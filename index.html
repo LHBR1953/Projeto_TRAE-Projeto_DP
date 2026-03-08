@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro de Pacientes - Consultório Odontológico</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <script>
+        window.onerror = function (msg, url, line, col, error) {
+            alert("JS Error: " + msg + " at " + line + ":" + col);
+        };
+    </script>
+</head>
+
+<body>
+    <!-- Login View -->
+    <div id="loginView" class="login-wrapper">
+        <div id="loginCard" class="login-card">
+            <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
+                <i class="ri-tooth-line" style="font-size: 2rem;"></i>
+                <span style="font-size: 1.5rem;">OdontoClinic</span>
+            </div>
+
+            <h2 style="text-align: center; margin-bottom: 1.5rem; color: var(--text-dark);">Acesso Rápido</h2>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="loginEmail">E-mail</label>
+                    <input type="email" id="loginEmail" placeholder="seu@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Senha</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••" required>
+                </div>
+                <button type="submit" id="btnLogin" class="btn btn-primary"
+                    style="width: 100%; margin-top: 1rem; padding: 0.75rem;">
+                    Entrar no Sistema
+                </button>
+                <div style="text-align: center; margin-top: 1rem;">
+                    <a href="#" id="linkForgotPassword"
+                        style="color: var(--primary-color); font-size: 0.85rem; text-decoration: none;">Esqueci minha
+                        senha</a>
+                </div>
+                <div id="loginError"
+                    style="color: #dc3545; font-size: 0.85rem; margin-top: 1rem; text-align: center; display: none;">
+                    Email ou senha incorretos.
+                </div>
+            </form>
+        </div>
+
+        <!-- Forgot Password View -->
+        <div id="forgotPasswordView" class="login-card" style="display: none;">
+            <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
+                <i class="ri-tooth-line" style="font-size: 2rem;"></i>
+                <span style="font-size: 1.5rem;">OdontoClinic</span>
+            </div>
+            <h2 style="text-align: center; margin-bottom: 1.5rem; color: var(--text-dark);">Recuperar Senha</h2>
+            <p style="text-align: center; color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.9rem;">
+                Insira seu e-mail para receber um link de recuperação.
+            </p>
+            <form id="forgotPasswordForm">
+                <div class="form-group">
+                    <label for="recoveryEmail">E-mail</label>
+                    <input type="email" id="recoveryEmail" placeholder="seu@email.com" required>
+                </div>
+                <button type="submit" id="btnSendRecovery" class="btn btn-primary"
+                    style="width: 100%; margin-top: 1rem; padding: 0.75rem;">
+                    Enviar Link de Recuperação
+                </button>
+                <button type="button" id="btnBackToLogin" class="btn btn-secondary"
+                    style="width: 100%; margin-top: 0.5rem; padding: 0.75rem; background: transparent; border: 1px solid var(--border-color); color: var(--text-main);">
+                    Voltar ao Login
+                </button>
+            </form>
+        </div>
+
+        <!-- Reset Password View -->
+        <div id="resetPasswordView" class="login-card" style="display: none;">
+            <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
+                <i class="ri-tooth-line" style="font-size: 2rem;"></i>
+                <span style="font-size: 1.5rem;">OdontoClinic</span>
+            </div>
+            <h2 style="text-align: center; margin-bottom: 1.5rem; color: var(--text-dark);">Nova Senha</h2>
+            <form id="resetPasswordForm">
+                <div class="form-group">
+                    <label for="newPassword">Nova Senha</label>
+                    <input type="password" id="newPassword" placeholder="••••••••" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="confirmNewPassword">Confirmar Nova Senha</label>
+                    <input type="password" id="confirmNewPassword" placeholder="••••••••" required minlength="6">
+                </div>
+                <button type="submit" id="btnUpdatePassword" class="btn btn-primary"
+                    style="width: 100%; margin-top: 1rem; padding: 0.75rem;">
+                    Atualizar Senha
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App Content (Hidden by default until logged in) -->
+    <div id="appContainer" class="app-container" style="display: none;">
+        <!-- Sidebar Menu -->
+        <aside class="sidebar" id="sidebar">
+            <div class="logo">
+                <i class="ri-tooth-line"></i>
+                <span>OdontoClinic</span>
+                <button id="sidebarToggle" class="sidebar-toggle-btn"
+                    style="margin-left: auto; background: transparent; border: none; font-size: 1.25rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                    <i class="ri-menu-fold-line"></i>
+                </button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">Aplicações</div>
+                <button id="navPatients" class="nav-item active">
+                    <i class="ri-team-line"></i> <span>Pacientes</span>
+                </button>
+                <button id="navProfessionals" class="nav-item">
+                    <i class="ri-user-star-line"></i> <span>Profissionais</span>
+                </button>
+                <button id="navSpecialties" class="nav-item">
+                    <i class="ri-medicine-bottle-line"></i> <span>Especialidades</span>
+                </button>
+                <button id="navServices" class="nav-item">
+                    <i class="ri-shopping-bag-3-line"></i> <span>Serviços</span>
+                </button>
+                <button id="navBudgets" class="nav-item">
+                    <i class="ri-wallet-3-line"></i> <span>Orçamentos</span>
+                </button>
+
+                <div class="nav-section mt-4" id="navConfigSection" style="display: none;">Configurações</div>
+                <button id="navEmpresas" class="nav-item" style="display: none;">
+                    <i class="ri-building-line"></i> <span>Cadastro de Empresas</span>
+                </button>
+                <button id="navUsersAdmin" class="nav-item" style="display: none;">
+                    <i class="ri-user-settings-line"></i> <span>Gerenciar Usuários</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="avatar"><i class="ri-user-line"></i></div>
+                    <div class="details">
+                        <span class="name" id="userNameDisplay">Carregando...</span>
+                        <span class="role" id="userRoleDisplay">Aguarde</span>
+                    </div>
+                </div>
+                <button id="btnLogout" class="btn-icon"
+                    style="margin-top: 1rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;">
+                    <i class="ri-logout-box-r-line"></i> <span>Sair</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <!-- Header for mobile / Top actions -->
+            <header class="main-header">
+                <button id="mobileMenuBtn" class="mobile-menu-btn">
+                    <i class="ri-menu-line"></i>
+                </button>
+                <h2>Gerenciador de Clínica</h2>
+                <div class="theme-toggle">
+                    <!-- Theme toggle can go here -->
+                </div>
+            </header>
+
+            <!-- PATIENT LIST VIEW -->
+            <section id="patientListView" class="view-section active">
+                <div class="section-header">
+                    <h2>Pacientes</h2>
+                    <button id="btnAddNew" class="btn btn-primary">
+                        <i class="ri-user-add-line"></i> Novo Paciente
+                    </button>
+                </div>
+
+                <div class="search-bar">
+                    <i class="ri-search-line"></i>
+                    <input type="text" id="searchInput" placeholder="Buscar por Nome ou CPF...">
+                </div>
+
+                <div class="table-container">
+                    <table id="patientsTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">ID</th>
+                                <th>Nome</th>
+                                <th>CPF</th>
+                                <th>Celular</th>
+                                <th>Cidade/UF</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="patientsTableBody">
+                            <!-- Rows will be injected here via JS -->
+                        </tbody>
+                    </table>
+                    <div id="patientEmptyState" class="empty-state hidden">
+                        <i class="ri-team-line"></i>
+                        <p>Nenhum paciente cadastrado encontrado.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PATIENT FORM VIEW -->
+            <section id="patientFormView" class="view-section hidden">
+                <div class="section-header">
+                    <h2 id="formTitle">Novo Paciente</h2>
+                    <button id="btnBack" class="btn btn-secondary">
+                        <i class="ri-arrow-left-line"></i> Voltar
+                    </button>
+                </div>
+
+                <form id="patientForm" class="patient-form">
+                    <input type="hidden" id="editId">
+
+                    <div class="form-card">
+                        <h3 class="card-title">Dados Pessoais</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>ID</label>
+                                <input type="text" id="patIdDisplay" readonly class="readonly-input" placeholder="Novo">
+                            </div>
+                            <div class="form-group span-2">
+                                <label for="nome">Nome Completo *</label>
+                                <input type="text" id="nome" required placeholder="Ex: João da Silva">
+                            </div>
+                            <div class="form-group">
+                                <label for="cpf">CPF *</label>
+                                <input type="text" id="cpf" required placeholder="000.000.000-00" maxlength="14">
+                                <span class="error-msg" id="cpfError">CPF Inválido ou já cadastrado.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="dataNascimento">Data de Nascimento</label>
+                                <input type="date" id="dataNascimento">
+                            </div>
+                            <div class="form-group">
+                                <label for="sexo">Sexo</label>
+                                <select id="sexo">
+                                    <option value="">Selecione...</option>
+                                    <option value="M">Masculino</option>
+                                    <option value="F">Feminino</option>
+                                    <option value="O">Outro</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="profissao">Profissão</label>
+                                <input type="text" id="profissao" placeholder="Ex: Engenheiro">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-card">
+                        <h3 class="card-title">Contato</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="telefone">Telefone</label>
+                                <input type="text" id="telefone" placeholder="(00) 0000-0000" maxlength="14">
+                            </div>
+                            <div class="form-group">
+                                <label for="celular">Celular *</label>
+                                <input type="text" id="celular" required placeholder="(00) 0 0000-0000" maxlength="16">
+                            </div>
+                            <div class="form-group span-2">
+                                <label for="email">E-mail</label>
+                                <input type="email" id="email" placeholder="email@exemplo.com">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-card">
+                        <h3 class="card-title">Endereço</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="cep">CEP</label>
+                                <input type="text" id="cep" placeholder="00000-000" maxlength="9">
+                            </div>
+                            <div class="form-group span-2">
+                                <label for="endereco">Endereço *</label>
+                                <input type="text" id="endereco" required placeholder="Rua, Avenida, etc.">
+                            </div>
+                            <div class="form-group">
+                                <label for="numero">Número *</label>
+                                <input type="text" id="numero" required placeholder="Nº">
+                            </div>
+                            <div class="form-group">
+                                <label for="complemento">Complemento</label>
+                                <input type="text" id="complemento" placeholder="Apto, Bloco, etc.">
+                            </div>
+                            <div class="form-group">
+                                <label for="bairro">Bairro *</label>
+                                <input type="text" id="bairro" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="cidade">Cidade *</label>
+                                <input type="text" id="cidade" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="uf">UF *</label>
+                                <select id="uf" required>
+                                    <option value="">Selecione</option>
+                                    <option value="AC">AC</option>
+                                    <option value="AL">AL</option>
+                                    <option value="AP">AP</option>
+                                    <option value="AM">AM</option>
+                                    <option value="BA">BA</option>
+                                    <option value="CE">CE</option>
+                                    <option value="DF">DF</option>
+                                    <option value="ES">ES</option>
+                                    <option value="GO">GO</option>
+                                    <option value="MA">MA</option>
+                                    <option value="MT">MT</option>
+                                    <option value="MS">MS</option>
+                                    <option value="MG">MG</option>
+                                    <option value="PA">PA</option>
+                                    <option value="PB">PB</option>
+                                    <option value="PR">PR</option>
+                                    <option value="PE">PE</option>
+                                    <option value="PI">PI</option>
+                                    <option value="RJ">RJ</option>
+                                    <option value="RN">RN</option>
+                                    <option value="RS">RS</option>
+                                    <option value="RO">RO</option>
+                                    <option value="RR">RR</option>
+                                    <option value="SC">SC</option>
+                                    <option value="SP">SP</option>
+                                    <option value="SE">SE</option>
+                                    <option value="TO">TO</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-card">
+                        <h3 class="card-title">Anamnese (Histórico de Saúde)</h3>
+                        <div class="form-row">
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="emTratamentoMedico">
+                                    Está em tratamento médico atualmente?
+                                </label>
+                            </div>
+                            <div class="form-group" id="tratamentoDescContainer" style="display: none;">
+                                <input type="text" id="tratamentoDesc" placeholder="Qual tratamento?">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="tomaMedicacao">
+                                    Toma alguma medicação regularmente?
+                                </label>
+                            </div>
+                            <div class="form-group" id="medicacaoDescContainer" style="display: none;">
+                                <input type="text" id="medicacaoDesc" placeholder="Quais medicações?">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="temAlergia">
+                                    Tem alergia a algum medicamento/anestesia?
+                                </label>
+                            </div>
+                            <div class="form-group" id="alergiaDescContainer" style="display: none;">
+                                <input type="text" id="alergiaDesc" placeholder="Quais alergias?">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="teveHemorragia">
+                                    Já teve hemorragia após extrações, cortes ou machucados?
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group w-100">
+                                <label for="doencasPreexistentes">Doenças preexistentes (Diabetes, Hipertensão, Asma,
+                                    Problemas Cardíacos, etc.)</label>
+                                <textarea id="doencasPreexistentes" rows="3"
+                                    placeholder="Descreva aqui as doenças preexistentes ou outras informações relevantes da saúde do paciente..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" id="btnCancelPatient" class="btn btn-secondary">Cancelar</button>
+                        <button type="submit" id="btnSavePatient" class="btn btn-primary">
+                            <i class="ri-save-line"></i> Salvar Paciente
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- PROFESSIONAL LIST VIEW -->
+            <section id="professionalListView" class="view-section hidden">
+                <div class="section-header">
+                    <h2>Profissionais</h2>
+                    <button id="btnAddNewProfessional" class="btn btn-primary">
+                        <i class="ri-user-add-line"></i> Novo Profissional
+                    </button>
+                </div>
+
+                <div class="search-bar">
+                    <i class="ri-search-line"></i>
+                    <input type="text" id="searchProfessionalInput" placeholder="Buscar por Nome ou E-mail...">
+                </div>
+
+                <div class="table-container">
+                    <table id="professionalsTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">ID</th>
+                                <th>Foto</th>
+                                <th>Nome</th>
+                                <th>Celular</th>
+                                <th>Tipo</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="professionalsTableBody">
+                            <!-- Rows will be injected here via JS -->
+                        </tbody>
+                    </table>
+                    <div id="professionalEmptyState" class="empty-state hidden">
+                        <i class="ri-user-star-line"></i>
+                        <p>Nenhum profissional cadastrado encontrado.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PROFESSIONAL FORM VIEW -->
+            <section id="professionalFormView" class="view-section hidden">
+                <div class="section-header">
+                    <h2 id="professionalFormTitle">Novo Profissional</h2>
+                    <button id="btnBackProfessional" class="btn btn-secondary">
+                        <i class="ri-arrow-left-line"></i> Voltar
+                    </button>
+                </div>
+
+                <form id="professionalForm" class="patient-form">
+                    <input type="hidden" id="editProfessionalId">
+
+                    <div class="form-card">
+                        <h3 class="card-title">Dados do Profissional</h3>
+                        <div class="form-grid">
+
+                            <div class="form-group">
+                                <label>ID</label>
+                                <input type="text" id="profIdDisplay" readonly class="readonly-input"
+                                    placeholder="Novo">
+                            </div>
+
+                            <!-- Foto Capture / Upload -->
+                            <div class="form-group span-2 photo-upload-container">
+                                <label>Foto do Profissional</label>
+                                <div class="photo-wrapper">
+                                    <div class="photo-preview" id="photoPreview">
+                                        <i class="ri-camera-line"></i>
+                                    </div>
+                                    <!-- Botão Capturar (Câmera) via JS -->
+                                    <button type="button" id="btnOpenModalCamera" class="btn btn-secondary btn-sm">
+                                        <i class="ri-camera-lens-line"></i> Capturar
+                                    </button>
+
+                                    <!-- Botão Escolher (Arquivo) -->
+                                    <label for="professionalPhotoUpload" class="btn btn-secondary btn-sm">
+                                        <i class="ri-folder-open-line"></i> Escolher
+                                    </label>
+                                    <input type="file" id="professionalPhotoUpload" accept="image/*" class="hidden">
+
+                                    <input type="hidden" id="photoBase64">
+                                    <button type="button" class="btn btn-danger btn-icon" id="btnRemovePhoto"
+                                        style="display: none;" title="Remover Foto">
+                                        <i class="ri-delete-bin-line"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="form-group span-2">
+                                <label for="profNome">Nome Completo *</label>
+                                <input type="text" id="profNome" required placeholder="Ex: Dra. Maria Silva">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="profCelular">Celular *</label>
+                                <input type="text" id="profCelular" required placeholder="(00) 0 0000-0000"
+                                    maxlength="16">
+                            </div>
+
+                            <div class="form-group relative">
+                                <label for="profEmail">E-mail * <span id="emailValidationIndicator"
+                                        class="validation-indicator"></span></label>
+                                <input type="email" id="profEmail" required placeholder="email@exemplo.com">
+                                <span class="error-msg" id="profEmailError">E-mail inválido ou já cadastrado.</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="profTipo">Tipo de Profissional *</label>
+                                <select id="profTipo" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="Clinico">Clínico</option>
+                                    <option value="Especialista">Especialista</option>
+                                    <option value="Protetico">Protético</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group" id="profEspecialidadeDiv" style="display: none;">
+                                <label for="profEspecialidade">Especialidade *</label>
+                                <select id="profEspecialidade">
+                                    <option value="">Selecione uma especialidade...</option>
+                                    <!-- Options will be populated by JS -->
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="profStatus">Status *</label>
+                                <select id="profStatus" required>
+                                    <option value="Ativo">Ativo</option>
+                                    <option value="Inativo">Inativo</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Comissões (Dinâmico) -->
+                        <div class="form-card" id="comissionCard" style="display: none;">
+                            <h3 class="card-title">Comissões (%)</h3>
+                            <div class="form-grid">
+                                <div class="form-group" id="comissionCEDiv">
+                                    <label for="comissionCE" id="lblCE">CE (Clínico Espécie)</label>
+                                    <div class="input-with-icon">
+                                        <input type="number" id="comissionCE" min="0" max="100" step="0.01"
+                                            placeholder="0.00">
+                                        <span class="input-icon">%</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group" id="comissionCCDiv">
+                                    <label for="comissionCC" id="lblCC">CC (Clínico Cartão)</label>
+                                    <div class="input-with-icon">
+                                        <input type="number" id="comissionCC" min="0" max="100" step="0.01"
+                                            placeholder="0.00">
+                                        <span class="input-icon">%</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group" id="comissionCPDiv">
+                                    <label for="comissionCP" id="lblCP">CP (Clínico PIX)</label>
+                                    <div class="input-with-icon">
+                                        <input type="number" id="comissionCP" min="0" max="100" step="0.01"
+                                            placeholder="0.00">
+                                        <span class="input-icon">%</span>
+                                    </div>
+                                </div>
+
+                                <!-- Campos Especialista -->
+                                <div class="form-group" id="comissionEEDiv" style="display: none;">
+                                    <label for="comissionEE" id="lblEE">EE (Especialista Espécie)</label>
+                                    <div class="input-with-icon">
+                                        <input type="number" id="comissionEE" min="0" max="100" step="0.01"
+                                            placeholder="0.00">
+                                        <span class="input-icon">%</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group" id="comissionECDiv" style="display: none;">
+                                    <label for="comissionEC" id="lblEC">EC (Especialista Cartão)</label>
+                                    <div class="input-with-icon">
+                                        <input type="number" id="comissionEC" min="0" max="100" step="0.01"
+                                            placeholder="0.00">
+                                        <span class="input-icon">%</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group" id="comissionEPDiv" style="display: none;">
+                                    <label for="comissionEP" id="lblEP">EP (Especialista PIX)</label>
+                                    <div class="input-with-icon">
+                                        <input type="number" id="comissionEP" min="0" max="100" step="0.01"
+                                            placeholder="0.00">
+                                        <span class="input-icon">%</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group span-2">
+                                    <label for="comissionImp">Imp (Imposto deduzido em Cartão ou PIX)</label>
+                                    <div class="input-with-icon">
+                                        <input type="number" id="comissionImp" min="0" max="100" step="0.01"
+                                            placeholder="0.00">
+                                        <span class="input-icon">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" id="btnCancelProfessional" class="btn btn-secondary">Cancelar</button>
+                            <button type="submit" id="btnSaveProfessional" class="btn btn-primary" disabled>
+                                <i class="ri-save-line"></i> Salvar Profissional
+                            </button>
+                        </div>
+                </form>
+            </section>
+
+            <!-- ESPECIALIDADES LIST VIEW -->
+            <section id="specialtiesListView" class="view-section hidden">
+                <div class="section-header">
+                    <h2 id="specialtiesTitle">Especialidades</h2>
+                    <button id="btnNewSpecialty" class="btn btn-primary">
+                        <i class="ri-add-line"></i> Nova Especialidade
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table id="specialtiesTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">ID</th>
+                                <th>Nome da Especialidade</th>
+                                <th>Subdivisões</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="specialtiesTableBody">
+                            <!-- Rows will be injected here via JS -->
+                        </tbody>
+                    </table>
+                    <div id="specialtyEmptyState" class="empty-state hidden">
+                        <i class="ri-medicine-bottle-line"></i>
+                        <p>Nenhuma especialidade cadastrada encontrada.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ESPECIALTY FORM VIEW -->
+            <section id="specialtyFormView" class="view-section hidden">
+                <div class="section-header">
+                    <h2 id="specialtyFormTitle">Nova Especialidade</h2>
+                    <button id="btnBackSpecialty" class="btn btn-secondary">
+                        <i class="ri-arrow-left-line"></i> Voltar
+                    </button>
+                </div>
+
+                <form id="specialtyForm" class="patient-form">
+                    <input type="hidden" id="editSpecialtyId">
+
+                    <div class="form-card">
+                        <h3 class="card-title">Dados da Especialidade</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>ID</label>
+                                <input type="text" id="specIdDisplay" readonly class="readonly-input"
+                                    placeholder="Novo">
+                            </div>
+                            <div class="form-group span-2">
+                                <label for="specNome">Nome da Especialidade *</label>
+                                <input type="text" id="specNome" required placeholder="Ex: Ortodontia">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-card mt-4">
+                        <h3 class="card-title">SUBDIVISÃO</h3>
+                        <div class="form-grid">
+                            <div class="form-group span-2" style="display: flex; gap: 10px; align-items: flex-end;">
+                                <div style="flex: 1;">
+                                    <label for="subSpecNome">Nome da Subdivisão</label>
+                                    <input type="text" id="subSpecNome" placeholder="Ex: PRÓTESES REMOVÍVEIS">
+                                </div>
+                                <button type="button" id="btnAddSubSpec" class="btn btn-secondary"
+                                    style="height: 48px; margin-bottom: 2px;">
+                                    Adicionar
+                                </button>
+                            </div>
+                            <div class="form-group span-2">
+                                <table class="sub-table"
+                                    style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid #ddd; text-align: left;">
+                                            <th style="padding: 8px;">ID</th>
+                                            <th style="padding: 8px;">Nome da Subdivisão</th>
+                                            <th style="padding: 8px; text-align: right;">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="subSpecTableBody">
+                                        <!-- Rows injected via JS -->
+                                    </tbody>
+                                </table>
+                                <div id="subSpecEmpty"
+                                    style="text-align: center; color: var(--text-muted); padding: 15px; font-size: 0.9rem;">
+                                    Nenhuma subdivisão vinculada.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" id="btnCancelSpecialty" class="btn btn-secondary">Cancelar</button>
+                        <button type="submit" id="btnSaveSpecialty" class="btn btn-primary">
+                            <i class="ri-save-line"></i> Salvar Especialidade
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- SERVICES LIST VIEW -->
+            <section id="servicesListView" class="view-section hidden">
+                <div class="section-header">
+                    <h2>Serviços / Estoque</h2>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <button id="btnPrintServiceList" class="btn btn-secondary" title="Relatório Geral de Serviços"
+                            style="padding: 0.5rem 0.75rem; font-size: 1.2rem;">
+                            <i class="ri-printer-line"></i>
+                        </button>
+                        <button id="btnNewService" class="btn btn-primary">
+                            <i class="ri-add-line"></i> Novo Item
+                        </button>
+                    </div>
+                </div>
+
+                <div class="search-bar">
+                    <i class="ri-search-line"></i>
+                    <input type="text" id="searchServiceInput" placeholder="Buscar por Descrição...">
+                </div>
+
+                <div class="table-container">
+                    <table id="servicesTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">ID</th>
+                                <th>Descrição</th>
+                                <th>Valor</th>
+                                <th>Tipo (IE)</th>
+                                <th>Subdivisão</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="servicesTableBody">
+                            <!-- Rows will be injected here via JS -->
+                        </tbody>
+                    </table>
+                    <div id="serviceEmptyState" class="empty-state hidden">
+                        <i class="ri-shopping-bag-3-line"></i>
+                        <p>Nenhum serviço ou item encontrado.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SERVICE FORM VIEW -->
+            <section id="serviceFormView" class="view-section hidden">
+                <div class="section-header">
+                    <h2 id="serviceFormTitle">Novo Serviço/Item</h2>
+                    <button id="btnBackService" class="btn btn-secondary">
+                        <i class="ri-arrow-left-line"></i> Voltar
+                    </button>
+                </div>
+
+                <form id="serviceForm" class="patient-form">
+                    <input type="hidden" id="editServiceId">
+
+                    <div class="form-card">
+                        <h3 class="card-title">Dados do Serviço/Item</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>ID</label>
+                                <input type="text" id="servIdDisplay" readonly class="readonly-input"
+                                    placeholder="Novo">
+                            </div>
+                            <div class="form-group span-2">
+                                <label for="servDescricao">Descrição *</label>
+                                <input type="text" id="servDescricao" required placeholder="Ex: Limpeza Dental">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="servValor">Valor (R$) *</label>
+                                <input type="number" id="servValor" required min="0" step="0.01" placeholder="0.00">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="servTipoIE">Tipo (IE) *</label>
+                                <select id="servTipoIE" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="S">Serviço</option>
+                                    <option value="E">Estoque</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group span-2">
+                                <label for="servSubdivisao">Subdivisão Vinculada (Opcional)</label>
+                                <select id="servSubdivisao">
+                                    <option value="">Nenhuma / Geral</option>
+                                    <!-- Options injected via JS -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" id="btnCancelService" class="btn btn-secondary">Cancelar</button>
+                        <button type="submit" id="btnSaveService" class="btn btn-primary">
+                            <i class="ri-save-line"></i> Salvar Item
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- BUDGETS LIST VIEW -->
+            <section id="budgetsListView" class="view-section hidden">
+                <div class="section-header">
+                    <h2>Orçamentos</h2>
+                    <button id="btnNewBudget" class="btn btn-primary">
+                        <i class="ri-add-line"></i> Novo Orçamento
+                    </button>
+                </div>
+
+                <div class="search-bar">
+                    <i class="ri-search-line"></i>
+                    <input type="text" id="searchBudgetInput" placeholder="Buscar por Nome do Paciente...">
+                </div>
+
+                <div class="table-container">
+                    <table id="budgetsTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">ID</th>
+                                <th>Paciente</th>
+                                <th>Qtd Itens</th>
+                                <th>Valor Total</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="budgetsTableBody">
+                            <!-- Rows will be injected here via JS -->
+                        </tbody>
+                    </table>
+                    <div id="budgetEmptyState" class="empty-state hidden">
+                        <i class="ri-wallet-3-line"></i>
+                        <p>Nenhum orçamento cadastrado encontrado.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- BUDGET FORM VIEW (MASTER) -->
+            <section id="budgetFormView" class="view-section hidden">
+                <div class="section-header">
+                    <h2 id="budgetFormTitle">Novo Orçamento</h2>
+                    <button id="btnBackBudget" class="btn btn-secondary">
+                        <i class="ri-arrow-left-line"></i> Voltar
+                    </button>
+                </div>
+
+                <form id="budgetForm" class="patient-form">
+                    <input type="hidden" id="editBudgetId">
+
+                    <!-- Master Data (Patient) -->
+                    <div class="form-card">
+                        <h3 class="card-title">Dados do Orçamento</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Orçamento ID</label>
+                                <input type="text" id="budIdDisplay" readonly class="readonly-input" placeholder="Novo">
+                            </div>
+                            <div class="form-group span-2">
+                                <label for="budPacienteId">Vincular Paciente *</label>
+                                <select id="budPacienteId" required>
+                                    <option value="">Selecione um Paciente...</option>
+                                    <!-- Options injected via JS -->
+                                </select>
+                            </div>
+
+                            <div class="form-group span-2">
+                                <label>Nome do Paciente</label>
+                                <input type="text" id="budNomePaciente" readonly class="readonly-input"
+                                    placeholder="Preenchimento automático">
+                            </div>
+                            <div class="form-group">
+                                <label>Celular</label>
+                                <input type="text" id="budCelularPaciente" readonly class="readonly-input"
+                                    placeholder="00 00000-0000">
+                            </div>
+                            <div class="form-group span-2">
+                                <label>E-mail</label>
+                                <input type="text" id="budEmailPaciente" readonly class="readonly-input"
+                                    placeholder="email@exemplo.com">
+                            </div>
+                            <div class="form-group">
+                                <label for="budStatus">Status do Orçamento *</label>
+                                <select id="budStatus" required>
+                                    <option value="Pendente">Pendente</option>
+                                    <option value="Aprovado">Aprovado</option>
+                                    <option value="Executado">Executado</option>
+                                    <option value="Cancelado">Cancelado</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="budProfissionalId">Profissional Responsável *</label>
+                                <select id="budProfissionalId" required>
+                                    <option value="">Selecione o Profissional...</option>
+                                    <!-- Options injected via JS -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detail Data (Items) -->
+                    <div class="form-card">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 1rem;">
+                            <h3 class="card-title" style="border: none; padding: 0; margin: 0;">Itens do Orçamento</h3>
+                            <button type="button" id="btnToggleAddItem" class="btn btn-primary"
+                                style="padding: 0.4rem 0.8rem; font-size: 0.75rem;">
+                                <i class="ri-add-line"></i> Adicionar Item
+                            </button>
+                        </div>
+
+                        <!-- Add Item Panel (Hidden by default) -->
+                        <div id="addBudgetItemPanel"
+                            style="display: none; background: #f9fafb; padding: 1rem; border-radius: 6px; border: 1px dashed var(--border-color); margin-bottom: 1.5rem;">
+                            <h4
+                                style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase;">
+                                Novo Serviço</h4>
+                            <div class="form-grid">
+                                <div class="form-group span-2">
+                                    <label for="budItemServicoId">Serviço *</label>
+                                    <select id="budItemServicoId">
+                                        <option value="">Selecione um Serviço...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group span-2">
+                                    <label>Descrição</label>
+                                    <input type="text" id="budItemDescricao" readonly class="readonly-input">
+                                </div>
+                                <div class="form-group span-2">
+                                    <label for="budItemSubdivisao">Subdivisão *</label>
+                                    <select id="budItemSubdivisao">
+                                        <option value="">Selecione o serviço acima...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="budItemValor">Valor Un. (R$)*</label>
+                                    <input type="number" id="budItemValor" min="0" step="0.01" placeholder="0.00"
+                                        style="max-width: 120px;">
+                                </div>
+                                <div class="form-group">
+                                    <label for="budItemQtde">Qtde *</label>
+                                    <input type="number" id="budItemQtde" min="1" value="1" style="max-width: 80px;">
+                                </div>
+                                <div class="form-group span-2">
+                                    <label for="budItemExecutorId">Profissional Executor *</label>
+                                    <select id="budItemExecutorId">
+                                        <option value="">Selecione...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="budItemProfissionalId">Protético</label>
+                                    <select id="budItemProfissionalId">
+                                        <option value="">Selecione...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="budItemValorProtetico">Vlr Protético</label>
+                                    <input type="number" id="budItemValorProtetico" min="0" step="0.01"
+                                        placeholder="0.00">
+                                </div>
+                            </div>
+                            <div style="margin-top: 1rem; text-align: right;">
+                                <button type="button" id="btnCancelAddItem" class="btn btn-secondary"
+                                    style="margin-right: 0.5rem; font-size: 0.8rem;">Fechar</button>
+                                <button type="button" id="btnSaveAddItem" class="btn btn-primary"
+                                    style="font-size: 0.8rem;">
+                                    <i class="ri-check-line"></i> Confirmar Item
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Items Grid -->
+                        <div class="table-container">
+                            <table id="budgetItemsTable" style="margin: 0; font-size: 0.8rem;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;">#</th>
+                                        <th>Serviço</th>
+                                        <th>Subdivisão</th>
+                                        <th>Qtde</th>
+                                        <th>Valor Un.</th>
+                                        <th>Subtotal</th>
+                                        <th>Executor</th>
+                                        <th>Protético</th>
+                                        <th>Status</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="budgetItemsTableBody">
+                                    <!-- Items injected via JS -->
+                                </tbody>
+                            </table>
+                            <div id="budgetItemsEmptyState"
+                                style="text-align: center; color: var(--text-muted); padding: 15px; font-size: 0.85rem;">
+                                Nenhum item adicionado a este orçamento.
+                            </div>
+                        </div>
+
+                        <!-- Subtotal Footer -->
+                        <div
+                            style="background: var(--bg-color); padding: 1rem; border-radius: var(--border-radius); border: 1px solid var(--border-color); margin-top: 1rem; display: flex; justify-content: flex-end; align-items: center; gap: 1rem;">
+                            <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500;">TOTAL DO
+                                ORÇAMENTO:</span>
+                            <span id="budTotalValue"
+                                style="font-size: 1.25rem; font-weight: 700; color: var(--primary-color);">R$
+                                0,00</span>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" id="btnCancelBudget" class="btn btn-secondary">Cancelar</button>
+                        <button type="submit" id="btnSaveBudget" class="btn btn-primary">
+                            <i class="ri-save-line"></i> Salvar Orçamento Completo
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- USERS ADMIN VIEW -->
+            <section id="usersAdminView" class="view-section hidden">
+                <div class="section-header">
+                    <h2>Gerenciar Equipe</h2>
+                    <button id="btnAddNewUser" class="btn btn-primary">
+                        <i class="ri-user-add-line"></i> Novo Usuário
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table id="usersAdminTable">
+                        <thead>
+                            <tr>
+                                <th>Nome / E-mail</th>
+                                <th>Empresa ID</th>
+                                <th>Perfil</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersAdminTableBody">
+                            <!-- Rows will be injected here via JS -->
+                        </tbody>
+                    </table>
+                    <div id="usersAdminEmptyState" class="empty-state hidden">
+                        <i class="ri-shield-user-line"></i>
+                        <p>Nenhum usuário cadastrado na sua clínica.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- USER FORM VIEW -->
+            <section id="userAdminFormView" class="view-section hidden">
+                <div class="section-header">
+                    <h2 id="userAdminFormTitle">Novo Usuário</h2>
+                    <button id="btnBackUserAdmin" class="btn btn-secondary">
+                        <i class="ri-arrow-left-line"></i> Voltar
+                    </button>
+                </div>
+
+                <form id="userAdminForm" class="patient-form">
+                    <input type="hidden" id="editAdminUserId">
+
+                    <div class="form-card">
+                        <h3 class="card-title">Dados de Acesso</h3>
+                        <div class="form-grid">
+                            <div class="form-group span-2">
+                                <label for="adminUserEmail">E-mail (Login) *</label>
+                                <input type="email" id="adminUserEmail" required placeholder="email@clinica.com">
+                            </div>
+
+                            <div class="form-group span-2">
+                                <label for="adminUserPassword">Senha Provisória * <small
+                                        style="color:var(--text-muted)">(o usuário poderá trocar
+                                        depois)</small></label>
+                                <input type="password" id="adminUserPassword" required
+                                    placeholder="Mínimo 6 caracteres">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="adminUserRole">Perfil de Acesso *</label>
+                                <select id="adminUserRole" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="admin">Administrador (Acesso Total)</option>
+                                    <option value="dentista">Dentista / Especialista</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group" id="adminUserCompanyContainer" style="display: none;">
+                                <label for="adminUserCompany">Vincular à Empresa (SuperAdmin) *</label>
+                                <select id="adminUserCompany">
+                                    <option value="">Selecione a Empresa...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-card" style="margin-top: 1.5rem;">
+                        <h3 class="card-title">Permissões de Acesso (RBAC)</h3>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+                            Defina o que este usuário pode fazer em cada área do sistema.
+                        </p>
+
+                        <div class="table-container">
+                            <table id="permissionsTable" style="font-size: 0.85rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Módulo/Tabela</th>
+                                        <th style="text-align: center;">Ver (Select)</th>
+                                        <th style="text-align: center;">Criar (Insert)</th>
+                                        <th style="text-align: center;">Editar (Update)</th>
+                                        <th style="text-align: center;">Excluir (Delete)</th>
+                                        <th style="text-align: center;">Todas</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="permissionsTableBody">
+                                    <!-- Dynamic rows will be injected here via app.js -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" id="btnCancelUserAdmin" class="btn btn-secondary">Cancelar</button>
+                        <button type="submit" id="btnSaveUserAdmin" class="btn btn-primary">
+                            <i class="ri-save-line"></i> Salvar Usuário
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- EMPRESAS LIST VIEW -->
+            <section id="empresasListView" class="view-section hidden">
+                <div class="section-header">
+                    <h2>Cadastro de Empresas</h2>
+                    <button id="btnAddNewEmpresa" class="btn btn-primary">
+                        <i class="ri-add-line"></i> Nova Empresa
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table id="empresasTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px;">Logo</th>
+                                <th>ID</th>
+                                <th>Nome da Empresa</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="empresasTableBody">
+                            <!-- Rows injected via JS -->
+                        </tbody>
+                    </table>
+                    <div id="empresasEmptyState" class="empty-state hidden">
+                        <i class="ri-building-line"></i>
+                        <p>Nenhuma empresa cadastrada.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- EMPRESA FORM VIEW -->
+            <section id="empresaFormView" class="view-section hidden">
+                <div class="section-header">
+                    <h2 id="empresaFormTitle">Nova Empresa</h2>
+                    <button id="btnBackEmpresa" class="btn btn-secondary">
+                        <i class="ri-arrow-left-line"></i> Voltar
+                    </button>
+                </div>
+
+                <form id="empresaForm" class="patient-form">
+                    <input type="hidden" id="editEmpresaOldId">
+
+                    <div class="form-card">
+                        <h3 class="card-title">Informações da Empresa</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="empresaId">Identificador (ID) *</label>
+                                <input type="text" id="empresaId" required placeholder="ex: emp_clinica_01">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="empresaNome">Nome da Empresa *</label>
+                                <input type="text" id="empresaNome" required placeholder="Nome Fantasia">
+                            </div>
+
+                            <div class="form-group span-2">
+                                <label for="empresaLogo">Logotipo (Arquivo)</label>
+                                <div style="display: flex; align-items: center; gap: 15px;">
+                                    <div id="logoPreviewContainer"
+                                        style="width: 60px; height: 60px; border: 1px solid var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f9fafb; overflow: hidden;">
+                                        <i class="ri-image-line"
+                                            style="font-size: 1.5rem; color: var(--text-muted);"></i>
+                                    </div>
+                                    <input type="file" id="empresaLogoFile" accept="image/*" style="flex: 1;">
+                                    <input type="hidden" id="empresaLogoBase64">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" id="btnCancelEmpresa" class="btn btn-secondary">Cancelar</button>
+                        <button type="submit" id="btnSaveEmpresa" class="btn btn-primary">
+                            <i class="ri-save-line"></i> Salvar Empresa
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- PATIENT DETAILS / PRONTUÁRIO VIEW -->
+            <section id="patientDetailsView" class="view-section hidden">
+                <div class="section-header">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <button id="btnBackDetails" class="btn btn-secondary btn-icon" title="Voltar para a lista">
+                            <i class="ri-arrow-left-line"></i>
+                        </button>
+                        <h2 id="detailsPatientName">Nome do Paciente</h2>
+                    </div>
+                    <button id="btnExportPDF" class="btn btn-primary">
+                        <i class="ri-file-pdf-line"></i> Exportar PDF
+                    </button>
+                </div>
+
+                <div class="patient-tabs">
+                    <button class="tab-btn active" data-tab="tabGeral">Geral</button>
+                    <button class="tab-btn" data-tab="tabEvolucao">Prontuário / Evolução</button>
+                    <button class="tab-btn" data-tab="tabOrcamentos">Orçamentos</button>
+                    <button class="tab-btn" data-tab="tabDocumentos">Documentos</button>
+                </div>
+
+                <!-- Tab: Geral -->
+                <div id="tabGeral" class="tab-content active">
+
+                    <!-- Bloco: Contato -->
+                    <div class="details-card">
+                        <h3><i class="ri-contacts-line" style="margin-right:6px;"></i> Informações de Contato</h3>
+                        <div class="contact-info-grid">
+                            <div class="contact-info-item">
+                                <span class="contact-info-label">CPF</span>
+                                <span class="contact-info-value" id="detCPF">-</span>
+                            </div>
+                            <div class="contact-info-item">
+                                <span class="contact-info-label">Data de Nascimento</span>
+                                <span class="contact-info-value" id="detNasc">-</span>
+                            </div>
+                            <div class="contact-info-item">
+                                <span class="contact-info-label">Celular</span>
+                                <span class="contact-info-value" id="detCel">-</span>
+                            </div>
+                            <div class="contact-info-item">
+                                <span class="contact-info-label">E-mail</span>
+                                <span class="contact-info-value" id="detEmail">-</span>
+                            </div>
+                            <div class="contact-info-item" style="grid-column: 1 / -1;">
+                                <span class="contact-info-label">Endereço</span>
+                                <span class="contact-info-value" id="detEnd">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Divisor -->
+                    <div class="section-divider"><span>Anamnese</span></div>
+
+                    <!-- Bloco: Anamnese -->
+                    <div class="details-card">
+                        <h3><i class="ri-heart-pulse-line" style="margin-right:6px;"></i> Anamnese Clínica</h3>
+                        <div id="detAnamneseBody" class="anamnese-block">
+                            <!-- Preenchido via JS -->
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Tab: Evolução (Prontuário Legislativo) -->
+                <div id="tabEvolucao" class="tab-content">
+                    <div class="evolution-header">
+                        <h3>Histórico de Evolução Clínica</h3>
+                        <button id="btnNewEvolution" class="btn btn-primary btn-sm">
+                            <i class="ri-add-line"></i> Nova Anotação
+                        </button>
+                    </div>
+
+                    <!-- Formulário de Nova Evolução (Inicialmente oculto) -->
+                    <div id="newEvolutionForm" class="evolution-form-card hidden">
+                        <h4>Nova Anotação de Atendimento</h4>
+                        <div class="form-grid">
+                            <div class="form-group span-2">
+                                <label>Descrição do Atendimento *</label>
+                                <textarea id="evolDescricao" rows="4"
+                                    placeholder="Descreva o procedimento realizado, materiais utilizados, orientações dadas..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Dente / Região</label>
+                                <input type="text" id="evolDente" placeholder="Ex: 11, 22, Quadrante Sup.">
+                            </div>
+                            <div class="form-group">
+                                <label>Profissional Responsável *</label>
+                                <select id="evolProfissional">
+                                    <!-- Populada via JS -->
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-actions" style="margin-top: 1rem;">
+                            <button id="btnCancelEvolution" class="btn btn-secondary btn-sm">Cancelar</button>
+                            <button id="btnSaveEvolution" class="btn btn-primary btn-sm">
+                                <i class="ri-save-line"></i> Gravar no Prontuário
+                            </button>
+                        </div>
+                        <p class="legal-notice">
+                            <i class="ri-information-line"></i>
+                            Atenção: Uma vez gravada, esta anotação não poderá ser editada ou excluída para fins de
+                            conformidade jurídica.
+                        </p>
+                    </div>
+
+                    <div class="evolution-timeline" id="evolutionTimeline">
+                        <!-- Itens injetados via JS -->
+                    </div>
+                </div>
+
+                <!-- Tab: Orçamentos -->
+                <div id="tabOrcamentos" class="tab-content">
+                    <div class="evolution-header">
+                        <h3>Orçamentos do Paciente</h3>
+                    </div>
+                    <div class="table-container" style="margin-top: 1rem;">
+                        <table id="detOrcamentosTable">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Profissional</th>
+                                    <th>Status</th>
+                                    <th>Valor Total</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detOrcamentosBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab: Documentos -->
+                <div id="tabDocumentos" class="tab-content">
+                    <div class="evolution-header">
+                        <h3>Documentos e Termos (TCLE)</h3>
+                        <label for="docUpload" class="btn btn-primary btn-sm">
+                            <i class="ri-upload-2-line"></i> Upload de Documento
+                        </label>
+                        <input type="file" id="docUpload" class="hidden" accept=".pdf,image/*">
+                    </div>
+                    <div class="docs-grid" id="detDocsGrid">
+                        <!-- Cards de documentos -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Modal: Detalhes do Orçamento (usado dentro da Ficha do Paciente) -->
+            <div id="budgetDetailModal" class="modal-overlay hidden" style="z-index: 1000;">
+                <div class="modal-content" style="max-width: 750px; width: 95%;">
+                    <div class="modal-header">
+                        <h3 id="budgetDetailTitle">Detalhes do Orçamento</h3>
+                        <button type="button" class="btn-close-modal" id="btnCloseBudgetDetail">
+                            <i class="ri-close-line"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body" id="budgetDetailBody"
+                        style="max-height: 70vh; overflow-y: auto; padding: 1.5rem;">
+                        <!-- Conteúdo injetado via JS -->
+                    </div>
+                    <div class="modal-footer"
+                        style="display: flex; justify-content: flex-end; gap: 1rem; padding: 1rem;">
+                        <button type="button" class="btn btn-primary" id="btnCloseBudgetDetail2">Fechar</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal para Filtro de Impressão de Serviços -->
+    <div id="servicePrintFilterModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Filtrar Relatório</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseServicePrintModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="printFilterSubdivisao">Selecionar Subdivisão</label>
+                    <select id="printFilterSubdivisao">
+                        <option value="">TODAS AS SUBDIVISÕES</option>
+                        <!-- Options injected via JS -->
+                    </select>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 10px;">
+                    Se nenhuma subdivisão for selecionada, todos os itens serão impressos.
+                </p>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 1rem;">
+                <button type="button" class="btn btn-secondary" id="btnCancelServicePrint">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmServicePrint">
+                    <i class="ri-printer-line"></i> Gerar Relatório
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Captura de Câmera -->
+    <div id="cameraModal" class="modal-overlay hidden">
+        <div class="modal-content camera-modal">
+            <div class="modal-header">
+                <h3>Capturar Foto</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseCameraModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="camera-feed-container">
+                    <video id="cameraVideo" autoplay playsinline></video>
+                    <canvas id="cameraCanvas" style="display:none;"></canvas>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 1rem;">
+                <button type="button" class="btn btn-secondary" id="btnCancelCamera">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnTakePhoto">
+                    <i class="ri-camera-line"></i> Gravar Foto
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toastNotification" class="toast hidden">
+        <div class="toast-content">
+            <i id="toastIcon" class="ri-check-line"></i>
+            <span id="toastMsg">Mensagem</span>
+        </div>
+    </div>
+
+    <input type="hidden" id="professionalPhotoCapture">
+
+    <!-- Supabase JS Client -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+
+</html>
