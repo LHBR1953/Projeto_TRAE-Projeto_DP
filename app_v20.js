@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260313-0835';
+const APP_BUILD = '20260313-0940';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -4624,7 +4624,7 @@ patientForm.addEventListener('submit', async e => {
     const patientData = {
         nome: document.getElementById('nome').value,
         cpf: cpfValue,
-        datanascimento: document.getElementById('dataNascimento').value,
+        datanascimento: document.getElementById('dataNascimento').value || null,
         sexo: document.getElementById('sexo').value,
         profissao: document.getElementById('profissao').value,
         telefone: document.getElementById('telefone').value,
@@ -4652,6 +4652,67 @@ patientForm.addEventListener('submit', async e => {
     };
 
     try {
+        async function insertPacienteSmart(payload) {
+            const base = { ...payload };
+            delete base.seqid;
+
+            try {
+                const rpcRes = await db.rpc('rpc_create_paciente', { p_data: base });
+                if (!rpcRes.error) return rpcRes;
+                const rpcCode = String(rpcRes.error.code || '');
+                const rpcMsg = String(rpcRes.error.message || '');
+                const notFound = rpcCode === 'PGRST202' || /could not find the function/i.test(rpcMsg);
+                if (!notFound) return rpcRes;
+            } catch {
+            }
+
+            async function getNextPacienteSeqIdFromDB() {
+                try {
+                    const q = db.from('pacientes')
+                        .select('seqid')
+                        .order('seqid', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+                    const { data, error } = await withTimeout(q, 15000, 'pacientes:max_seqid');
+                    if (error) throw error;
+                    const maxSeq = data && data.seqid ? Number(data.seqid) : 0;
+                    const next = maxSeq + 1;
+                    return Number.isFinite(next) && next > 0 ? next : getNextSeqId(patients);
+                } catch {
+                    return getNextSeqId(patients);
+                }
+            }
+
+            let res = await db.from('pacientes').insert(base).select().single();
+            if (!res.error) return res;
+
+            const code = String(res.error.code || '');
+            const msg = String(res.error.message || '');
+
+            const isDupSeq = code === '23505' && /pacientes_seqid_unique/i.test(msg);
+            if (isDupSeq) {
+                for (let i = 0; i < 3; i++) {
+                    const nextSeq = await getNextPacienteSeqIdFromDB();
+                    const attempt = { ...base, seqid: nextSeq };
+                    res = await db.from('pacientes').insert(attempt).select().single();
+                    if (!res.error) return res;
+                    const c2 = String(res.error.code || '');
+                    const m2 = String(res.error.message || '');
+                    if (!(c2 === '23505' && /pacientes_seqid_unique/i.test(m2))) break;
+                }
+            }
+
+            const needId = /null value in column \"id\"/i.test(msg) || /column \"id\".*violates not-null/i.test(msg);
+            const needSeq = /null value in column \"seqid\"/i.test(msg) || /column \"seqid\".*violates not-null/i.test(msg);
+            if (!needId && !needSeq) return res;
+
+            const fallback = { ...base };
+            if (needId) fallback.id = generateId();
+            if (needSeq) fallback.seqid = await getNextPacienteSeqIdFromDB();
+            res = await db.from('pacientes').insert(fallback).select().single();
+            return res;
+        }
+
         if (id) {
             // Edit existing
             const { error } = await db.from('pacientes').update(patientData).eq('id', id);
@@ -4662,12 +4723,7 @@ patientForm.addEventListener('submit', async e => {
             showToast('Paciente atualizado com sucesso!');
         } else {
             // Add new
-            patientData.id = generateId(); // Using our generateId for sync matching with Supabase UUID constraint (needs valid format or text)
-            // Or alternatively let supabase generate it and return it:
-            // Since our DB uses TEXT for id, calculate seqId
-            patientData.seqid = getNextSeqId(patients);
-
-            const { data, error } = await db.from('pacientes').insert(patientData).select().single();
+            const { data, error } = await insertPacienteSmart(patientData);
             if (error) throw error;
 
             if (data) {
@@ -4678,7 +4734,9 @@ patientForm.addEventListener('submit', async e => {
         showList('patients');
     } catch (error) {
         console.error("Error saving patient:", error);
-        showToast("Erro ao salvar paciente no banco de dados.", true);
+        const code = error && error.code ? String(error.code) : '-';
+        const msg = error && error.message ? String(error.message) : 'Erro desconhecido';
+        showToast(`Erro ao salvar paciente (${code}): ${msg}`, true);
     }
 });
 
