@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260312-0755';
+const APP_BUILD = '20260313-0805';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -5585,12 +5585,15 @@ window.renderTable = function (data, type) {
                 </td>
             `;
         } else if (type === 'services') {
+            const subBadge = item.subdivisao
+                ? `<span style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--text-color);">${item.subdivisao}</span>`
+                : '<small style="color:var(--text-muted)">-</small>';
             tr.innerHTML = `
                 <td>${item.seqid}</td>
                 <td style="font-weight: 600;">${item.descricao}</td>
-                <td>${item.subdivisao || '-'}</td>
                 <td style="font-weight: 600; color: var(--primary-color);">R$ ${parseFloat(item.valor || 0).toFixed(2)}</td>
                 <td>${item.ie === 'S' ? 'Serviço' : 'Estoque'}</td>
+                <td>${subBadge}</td>
                 <td>
                     <div class="actions">
                         <button onclick="printService('${item.id}')" class="btn-icon" title="Imprimir"><i class="ri-printer-line"></i></button>
