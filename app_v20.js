@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260312-0742';
+const APP_BUILD = '20260312-0755';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -1008,11 +1008,28 @@ function getDefaultHomeTab() {
     return 'agenda';
 }
 
+function toggleMobileSidebar() {
+    const sb = document.getElementById('sidebar') || sidebar;
+    if (!sb) return;
+    const isNowActive = !sb.classList.contains('active');
+    sb.classList.toggle('active');
+    if (isNowActive) {
+        sb.classList.remove('collapsed');
+        const toggleBtn = document.getElementById('sidebarToggle');
+        if (toggleBtn) {
+            const icon = toggleBtn.querySelector('i');
+            if (icon) icon.className = 'ri-menu-fold-line';
+        }
+    }
+}
+
 // Mobile Menu Toggle
 if (mobileMenuBtn) {
-    mobileMenuBtn.addEventListener('click', () => {
-        sidebar.classList.toggle('active');
-    });
+    mobileMenuBtn.addEventListener('click', toggleMobileSidebar);
+    mobileMenuBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        toggleMobileSidebar();
+    }, { passive: false });
 }
 
 // Navigation Logic
@@ -1140,9 +1157,7 @@ function setupNavigationListeners() {
     });
 
     if (mobileMenuBtn) {
-        mobileMenuBtn.onclick = () => {
-            sidebar.classList.toggle('active');
-        };
+        mobileMenuBtn.onclick = () => toggleMobileSidebar();
     }
 
     // Sidebar Toggle (Desktop/Global)
@@ -1715,7 +1730,7 @@ function showList(type = 'patients') {
     console.log("showList called with:", type);
 
     // Auto-collapse sidebar when a menu item is selected to free up space
-    if (sidebar && !sidebar.classList.contains('collapsed')) {
+    if (sidebar && window.innerWidth > 900 && !sidebar.classList.contains('collapsed')) {
         sidebar.classList.add('collapsed');
         const toggleBtn = document.getElementById('sidebarToggle');
         if (toggleBtn) {
