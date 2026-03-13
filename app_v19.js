@@ -79,6 +79,7 @@ let specialties = [];
 let services = [];
 let budgets = [];
 let activeEmpresasList = []; // Store companies list for admins
+let transactions = []; // Global transactions state
 
 
 async function checkAuth() {
@@ -153,7 +154,8 @@ function getModuleKey(type) {
         'professionals': 'profissionais',
         'specialties': 'especialidades',
         'services': 'servicos',
-        'budgets': 'orcamentos'
+        'budgets': 'orcamentos',
+        'financeiro': 'financeiro'
     };
     return map[type] || type;
 }
@@ -196,13 +198,14 @@ async function initializeApp() {
         document.getElementById('loginView').style.display = 'none';
         document.getElementById('appContainer').style.display = 'flex';
 
-        const [patientsRes, professionalsRes, specialtiesRes, subdivisionsRes, servicesRes, budgetsRes, empresasRes] = await Promise.all([
+        const [patientsRes, professionalsRes, specialtiesRes, subdivisionsRes, servicesRes, budgetsRes, paymentsRes, empresasRes] = await Promise.all([
             db.from('pacientes').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }),
             db.from('profissionais').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }),
             db.from('especialidades').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }),
             db.from('especialidade_subdivisoes').select('*').eq('empresa_id', currentEmpresaId),
             db.from('servicos').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }),
             db.from('orcamentos').select('*, orcamento_itens(*)').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }),
+            db.from('orcamento_pagamentos').select('*').eq('empresa_id', currentEmpresaId),
             db.from('empresas').select('*').order('nome')
         ]);
 
@@ -212,6 +215,7 @@ async function initializeApp() {
         if (subdivisionsRes.error) throw subdivisionsRes.error;
         if (servicesRes.error) throw servicesRes.error;
         if (budgetsRes.error) throw budgetsRes.error;
+        // if (paymentsRes.error) throw paymentsRes.error; // Removed: Handled below
         if (empresasRes.error) throw empresasRes.error;
 
         patients = patientsRes.data || [];
@@ -235,13 +239,28 @@ async function initializeApp() {
         services = servicesRes.data || [];
         budgets = budgetsRes.data || [];
 
+        let allPayments = [];
+        if (paymentsRes.error) {
+            console.warn("Table 'orcamento_pagamentos' not found. Financial features disabled until SQL is applied.");
+        } else {
+            allPayments = paymentsRes.data || [];
+        }
+
+        // Attach payments to budgets
+        budgets.forEach(b => {
+            const bPayments = allPayments.filter(p => p.orcamento_id === b.seqid);
+            b.pagamentos = bPayments;
+            b.total_pago = bPayments.reduce((acc, curr) => acc + (parseFloat(curr.valor_pago) || 0), 0);
+        });
+
         console.log("DEBUG Fetched Data Lengths:", {
             patients: patients.length,
             professionals: professionals.length,
             specialties: specialties.length,
             subdivisions: subdivisions.length,
             services: services.length,
-            budgets: budgets.length
+            budgets: budgets.length,
+            payments: allPayments.length
         });
 
         // Pre-fill default specialties if empty for this company
@@ -330,6 +349,7 @@ const usersAdminView = document.getElementById('usersAdminView');
 const userAdminFormView = document.getElementById('userAdminFormView');
 const empresasListView = document.getElementById('empresasListView');
 const empresaFormView = document.getElementById('empresaFormView');
+const financeiroView = document.getElementById('financeiroView');
 
 const navEmpresas = document.getElementById('navEmpresas');
 const btnAddNewEmpresa = document.getElementById('btnAddNewEmpresa');
@@ -345,7 +365,8 @@ const systemModules = [
     { id: 'profissionais', label: 'Profissionais' },
     { id: 'especialidades', label: 'Especialidades' },
     { id: 'servicos', label: 'Serviços/Estoque' },
-    { id: 'orcamentos', label: 'Orçamentos' }
+    { id: 'orcamentos', label: 'Orçamentos' },
+    { id: 'financeiro', label: 'Financeiro' }
 ];
 
 function renderPermissionsGrid(existingPerms = null) {
@@ -445,6 +466,25 @@ const usersAdminEmptyState = document.getElementById('usersAdminEmptyState');
 const userAdminFormTitle = document.getElementById('userAdminFormTitle');
 const navUsersAdminBtn = document.getElementById('navUsersAdmin');
 
+// Financeiro DOM Elements
+const finTransacoesTable = document.getElementById('finTransacoesTable');
+const finTransacoesBody = document.getElementById('finTransacoesBody');
+const finPainelSaldo = document.getElementById('finPainelSaldo');
+const finNomePaciente = document.getElementById('finNomePaciente');
+const finSaldoPaciente = document.getElementById('finSaldoPaciente');
+const btnNovaTransacao = document.getElementById('btnNovaTransacao');
+const modalNovaTransacao = document.getElementById('modalNovaTransacao');
+const btnSalvarTransacao = document.getElementById('btnSalvarTransacao');
+const btnCancelarTransacao = document.getElementById('btnCancelarTransacao');
+const formNovaTransacao = document.getElementById('formNovaTransacao');
+const transacaoPaciente = document.getElementById('transacaoPaciente');
+const transacaoCategoria = document.getElementById('transacaoCategoria');
+const grpPacienteDestino = document.getElementById('grpPacienteDestino');
+const transacaoPacienteDestino = document.getElementById('transacaoPacienteDestino');
+const btnFinBuscar = document.getElementById('btnFinBuscar');
+const finPacienteSearch = document.getElementById('finPacienteSearch');
+const btnFinVerTodos = document.getElementById('btnFinVerTodos');
+
 // Active State
 let currentSpecialtySubdivisions = [];
 let editingSubSpecIndex = -1;
@@ -487,6 +527,8 @@ function setActiveTab(tab) {
     if (navBudgets) navBudgets.classList.remove('active');
     if (navUsersAdminBtn) navUsersAdminBtn.classList.remove('active');
     if (navEmpresas) navEmpresas.classList.remove('active');
+    const navFinanceiro = document.getElementById('navFinanceiro');
+    if (navFinanceiro) navFinanceiro.classList.remove('active');
 
     // Hide all views
     patientListView.classList.add('hidden');
@@ -503,6 +545,7 @@ function setActiveTab(tab) {
     if (userAdminFormView) userAdminFormView.classList.add('hidden');
     if (empresasListView) empresasListView.classList.add('hidden');
     if (empresaFormView) empresaFormView.classList.add('hidden');
+    if (financeiroView) financeiroView.classList.add('hidden');
 
     if (tab === 'patients') {
         navPatients.classList.add('active');
@@ -522,6 +565,10 @@ function setActiveTab(tab) {
     } else if (tab === 'empresas') {
         if (navEmpresas) navEmpresas.classList.add('active');
         showList('empresas');
+    } else if (tab === 'financeiro') {
+        const navFinanceiro = document.getElementById('navFinanceiro');
+        if (navFinanceiro) navFinanceiro.classList.add('active');
+        showList('financeiro');
     } else {
         navProfessionals.classList.add('active');
         showList('professionals');
@@ -540,6 +587,7 @@ function setupNavigationListeners() {
         'navSpecialties': 'specialties',
         'navServices': 'services',
         'navBudgets': 'budgets',
+        'navFinanceiro': 'financeiro',
         'navUsersAdmin': 'usersAdmin',
         'navEmpresas': 'empresas'
     };
@@ -754,6 +802,9 @@ function renderTable(data = patients, type = 'patients') {
             const total = itens.reduce((acc, curr) => acc + ((parseFloat(curr.valor) || 0) * (parseInt(curr.qtde) || 1)), 0);
             const qtdItens = itens.length;
 
+            const totalPago = b.total_pago || 0;
+            const saldoDevedor = total - totalPago;
+
             tr.innerHTML = `
                 <td>${b.seqid}</td>
                 <td>
@@ -762,12 +813,16 @@ function renderTable(data = patients, type = 'patients') {
                 </td>
                 <td>${qtdItens} itens</td>
                 <td><strong style="color: var(--primary-color)">R$ ${total.toFixed(2)}</strong></td>
+                <td><strong style="color: ${saldoDevedor > 0 ? '#dc3545' : 'var(--success-color)'}">R$ ${totalPago.toFixed(2)}</strong></td>
                 <td>
                     <span style="background: var(--bg-hover); padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">
                         ${b.status || 'Pendente'}
                     </span>
                 </td>
                 <td class="actions-cell">
+                    <button class="btn-icon" onclick="viewBudgetPayments('${b.id}')" title="Ver Pagamentos">
+                        <i class="ri-money-dollar-circle-line"></i>
+                    </button>
                     <button class="btn-icon" onclick="printBudget('${b.id}')" title="Imprimir Orçamento">
                         <i class="ri-printer-line"></i>
                     </button>
@@ -782,6 +837,39 @@ function renderTable(data = patients, type = 'patients') {
                 </td>
             `;
             budgetsTableBody.appendChild(tr);
+        });
+    } else if (type === 'financeiro') {
+        const body = document.getElementById('finTransacoesBody');
+        if (!body) return;
+        body.innerHTML = '';
+        if (data.length === 0) {
+            body.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);">Nenhum lançamento encontrado.</td></tr>';
+            return;
+        }
+
+        data.forEach((t, index) => {
+            const tr = document.createElement('tr');
+            const valorFormatado = Number(t.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const tipoLabel = t.tipo === 'CREDITO' ?
+                '<span style="color: var(--success-color); font-weight: 600;">CRÉDITO</span>' :
+                '<span style="color: #dc3545; font-weight: 600;">DÉBITO</span>';
+
+            tr.innerHTML = `
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${t.seqid || index + 1}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);"><strong>${t.paciente_nome || '—'}</strong></td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${formatDateTime(t.data_transacao)}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${t.categoria}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${t.forma_pagamento || '—'}</td>
+                <td style="padding: 0.75rem; text-align: right; border-bottom: 1px solid var(--border-color);"><strong>${valorFormatado}</strong></td>
+                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">${tipoLabel}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${t.observacoes || ''}">${t.observacoes || '—'}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); text-align: center;">
+                    <button class="btn-icon delete-btn" onclick="deleteTransaction('${t.id}')" title="Excluir Lançamento">
+                        <i class="ri-delete-bin-line"></i>
+                    </button>
+                </td>
+            `;
+            body.appendChild(tr);
         });
     } else {
         professionalsTableBody.innerHTML = '';
@@ -1110,6 +1198,10 @@ function showList(type = 'patients') {
         if (empresaForm) empresaForm.reset();
         document.getElementById('editEmpresaOldId').value = '';
         fetchEmpresas();
+    } else if (type === 'financeiro') {
+        if (financeiroView) financeiroView.classList.remove('hidden');
+        // Hidden other forms if any
+        fetchTransactions();
     } else {
         professionalFormView.classList.add('hidden');
         professionalListView.classList.remove('hidden');
@@ -4436,4 +4528,597 @@ async function printPatientDetailReport(saveAsPdf = false) {
 (function () {
     const btnPDF = document.getElementById('btnExportPDF');
     if (btnPDF) btnPDF.addEventListener('click', () => printPatientDetailReport());
+})();
+
+// =============================================
+//  FINANCEIRO MODULE — TRANSACTIONS & WALLET
+// =============================================
+
+async function fetchTransactions(patientId = null) {
+    try {
+        let query = db.from('financeiro_transacoes')
+            .select(`
+                *,
+                paciente:pacientes!financeiro_transacoes_paciente_id_fkey(nome)
+            `)
+            .eq('empresa_id', currentEmpresaId)
+            .order('data_transacao', { ascending: false });
+
+        if (patientId) {
+            query = query.eq('paciente_id', patientId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        // Flatten patient name for rendering
+        transactions = (data || []).map(t => ({
+            ...t,
+            paciente_nome: t.paciente?.nome || '—'
+        }));
+
+        renderTable(transactions, 'financeiro');
+
+        if (patientId) {
+            updateBalanceUI(patientId);
+        }
+    } catch (error) {
+        console.error("Error fetching transactions:", error);
+        showToast("Erro ao carregar transações.", true);
+    }
+}
+
+async function updateBalanceUI(patientId) {
+    try {
+        const { data, error } = await db.from('view_saldo_paciente')
+            .select('*')
+            .eq('paciente_id', patientId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
+
+        const balance = data ? Number(data.saldo_atual) : 0;
+        const patient = patients.find(p => p.seqid == patientId || p.id == patientId);
+
+        if (finNomePaciente) finNomePaciente.textContent = patient ? patient.nome : 'Paciente selecionado';
+        if (finSaldoPaciente) {
+            finSaldoPaciente.textContent = balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            finSaldoPaciente.style.color = balance >= 0 ? 'var(--success-color)' : '#dc3545';
+        }
+        if (finPainelSaldo) finPainelSaldo.classList.remove('hidden');
+    } catch (error) {
+        console.error("Error updating balance UI:", error);
+    }
+}
+
+async function deleteTransaction(id) {
+    if (!confirm("Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita e pode afetar o saldo do paciente.")) return;
+
+    try {
+        // 1. Fetch transaction details to see if it belongs to a budget payment
+        const { data: trans, error: fError } = await db.from('financeiro_transacoes').select('*').eq('id', id).single();
+        if (fError) throw fError;
+
+        // 2. If it's a budget payment, find and delete the record in orcamento_pagamentos
+        if (trans.categoria === 'PAGAMENTO' && trans.referencia_id) {
+            // Find in orcamento_pagamentos (using seqid since it's common for referenca_id)
+            const { error: pError } = await db.from('orcamento_pagamentos')
+                .delete()
+                .eq('orcamento_id', trans.referencia_id)
+                .eq('valor_pago', trans.valor)
+                .eq('empresa_id', currentEmpresaId);
+
+            if (pError) console.warn("Could not delete from orcamento_pagamentos:", pError);
+        }
+
+        // 3. Delete from main financeiro_transacoes
+        const { error: dError } = await db.from('financeiro_transacoes').delete().eq('id', id);
+        if (dError) throw dError;
+
+        showToast("Lançamento excluído com sucesso.");
+
+        // 4. Refresh data
+        if (trans.paciente_id) {
+            fetchTransactions(trans.paciente_id);
+            updateBalanceUI(trans.paciente_id);
+        } else {
+            fetchTransactions();
+        }
+
+        // Refresh budget state if necessary
+        const { data: bData } = await db.from('orcamentos').select('*, orcamento_itens(*)').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true });
+        if (bData) budgets = bData;
+
+    } catch (error) {
+        console.error("Error deleting transaction:", error);
+        showToast("Erro ao excluir lançamento.", true);
+    }
+}
+
+// Hook up Financeiro search and listeners
+(function () {
+    if (btnFinBuscar) {
+        btnFinBuscar.addEventListener('click', () => {
+            const term = finPacienteSearch.value.toLowerCase();
+            if (!term) {
+                showToast("Digite o nome de um paciente para buscar.", true);
+                return;
+            }
+            const patient = patients.find(p => p.nome.toLowerCase().includes(term));
+            if (patient) {
+                fetchTransactions(patient.seqid);
+            } else {
+                showToast("Paciente não encontrado.", true);
+            }
+        });
+    }
+
+    if (btnFinVerTodos) {
+        btnFinVerTodos.addEventListener('click', () => {
+            if (finPainelSaldo) finPainelSaldo.classList.add('hidden');
+            fetchTransactions();
+        });
+    }
+
+    if (btnNovaTransacao) {
+        btnNovaTransacao.addEventListener('click', () => {
+            if (formNovaTransacao) formNovaTransacao.reset();
+            // Populate patient select
+            if (transacaoPaciente) {
+                transacaoPaciente.innerHTML = '<option value="">Selecione o paciente...</option>' +
+                    patients.map(p => `<option value="${p.seqid}">${p.nome}</option>`).join('');
+            }
+            if (modalNovaTransacao) modalNovaTransacao.classList.remove('hidden');
+        });
+    }
+
+    const btnCloseModalTransacao = document.getElementById('btnCloseModalTransacao');
+    if (btnCloseModalTransacao) {
+        btnCloseModalTransacao.addEventListener('click', () => modalNovaTransacao.classList.add('hidden'));
+    }
+
+    if (btnCancelarTransacao) {
+        btnCancelarTransacao.addEventListener('click', () => modalNovaTransacao.classList.add('hidden'));
+    }
+
+    if (transacaoCategoria) {
+        transacaoCategoria.addEventListener('change', (e) => {
+            if (e.target.value === 'TRANSFERENCIA') {
+                if (grpPacienteDestino) grpPacienteDestino.classList.remove('hidden');
+                if (transacaoPacienteDestino) {
+                    transacaoPacienteDestino.innerHTML = '<option value="">Selecione o paciente destino...</option>' +
+                        patients.map(p => `<option value="${p.seqid}">${p.nome}</option>`).join('');
+                }
+            } else {
+                if (grpPacienteDestino) grpPacienteDestino.classList.add('hidden');
+            }
+        });
+    }
+
+    const transacaoValor = document.getElementById('transacaoValor');
+    const transacaoForma = document.getElementById('transacaoForma');
+    const transacaoObs = document.getElementById('transacaoObs');
+
+    if (btnSalvarTransacao) {
+        btnSalvarTransacao.addEventListener('click', async () => {
+            const pacId = transacaoPaciente.value;
+            const cat = transacaoCategoria.value;
+            const valor = parseFloat(transacaoValor.value);
+            const forma = transacaoForma.value;
+            const obs = transacaoObs.value;
+
+            if (!pacId || !cat || isNaN(valor) || valor <= 0) {
+                showToast("Preencha todos os campos obrigatórios corretamente.", true);
+                return;
+            }
+
+            let tipo = (cat === 'PAGAMENTO' || cat === 'ESTORNO') ? 'CREDITO' : 'DEBITO';
+
+            const transactionData = {
+                paciente_id: pacId,
+                tipo: tipo,
+                categoria: cat,
+                valor: valor,
+                forma_pagamento: forma,
+                observacoes: obs,
+                empresa_id: currentEmpresaId,
+                criado_por: currentUser.id
+            };
+
+            try {
+                const { error } = await db.from('financeiro_transacoes').insert(transactionData);
+                if (error) throw error;
+
+                if (cat === 'TRANSFERENCIA') {
+                    const pacDestId = transacaoPacienteDestino.value;
+                    if (!pacDestId) {
+                        showToast("Paciente destino não selecionado.", true);
+                        return;
+                    }
+
+                    const transferData = {
+                        ...transactionData,
+                        paciente_id: pacDestId,
+                        tipo: 'CREDITO',
+                        observacoes: `[Transferência de ${pacId}] ${obs}`
+                    };
+                    const { error: err2 } = await db.from('financeiro_transacoes').insert(transferData);
+                    if (err2) throw err2;
+                }
+
+                showToast("Lançamento realizado com sucesso!");
+                modalNovaTransacao.classList.add('hidden');
+                fetchTransactions(pacId);
+            } catch (err) {
+                console.error("Error saving transaction:", err);
+                showToast("Erro ao salvar lançamento.", true);
+            }
+        });
+    }
+})();
+
+// Budget Payment Functions
+window.viewBudgetPayments = async function (budgetId) {
+    const budget = budgets.find(b => b.id === budgetId || b.seqid == budgetId);
+    if (!budget) return;
+
+    if (modalNovaTransacao) modalNovaTransacao.classList.add('hidden');
+    const budgetDetailModal = document.getElementById('budgetDetailModal');
+    if (budgetDetailModal) budgetDetailModal.classList.remove('hidden');
+
+    const itens = budget.orcamento_itens || budget.itens || [];
+    const totalOrcado = itens.reduce((acc, curr) => acc + ((parseFloat(curr.valor) || 0) * (parseInt(curr.qtde) || 1)), 0);
+    const totalPago = budget.total_pago || 0;
+    const saldo = totalOrcado - totalPago;
+
+    const body = document.getElementById('budgetDetailBody');
+    if (!body) return;
+
+    let paymentsHtml = '';
+    if (budget.pagamentos && budget.pagamentos.length > 0) {
+        paymentsHtml = `
+            <table class="simple-table" style="margin-top: 0.5rem; width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                <thead style="background: var(--bg-hover);">
+                    <tr>
+                        <th style="padding: 0.5rem; text-align: left;">Data</th>
+                        <th style="padding: 0.5rem; text-align: left;">Valor</th>
+                        <th style="padding: 0.5rem; text-align: left;">Forma</th>
+                        <th style="padding: 0.5rem; text-align: center;">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${budget.pagamentos.map(p => `
+                        <tr>
+                            <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">${formatDateTime(p.data_pagamento || p.data)}</td>
+                            <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">R$ ${Number(p.valor_pago).toFixed(2)}</td>
+                            <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">${p.forma_pagamento}</td>
+                            <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color); text-align: center;">
+                                <button class="btn-icon delete-btn" onclick="deleteBudgetPayment('${budget.id}', '${p.id}')" title="Excluir Pagamento">
+                                    <i class="ri-delete-bin-line"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    } else {
+        paymentsHtml = '<p style="color: var(--text-muted); margin-top: 0.5rem;">Nenhum pagamento registrado.</p>';
+    }
+
+    let itemsHtml = `
+        <table class="simple-table" style="margin-top: 1rem; width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead style="background: var(--bg-hover);">
+                <tr>
+                    <th style="padding: 0.5rem; text-align: left;">Procedimento</th>
+                    <th style="padding: 0.5rem; text-align: left;">Valor</th>
+                    <th style="padding: 0.5rem; text-align: left;">Status</th>
+                    <th style="padding: 0.5rem; text-align: center;">Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itens.map(it => {
+        const isReleased = ['Liberado', 'Em Execução', 'Finalizado'].includes(it.status);
+
+        // Robust lookup for service
+        const servId = String(it.servico_id).toLowerCase();
+        const serv = services.find(s => String(s.id).toLowerCase() === servId);
+        const desc = serv ? serv.descricao : 'Serviço não encontrado';
+
+        // Robust lookup for professional (seqid can be string or number)
+        const profId = it.profissional_id;
+        const prof = professionals.find(p => String(p.seqid) === String(profId));
+        const profNome = prof ? prof.nome : '—';
+
+        return `
+                    <tr>
+                        <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">
+                            <strong>${desc}</strong><br>
+                            <small style="color: var(--text-muted)">Prof: ${profNome}</small>
+                        </td>
+                        <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">R$ ${Number(it.valor).toFixed(2)}</td>
+                        <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">
+                            <span style="font-size: 0.75rem; background: ${isReleased ? 'rgba(40,167,69,0.1)' : '#eee'}; color: ${isReleased ? 'var(--success-color)' : '#666'}; padding: 2px 6px; border-radius: 4px;">
+                                ${it.status || 'Pendente'}
+                            </span>
+                        </td>
+                        <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color); text-align: center;">
+                            ${!isReleased ? `<button class="btn btn-primary btn-sm" onclick="releaseBudgetItem('${budget.id}', '${it.id}')" title="Liberar para Clínica">Liberar</button>` : '<i class="ri-check-line" style="color: var(--success-color)"></i>'}
+                        </td>
+                    </tr>`;
+    }).join('')}
+            </tbody>
+        </table>
+    `;
+
+    body.innerHTML = `
+        <div style="background: var(--bg-hover); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <p><strong>Paciente:</strong> ${budget.pacientenome || '—'}</p>
+                <p><strong>Total Orçado:</strong> R$ ${totalOrcado.toFixed(2)}</p>
+            </div>
+            <div>
+                <p><strong>Total Pago:</strong> <span style="color: var(--success-color)">R$ ${totalPago.toFixed(2)}</span></p>
+                <p><strong>Saldo Devedor:</strong> <span style="color: ${saldo > 0 ? '#dc3545' : 'var(--success-color)'}">R$ ${saldo.toFixed(2)}</span></p>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr; gap: 2rem;">
+            <div>
+                <h4>Procedimentos e Liberações</h4>
+                ${itemsHtml}
+            </div>
+            <div>
+                <h4>Histórico de Pagamentos</h4>
+                ${paymentsHtml}
+            </div>
+        </div>
+
+        <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1rem; background: #fdfdfd; padding: 1rem; border-radius: 8px;">
+            <h4>Registrar Novo Pagamento</h4>
+            <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                <div class="form-group">
+                    <label>Valor do Pagamento *</label>
+                    <input type="number" id="payBudgetAmount" value="${saldo > 0 ? saldo.toFixed(2) : ''}" step="0.01" style="width: 100%;">
+                </div>
+                <div class="form-group">
+                    <label>Forma de Pagamento *</label>
+                    <select id="payBudgetForma" style="width: 100%;">
+                        <option value="PIX">PIX</option>
+                        <option value="Cartão Débito">Cartão Débito</option>
+                        <option value="Cartão de Crédito">Cartão de Crédito</option>
+                        <option value="Dinheiro">Dinheiro</option>
+                        <option value="Boleto">Boleto</option>
+                        <option value="Cheque">Cheque</option>
+                    </select>
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Observações</label>
+                    <input type="text" id="payBudgetObs" placeholder="Ex: Pagamento 1a parcela" style="width: 100%;">
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="recordBudgetPayment('${budget.id}')" style="margin-top: 1rem; width: 100%;">
+                <i class="ri-save-line"></i> Confirmar Pagamento
+            </button>
+        </div>
+    `;
+};
+
+window.deleteBudgetPayment = async function (budgetId, paymentId) {
+    if (!can('financeiro', 'delete')) {
+        showToast("Você não tem permissão para excluir pagamentos.", true);
+        return;
+    }
+    if (!confirm("Tem certeza que deseja excluir este pagamento?")) return;
+
+    const budget = budgets.find(b => b.id === budgetId || b.seqid == budgetId);
+    if (!budget) return;
+
+    try {
+        // 1. Get payment details to find the financial transaction
+        const payment = (budget.pagamentos || []).find(p => p.id === paymentId);
+        if (!payment) {
+            showToast("Pagamento não encontrado localmente.", true);
+            return;
+        }
+
+        // 2. Delete from orcamento_pagamentos
+        const { error: pErr } = await db.from('orcamento_pagamentos').delete().eq('id', paymentId);
+        if (pErr) throw pErr;
+
+        // 3. Find and delete mirror in financeiro_transacoes
+        // Note: We search by orcamento_id (referencia_id), valor and paciente_id to be safe
+        const pacId = budget.pacienteid || budget.paciente_id;
+        const patient = patients.find(p => p.id === pacId);
+        const pacNumId = patient ? patient.seqid : null;
+
+        if (pacNumId) {
+            const { data: transList, error: fTermErr } = await db.from('financeiro_transacoes')
+                .select('id')
+                .eq('referencia_id', budget.seqid)
+                .eq('valor', payment.valor_pago)
+                .eq('paciente_id', pacNumId)
+                .eq('categoria', 'PAGAMENTO')
+                .order('created_at', { ascending: false });
+
+            if (!fTermErr && transList && transList.length > 0) {
+                // Delete the most recent one that matches
+                await db.from('financeiro_transacoes').delete().eq('id', transList[0].id);
+            }
+        }
+
+        // 4. Update local state
+        budget.pagamentos = budget.pagamentos.filter(p => p.id !== paymentId);
+        budget.total_pago = budget.pagamentos.reduce((acc, curr) => acc + (parseFloat(curr.valor_pago) || 0), 0);
+
+        showToast("Pagamento excluído com sucesso!");
+        viewBudgetPayments(budgetId); // Refresh UI
+
+        // Refresh budget list if open
+        if (!budgetsListView.classList.contains('hidden')) {
+            renderTable(budgets, 'budgets');
+        }
+
+    } catch (error) {
+        console.error("Error deleting budget payment:", error);
+        showToast("Erro ao excluir pagamento.", true);
+    }
+};
+
+window.recordBudgetPayment = async function (budgetId) {
+    const budget = budgets.find(b => b.id === budgetId || b.seqid == budgetId);
+    if (!budget) return;
+
+    const valorInput = document.getElementById('payBudgetAmount');
+    const formaInput = document.getElementById('payBudgetForma');
+    const obsInput = document.getElementById('payBudgetObs');
+
+    const valor = parseFloat(valorInput.value);
+    const forma = formaInput.value;
+    const obs = obsInput.value;
+
+    if (isNaN(valor) || valor <= 0) {
+        showToast("Insira um valor válido.", true);
+        return;
+    }
+
+    try {
+        // 1. Inserir em orcamento_pagamentos
+        const paymentData = {
+            orcamento_id: budget.seqid,
+            valor_pago: valor,
+            forma_pagamento: forma,
+            observacoes: obs,
+            empresa_id: currentEmpresaId
+        };
+
+        const { data: pData, error: pErr } = await db.from('orcamento_pagamentos').insert(paymentData).select().single();
+        if (pErr) {
+            console.error("DEBUG V19: Erro no Passo 1 (orcamento_pagamentos):", pErr);
+            throw pErr;
+        }
+
+        console.log("DEBUG V19: Passo 1 Sucesso, dado inserido:", pData);
+
+        // --- SUCESSO NO PASSO 1: O pagamento já existe no banco ---
+
+        // Atualizar estado local imediatamente
+        if (!budget.pagamentos) budget.pagamentos = [];
+        budget.pagamentos.push(pData);
+        budget.total_pago = (budget.total_pago || 0) + valor;
+
+        console.log("DEBUG V19: Estado local atualizado. Total pago:", budget.total_pago);
+
+        // Atualizar interface com pequeno delay para garantir sincronia
+        setTimeout(() => {
+            console.log("DEBUG V19: Atualizando interface via viewBudgetPayments...");
+            viewBudgetPayments(budgetId);
+            if (!budgetsListView.classList.contains('hidden')) {
+                renderTable(budgets, 'budgets');
+            }
+        }, 300);
+
+        // 2. Tentar inserir espelho em financeiro_transacoes (Conta Corrente)
+        try {
+            const pacId = budget.pacienteid || budget.paciente_id;
+            const patient = patients.find(p => p.id === pacId);
+            const pacNumId = patient ? patient.seqid : null;
+
+            const transactionData = {
+                paciente_id: pacNumId,
+                tipo: 'CREDITO',
+                categoria: 'PAGAMENTO',
+                valor: valor,
+                forma_pagamento: forma,
+                observacoes: `[Orçamento #${budget.seqid}] ${obs}`,
+                referencia_id: budget.seqid,
+                empresa_id: currentEmpresaId,
+                criado_por: currentUser.id
+            };
+
+            const { error: tErr } = await db.from('financeiro_transacoes').insert(transactionData);
+            if (tErr) {
+                console.error("Erro no registro financeiro secundário:", tErr);
+                showToast("Pagamento salvo, mas houve um alerta no financeiro.", true);
+            } else {
+                showToast("Pagamento registrado com sucesso!");
+            }
+        } catch (finErr) {
+            console.error("Erro ao tentar gravar no financeiro:", finErr);
+            showToast("Pagamento salvo com aviso no financeiro.", true);
+        }
+
+    } catch (error) {
+        console.error("Error recording payment:", error);
+        showToast("Erro ao processar pagamento no banco de dados.", true);
+    }
+};
+
+window.releaseBudgetItem = async function (budgetId, itemId) {
+    const budget = budgets.find(b => b.id === budgetId || b.seqid == budgetId);
+    if (!budget) return;
+
+    const item = (budget.orcamento_itens || []).find(it => it.id === itemId);
+    if (!item) return;
+
+    try {
+        const { error: itErr } = await db.from('orcamento_itens').update({ status: 'Liberado' }).eq('id', itemId);
+        if (itErr) throw itErr;
+
+        item.status = 'Liberado';
+
+        const profId = item.profissional_id;
+        const profissional = professionals.find(p => p.seqid == profId);
+
+        if (profissional) {
+            const valorComissao = calculateCommission(profissional, item);
+            if (valorComissao > 0) {
+                const comissaoData = {
+                    profissional_id: profId,
+                    item_id: item.id,
+                    valor_comissao: valorComissao,
+                    status: 'PENDENTE',
+                    empresa_id: currentEmpresaId
+                };
+                const { error: cErr } = await db.from('financeiro_comissoes').insert(comissaoData);
+                if (cErr) throw cErr;
+                showToast(`Item liberado! Comissão de R$ ${valorComissao.toFixed(2)} gerada.`);
+            } else {
+                showToast("Item liberado!");
+            }
+        } else {
+            showToast("Item liberado!");
+        }
+
+        viewBudgetPayments(budgetId);
+    } catch (err) {
+        console.error("Error releasing item:", err);
+        showToast("Erro ao liberar item.", true);
+    }
+};
+
+function calculateCommission(prof, item) {
+    const tipo = prof.tipo;
+    const rules = prof.comissions || {};
+    const valor = parseFloat(item.valor) || 0;
+    const qtde = parseInt(item.qtde) || 1;
+    const totalItem = valor * qtde;
+
+    let perc = 0;
+    if (tipo === 'Clinico') perc = parseFloat(rules.cc) || parseFloat(rules.ce) || 0;
+    else if (tipo === 'Especialista') perc = parseFloat(rules.ec) || parseFloat(rules.ee) || 0;
+    else if (tipo === 'Protetico') perc = parseFloat(rules.cp) || 0;
+
+    const imp = parseFloat(rules.imp) || 0;
+    const baseCalculo = totalItem - imp;
+    return Math.max(0, (baseCalculo * perc) / 100);
+}
+
+// Modal Budget Detail Close Listeners
+(function () {
+    const btn1 = document.getElementById('btnCloseBudgetDetail');
+    const btn2 = document.getElementById('btnCloseBudgetDetail2');
+    const modal = document.getElementById('budgetDetailModal');
+    if (btn1) btn1.onclick = () => modal.classList.add('hidden');
+    if (btn2) btn2.onclick = () => modal.classList.add('hidden');
 })();

@@ -4,9 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cadastro de Pacientes - Consultório Odontológico</title>
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260312-0742">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -16,12 +19,18 @@
 </head>
 
 <body>
+    <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        build 20260312-0742
+    </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
         <div id="loginCard" class="login-card">
-            <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
+            <div class="logo" style="justify-content: center; margin-bottom: 2rem; flex-direction: column; gap: 0.25rem;">
                 <i class="ri-tooth-line" style="font-size: 2rem;"></i>
-                <span style="font-size: 1.5rem;">OdontoClinic</span>
+                <div style="display: flex; flex-direction: column; align-items: center; line-height: 1.1;">
+                    <span style="font-size: 1.8rem; font-weight: 800; letter-spacing: 0.08em;">OCC</span>
+                    <span style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.04em;">Odonto Connect Cloud</span>
+                </div>
             </div>
 
             <h2 style="text-align: center; margin-bottom: 1.5rem; color: var(--text-dark);">Acesso Rápido</h2>
@@ -53,9 +62,12 @@
 
         <!-- Forgot Password View -->
         <div id="forgotPasswordView" class="login-card" style="display: none;">
-            <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
+            <div class="logo" style="justify-content: center; margin-bottom: 2rem; flex-direction: column; gap: 0.25rem;">
                 <i class="ri-tooth-line" style="font-size: 2rem;"></i>
-                <span style="font-size: 1.5rem;">OdontoClinic</span>
+                <div style="display: flex; flex-direction: column; align-items: center; line-height: 1.1;">
+                    <span style="font-size: 1.8rem; font-weight: 800; letter-spacing: 0.08em;">OCC</span>
+                    <span style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.04em;">Odonto Connect Cloud</span>
+                </div>
             </div>
             <h2 style="text-align: center; margin-bottom: 1.5rem; color: var(--text-dark);">Recuperar Senha</h2>
             <p style="text-align: center; color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.9rem;">
@@ -79,9 +91,12 @@
 
         <!-- Reset Password View -->
         <div id="resetPasswordView" class="login-card" style="display: none;">
-            <div class="logo" style="justify-content: center; margin-bottom: 2rem;">
+            <div class="logo" style="justify-content: center; margin-bottom: 2rem; flex-direction: column; gap: 0.25rem;">
                 <i class="ri-tooth-line" style="font-size: 2rem;"></i>
-                <span style="font-size: 1.5rem;">OdontoClinic</span>
+                <div style="display: flex; flex-direction: column; align-items: center; line-height: 1.1;">
+                    <span style="font-size: 1.8rem; font-weight: 800; letter-spacing: 0.08em;">OCC</span>
+                    <span style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.04em;">Odonto Connect Cloud</span>
+                </div>
             </div>
             <h2 style="text-align: center; margin-bottom: 1.5rem; color: var(--text-dark);">Nova Senha</h2>
             <form id="resetPasswordForm">
@@ -107,7 +122,10 @@
         <aside class="sidebar" id="sidebar">
             <div class="logo">
                 <i class="ri-tooth-line"></i>
-                <span>OdontoClinic</span>
+                <div style="display: flex; flex-direction: column; line-height: 1.05;">
+                    <span style="font-weight: 800; letter-spacing: 0.08em;">OCC</span>
+                    <span style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; color: var(--text-muted);">Odonto Connect Cloud</span>
+                </div>
                 <button id="sidebarToggle" class="sidebar-toggle-btn"
                     style="margin-left: auto; background: transparent; border: none; font-size: 1.25rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;">
                     <i class="ri-menu-fold-line"></i>
@@ -116,6 +134,9 @@
 
             <nav class="sidebar-nav">
                 <div class="nav-section">Aplicações</div>
+                <button id="navDashboard" class="nav-item">
+                    <i class="ri-dashboard-3-line"></i> <span>Dashboard</span>
+                </button>
                 <button id="navPatients" class="nav-item active">
                     <i class="ri-team-line"></i> <span>Pacientes</span>
                 </button>
@@ -131,14 +152,37 @@
                 <button id="navBudgets" class="nav-item">
                     <i class="ri-wallet-3-line"></i> <span>Orçamentos</span>
                 </button>
+                <button id="navFinanceiro" class="nav-item">
+                    <i class="ri-money-dollar-circle-line"></i> <span>Financeiro</span>
+                </button>
+                <button id="navCommissions" class="nav-item">
+                    <i class="ri-hand-coin-line"></i> <span>Comissões</span>
+                </button>
+                <button id="navAtendimento" class="nav-item">
+                    <i class="ri-stethoscope-line"></i> <span>Atendimento</span>
+                </button>
+                <button id="navAgenda" class="nav-item">
+                    <i class="ri-calendar-2-line"></i> <span>Agenda</span>
+                </button>
 
                 <div class="nav-section mt-4" id="navConfigSection" style="display: none;">Configurações</div>
                 <button id="navEmpresas" class="nav-item" style="display: none;">
                     <i class="ri-building-line"></i> <span>Cadastro de Empresas</span>
                 </button>
-                <button id="navUsersAdmin" class="nav-item" style="display: none;">
+                <button id="navUsersAdmin" class="nav-item" title="Gerenciar Usuários" style="display: none;">
                     <i class="ri-user-settings-line"></i> <span>Gerenciar Usuários</span>
                 </button>
+                <button id="navCancelledBudgets" class="nav-item" title="Auditoria de Cancelamentos"
+                    style="display: none;">
+                    <i class="ri-history-line"></i> <span>Audit Cancelados</span>
+                </button>
+                <div class="nav-section mt-4" id="navEmpresaContextSection" style="display: none;">Unidade Atual</div>
+                <div id="companySwitcherContainer" style="display: none; padding: 0 1rem 1rem 1rem;">
+                    <select id="companySwitcher" class="form-control"
+                        style="width: 100%; background: var(--bg-hover); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem; cursor: pointer;">
+                        <!-- Options will be populated via JS -->
+                    </select>
+                </div>
             </nav>
 
             <div class="sidebar-footer">
@@ -162,11 +206,131 @@
                 <button id="mobileMenuBtn" class="mobile-menu-btn">
                     <i class="ri-menu-line"></i>
                 </button>
-                <h2>Gerenciador de Clínica</h2>
+                <h2>OCC - Odonto Connect Cloud</h2>
                 <div class="theme-toggle">
                     <!-- Theme toggle can go here -->
                 </div>
             </header>
+
+            <section id="dashboardView" class="view-section hidden">
+                <div class="section-header">
+                    <div>
+                        <h2><i class="ri-dashboard-3-line"></i> Dashboard</h2>
+                        <p>Indicadores do dia e visão executiva da unidade.</p>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display:flex; gap: 1rem; align-items:flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="min-width: 210px; margin-bottom: 0;">
+                            <label for="dashDate">Data</label>
+                            <input id="dashDate" type="date" class="form-control">
+                        </div>
+                        <div class="form-group" style="flex: 1; min-width: 280px; margin-bottom: 0;">
+                            <label for="dashProfessional">Profissional (Agenda)</label>
+                            <select id="dashProfessional" class="form-control">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0; display:flex; gap: 0.5rem;">
+                            <button id="btnDashRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-title">Agendados do dia</div>
+                        <div class="kpi-value" id="kpiAgendados">—</div>
+                        <div class="kpi-sub" id="kpiAgendadosSub">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">Recebido hoje</div>
+                        <div class="kpi-value" id="kpiRecebido">—</div>
+                        <div class="kpi-sub" id="kpiRecebidoSub">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">Orçamentos criados</div>
+                        <div class="kpi-value" id="kpiOrcamentosHoje">—</div>
+                        <div class="kpi-sub" id="kpiOrcamentosHojeSub">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">Pacientes cadastrados</div>
+                        <div class="kpi-value" id="kpiPacientesHoje">—</div>
+                        <div class="kpi-sub" id="kpiPacientesHojeSub">—</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid-2">
+                    <div class="dash-card">
+                        <div class="dash-card-header">
+                            <div class="dash-card-title"><i class="ri-calendar-schedule-line"></i> Agenda do dia</div>
+                            <div class="dash-card-sub" id="dashAgendaSummary">—</div>
+                        </div>
+                        <div class="table-container">
+                            <table class="main-table" id="dashAgendaTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 90px;">Hora</th>
+                                        <th>Paciente</th>
+                                        <th style="width: 160px;">Profissional</th>
+                                        <th style="width: 140px;">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashAgendaBody">
+                                    <tr>
+                                        <td colspan="4" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+                                            Use os filtros e clique em “Atualizar”.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div id="dashAgendaEmpty" class="empty-state hidden">
+                                <i class="ri-calendar-schedule-line"></i>
+                                <p>Nenhum agendamento encontrado para a data.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dash-card" id="dashFinanceCard">
+                        <div class="dash-card-header">
+                            <div class="dash-card-title"><i class="ri-bank-card-line"></i> Pagamentos do dia</div>
+                            <div class="dash-card-sub" id="dashFinanceSummary">—</div>
+                        </div>
+                        <div class="dash-chart" id="dashPaymentsChart"></div>
+                        <div class="table-container" style="margin-top: 0.75rem;">
+                            <table class="main-table" id="dashPaymentsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Forma</th>
+                                        <th style="width: 160px; text-align:right;">Total</th>
+                                        <th style="width: 110px; text-align:right;">Qtde</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashPaymentsBody"></tbody>
+                            </table>
+                            <div id="dashPaymentsEmpty" class="empty-state hidden">
+                                <i class="ri-money-dollar-circle-line"></i>
+                                <p>Nenhum pagamento encontrado para a data.</p>
+                            </div>
+                        </div>
+                        <div class="dash-mini-grid">
+                            <div class="mini-card">
+                                <div class="mini-title">Cancelamentos (dia)</div>
+                                <div class="mini-value" id="kpiCancelamentosHoje">—</div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mini-title">Comissões a pagar</div>
+                                <div class="mini-value" id="kpiComissoesAPagar">—</div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mini-title">Ticket médio</div>
+                                <div class="mini-value" id="kpiTicketMedio">—</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
             <!-- PATIENT LIST VIEW -->
             <section id="patientListView" class="view-section active">
@@ -601,6 +765,140 @@
                             </div>
                         </div>
 
+                        <div class="form-card" id="agendaCard">
+                            <h3 class="card-title">Agenda Semanal</h3>
+                            <div style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.75rem;">
+                                Defina os dias e horários de atendimento do profissional.
+                            </div>
+                            <div class="table-container" style="margin: 0;">
+                                <table class="main-table" style="font-size: 0.85rem;">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 70px; text-align: center;">Ativo</th>
+                                            <th>Dia</th>
+                                            <th style="width: 160px;">Início</th>
+                                            <th style="width: 160px;">Fim</th>
+                                            <th style="width: 170px;">Intervalo (min)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td style="text-align:center;"><input type="checkbox" id="agendaDay1Enabled"></td>
+                                            <td>Segunda-feira</td>
+                                            <td><input type="time" id="agendaDay1Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay1End" class="form-control"></td>
+                                            <td>
+                                                <select id="agendaDay1Slot" class="form-control">
+                                                    <option value="10">10</option>
+                                                    <option value="15">15</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
+                                                    <option value="45">45</option>
+                                                    <option value="60">60</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="text-align:center;"><input type="checkbox" id="agendaDay2Enabled"></td>
+                                            <td>Terça-feira</td>
+                                            <td><input type="time" id="agendaDay2Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay2End" class="form-control"></td>
+                                            <td>
+                                                <select id="agendaDay2Slot" class="form-control">
+                                                    <option value="10">10</option>
+                                                    <option value="15">15</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
+                                                    <option value="45">45</option>
+                                                    <option value="60">60</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="text-align:center;"><input type="checkbox" id="agendaDay3Enabled"></td>
+                                            <td>Quarta-feira</td>
+                                            <td><input type="time" id="agendaDay3Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay3End" class="form-control"></td>
+                                            <td>
+                                                <select id="agendaDay3Slot" class="form-control">
+                                                    <option value="10">10</option>
+                                                    <option value="15">15</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
+                                                    <option value="45">45</option>
+                                                    <option value="60">60</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="text-align:center;"><input type="checkbox" id="agendaDay4Enabled"></td>
+                                            <td>Quinta-feira</td>
+                                            <td><input type="time" id="agendaDay4Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay4End" class="form-control"></td>
+                                            <td>
+                                                <select id="agendaDay4Slot" class="form-control">
+                                                    <option value="10">10</option>
+                                                    <option value="15">15</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
+                                                    <option value="45">45</option>
+                                                    <option value="60">60</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="text-align:center;"><input type="checkbox" id="agendaDay5Enabled"></td>
+                                            <td>Sexta-feira</td>
+                                            <td><input type="time" id="agendaDay5Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay5End" class="form-control"></td>
+                                            <td>
+                                                <select id="agendaDay5Slot" class="form-control">
+                                                    <option value="10">10</option>
+                                                    <option value="15">15</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
+                                                    <option value="45">45</option>
+                                                    <option value="60">60</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="text-align:center;"><input type="checkbox" id="agendaDay6Enabled"></td>
+                                            <td>Sábado</td>
+                                            <td><input type="time" id="agendaDay6Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay6End" class="form-control"></td>
+                                            <td>
+                                                <select id="agendaDay6Slot" class="form-control">
+                                                    <option value="10">10</option>
+                                                    <option value="15">15</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
+                                                    <option value="45">45</option>
+                                                    <option value="60">60</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="text-align:center;"><input type="checkbox" id="agendaDay7Enabled"></td>
+                                            <td>Domingo</td>
+                                            <td><input type="time" id="agendaDay7Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay7End" class="form-control"></td>
+                                            <td>
+                                                <select id="agendaDay7Slot" class="form-control">
+                                                    <option value="10">10</option>
+                                                    <option value="15">15</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
+                                                    <option value="45">45</option>
+                                                    <option value="60">60</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
                         <div class="form-actions">
                             <button type="button" id="btnCancelProfessional" class="btn btn-secondary">Cancelar</button>
                             <button type="submit" id="btnSaveProfessional" class="btn btn-primary" disabled>
@@ -869,18 +1167,16 @@
                                 <label>Orçamento ID</label>
                                 <input type="text" id="budIdDisplay" readonly class="readonly-input" placeholder="Novo">
                             </div>
-                            <div class="form-group span-2">
-                                <label for="budPacienteId">Vincular Paciente *</label>
-                                <select id="budPacienteId" required>
-                                    <option value="">Selecione um Paciente...</option>
-                                    <!-- Options injected via JS -->
-                                </select>
+                            <div class="form-group span-3">
+                                <label for="budPacienteNome">Buscar Paciente *</label>
+                                <input type="text" id="budPacienteNome" list="pacientesDataList" required placeholder="Digite o nome ou CPF do paciente...">
+                                <datalist id="pacientesDataList"></datalist>
+                                <input type="hidden" id="budPacienteId">
                             </div>
 
-                            <div class="form-group span-2">
-                                <label>Nome do Paciente</label>
-                                <input type="text" id="budNomePaciente" readonly class="readonly-input"
-                                    placeholder="Preenchimento automático">
+                            <div class="form-group span-1">
+                                <label>CPF</label>
+                                <input type="text" id="budCpfPaciente" readonly class="readonly-input" placeholder="CPF">
                             </div>
                             <div class="form-group">
                                 <label>Celular</label>
@@ -898,6 +1194,7 @@
                                     <option value="Pendente">Pendente</option>
                                     <option value="Aprovado">Aprovado</option>
                                     <option value="Executado">Executado</option>
+                                    <option value="Finalizado">Finalizado</option>
                                     <option value="Cancelado">Cancelado</option>
                                 </select>
                             </div>
@@ -907,6 +1204,19 @@
                                     <option value="">Selecione o Profissional...</option>
                                     <!-- Options injected via JS -->
                                 </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="budTipo">Tipo de Orçamento</label>
+                                <select id="budTipo">
+                                    <option value="Normal">Normal</option>
+                                    <option value="Retrabalho">Retrabalho</option>
+                                    <option value="Cortesia">Cortesia</option>
+                                </select>
+                            </div>
+                            <div class="form-group span-3">
+                                <label for="budObservacoes">Observações</label>
+                                <textarea id="budObservacoes" rows="2"
+                                    placeholder="Observações internas ou detalhes do orçamento..."></textarea>
                             </div>
                         </div>
                     </div>
@@ -1021,7 +1331,7 @@
                     </div>
 
                     <div class="form-actions">
-                        <button type="button" id="btnCancelBudget" class="btn btn-secondary">Cancelar</button>
+                        <button type="button" id="btnCancelBudget" class="btn btn-secondary">Fechar</button>
                         <button type="submit" id="btnSaveBudget" class="btn btn-primary">
                             <i class="ri-save-line"></i> Salvar Orçamento Completo
                         </button>
@@ -1093,7 +1403,9 @@
                                 <select id="adminUserRole" required>
                                     <option value="">Selecione...</option>
                                     <option value="admin">Administrador (Acesso Total)</option>
+                                    <option value="supervisor">Supervisor (Autorização Superior)</option>
                                     <option value="dentista">Dentista / Especialista</option>
+                                    <option value="protetico">Protético (Laboratório)</option>
                                 </select>
                             </div>
 
@@ -1195,6 +1507,11 @@
                                 <input type="text" id="empresaNome" required placeholder="Nome Fantasia">
                             </div>
 
+                            <div class="form-group">
+                                <label for="empresaSupervisorPin">Senha do Supervisor *</label>
+                                <input type="password" id="empresaSupervisorPin" required placeholder="Ex: 1234">
+                            </div>
+
                             <div class="form-group span-2">
                                 <label for="empresaLogo">Logotipo (Arquivo)</label>
                                 <div style="display: flex; align-items: center; gap: 15px;">
@@ -1237,6 +1554,7 @@
                     <button class="tab-btn active" data-tab="tabGeral">Geral</button>
                     <button class="tab-btn" data-tab="tabEvolucao">Prontuário / Evolução</button>
                     <button class="tab-btn" data-tab="tabOrcamentos">Orçamentos</button>
+                    <button class="tab-btn" data-tab="tabFinanceiro">Financeiro / Extrato</button>
                     <button class="tab-btn" data-tab="tabDocumentos">Documentos</button>
                 </div>
 
@@ -1364,27 +1682,543 @@
                         <!-- Cards de documentos -->
                     </div>
                 </div>
+
+                <!-- Tab: Financeiro -->
+                <div id="tabFinanceiro" class="tab-content">
+                    <div class="evolution-header">
+                        <h3>Extrato Financeiro do Paciente</h3>
+                    </div>
+                    <div class="table-container" style="margin-top: 1rem;">
+                        <table id="detFinanceiroTable">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Categoria</th>
+                                    <th>Forma</th>
+                                    <th style="text-align: right;">Valor</th>
+                                    <th style="text-align: center;">Tipo</th>
+                                    <th>Observação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detFinanceiroBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </section>
 
-            <!-- Modal: Detalhes do Orçamento (usado dentro da Ficha do Paciente) -->
-            <div id="budgetDetailModal" class="modal-overlay hidden" style="z-index: 1000;">
-                <div class="modal-content" style="max-width: 750px; width: 95%;">
+            <!-- Modal: Detalhes do Orçamento - REMOVIDO DUPLICADO PARA EVITAR CONFLITO -->
+            <!-- ============================================================ -->
+            <!-- MÓDULO FINANCEIRO: CONTA CORRENTE                            -->
+            <!-- ============================================================ -->
+            <section id="financeiroView" class="view-section hidden">
+                <div class="section-header">
+                    <h2><i class="ri-bank-card-line"></i> Financeiro</h2>
+                    <button id="btnNovaTransacao" class="btn btn-primary">
+                        <i class="ri-add-line"></i> Novo Lançamento
+                    </button>
+                </div>
+
+                <!-- Painel de Busca por Paciente -->
+                <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="flex: 1; min-width: 250px; margin-bottom: 0;">
+                            <label for="finPacienteSearch">Buscar Paciente</label>
+                            <input type="text" id="finPacienteSearch" placeholder="Digite o nome do paciente..."
+                                class="form-control">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <button id="btnFinBuscar" class="btn btn-secondary"><i class="ri-search-line"></i>
+                                Buscar</button>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <button id="btnFinVerTodos" class="btn btn-secondary"><i class="ri-list-check"></i> Ver
+                                Todos</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Painel de Saldo do Paciente Selecionado -->
+                <div id="finPainelSaldo" class="card hidden"
+                    style="margin-bottom: 1rem; padding: 1rem; border-left: 4px solid var(--primary-color);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                        <div>
+                            <p style="margin:0; font-size: 0.85rem; color: var(--text-muted);">Paciente Selecionado</p>
+                            <h3 id="finNomePaciente" style="margin: 0.25rem 0;">-</h3>
+                        </div>
+                        <div style="text-align: right;">
+                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Saldo Disponível</p>
+                            <h2 id="finSaldoPaciente" style="margin: 0.25rem 0; color: var(--success-color);">R$ 0,00
+                            </h2>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button id="btnTransferirSaldo" class="btn btn-secondary"
+                                title="Transferir saldo para outro paciente">
+                                <i class="ri-arrow-left-right-line"></i> Transferir Saldo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Extrato de Transações -->
+                <div class="card">
+                    <h3 style="margin-bottom: 1rem; padding: 1rem 1rem 0;">Extrato de Transações</h3>
+                    <div style="overflow-x: auto;">
+                        <table id="finTransacoesTable" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr>
+                                    <th
+                                        style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
+                                        #</th>
+                                    <th
+                                        style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
+                                        Paciente</th>
+                                    <th
+                                        style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
+                                        Data</th>
+                                    <th
+                                        style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
+                                        Categoria</th>
+                                    <th
+                                        style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
+                                        Forma</th>
+                                    <th
+                                        style="padding: 0.75rem; text-align: right; border-bottom: 1px solid var(--border-color);">
+                                        Valor</th>
+                                    <th
+                                        style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">
+                                        Tipo</th>
+                                    <th
+                                        style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
+                                        Observação</th>
+                                    <th
+                                        style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">
+                                        Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="finTransacoesBody">
+                                <tr>
+                                    <td colspan="9"
+                                        style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                                        <i class="ri-search-line"></i> Busque um paciente ou clique em "Ver Todos" para
+                                        carregar o extrato.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- COMMISSIONS VIEW -->
+            <section id="commissionsView" class="view-section hidden">
+                <div class="section-header">
+                    <div>
+                        <h2><i class="ri-hand-coin-line"></i> Comissões</h2>
+                        <p>Consulta e pagamento de comissões por período e profissional.</p>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
+                            <label for="commStatus">Status</label>
+                            <select id="commStatus" class="form-control">
+                                <option value="A_PAGAR">Comissões à Pagar</option>
+                                <option value="PAGAS">Comissões Pagas</option>
+                                <option value="TRANSFERIDAS">Transferidas / Estornadas</option>
+                                <option value="TODAS">Todas</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="min-width: 170px; margin-bottom: 0;">
+                            <label for="commStart">De</label>
+                            <input id="commStart" type="date" class="form-control">
+                        </div>
+                        <div class="form-group" style="min-width: 170px; margin-bottom: 0;">
+                            <label for="commEnd">Até</label>
+                            <input id="commEnd" type="date" class="form-control">
+                        </div>
+                        <div class="form-group" style="flex: 1; min-width: 260px; margin-bottom: 0;">
+                            <label for="commProfessional">Profissional</label>
+                            <select id="commProfessional" class="form-control">
+                                <option value="">Todos os profissionais</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0; display: flex; gap: 0.5rem;">
+                            <button id="btnCommSearch" class="btn btn-secondary"><i class="ri-search-line"></i> Buscar</button>
+                            <button id="btnCommPay" class="btn btn-muted"><i class="ri-money-dollar-circle-line"></i> Marcar como Pago</button>
+                            <button id="btnCommTransfer" class="btn btn-secondary"><i class="ri-user-shared-2-line"></i> Transferir Comissões</button>
+                            <button id="btnCommPrint" class="btn btn-secondary"><i class="ri-printer-line"></i> Imprimir Recibo</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div style="display:flex; justify-content: space-between; align-items:center; padding: 1rem 1rem 0; gap: 1rem; flex-wrap: wrap;">
+                        <h3 style="margin:0;">Lançamentos de Comissão</h3>
+                        <div style="display:flex; align-items:center; gap: 0.75rem; color: var(--text-muted); font-size: 0.9rem;">
+                            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                                <input id="commSelectAll" type="checkbox">
+                                Selecionar todos
+                            </label>
+                            <span id="commSelectedTotal">Total selecionado: R$ 0,00</span>
+                        </div>
+                    </div>
+                    <div class="table-container" style="margin-top: 0.5rem;">
+                        <table class="main-table" id="commissionsTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 44px; text-align: center;">[ ]</th>
+                                    <th style="width: 110px;">Data</th>
+                                    <th style="width: 320px;">Profissional</th>
+                                    <th style="min-width: 320px;">Item</th>
+                                    <th style="width: 140px; text-align: right;">Valor</th>
+                                    <th style="width: 130px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="commissionsTableBody">
+                                <tr>
+                                    <td colspan="6" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+                                        Use os filtros e clique em “Buscar”.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div id="commissionsEmptyState" class="empty-state hidden">
+                            <i class="ri-hand-coin-line"></i>
+                            <p>Nenhuma comissão encontrada para os filtros selecionados.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="atendimentoView" class="view-section hidden">
+                <div class="section-header">
+                    <div>
+                        <h2><i class="ri-stethoscope-line"></i> Atendimento</h2>
+                        <p>Lista de atendimentos do dia baseada na agenda e no executor do item.</p>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="min-width: 210px; margin-bottom: 0;">
+                            <label for="atendimentoDate">Data</label>
+                            <input id="atendimentoDate" type="date" class="form-control">
+                        </div>
+                        <div class="form-group" id="atendimentoProfessionalGroup" style="flex: 1; min-width: 280px; margin-bottom: 0;">
+                            <label for="atendimentoProfessional">Profissional (Executor)</label>
+                            <select id="atendimentoProfessional" class="form-control">
+                                <option value="">Selecione...</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0; display: flex; gap: 0.5rem;">
+                            <button id="btnAtendimentoRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div style="display:flex; justify-content: space-between; align-items:center; padding: 1rem 1rem 0; gap: 1rem; flex-wrap: wrap;">
+                        <h3 style="margin:0;">Atendimentos do Dia</h3>
+                        <div id="atendimentoSummary" style="color: var(--text-muted); font-size: 0.9rem;">—</div>
+                    </div>
+                    <div class="table-container" style="margin-top: 0.5rem;">
+                        <table class="main-table" id="atendimentoTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 90px;">Hora</th>
+                                    <th style="width: 280px;">Paciente</th>
+                                    <th>Item</th>
+                                    <th style="width: 90px; text-align: center;">Orc. #</th>
+                                    <th style="width: 160px;">Status do Item</th>
+                                    <th style="width: 220px;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="atendimentoBody">
+                                <tr>
+                                    <td colspan="6" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+                                        Selecione a data e o profissional.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div id="atendimentoEmptyState" class="empty-state hidden">
+                            <i class="ri-stethoscope-line"></i>
+                            <p>Nenhum atendimento encontrado para este dia.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AGENDA VIEW -->
+            <section id="agendaView" class="view-section hidden">
+                <div class="section-header">
+                    <div>
+                        <h2><i class="ri-calendar-2-line"></i> Agenda</h2>
+                        <p>Agendamento por profissional com base na disponibilidade semanal.</p>
+                    </div>
+                    <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button id="btnAgendaPrintDay" class="btn btn-secondary">
+                            <i class="ri-printer-line"></i> Imprimir Dia
+                        </button>
+                        <button id="btnAgendaPrintWeek" class="btn btn-secondary">
+                            <i class="ri-printer-line"></i> Imprimir Semana
+                        </button>
+                        <button id="btnAgendaPrintWeekCompact" class="btn btn-secondary">
+                            <i class="ri-printer-line"></i> Agenda Semanal Reduzida
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="min-width: 210px; margin-bottom: 0;">
+                            <label for="agendaDate">Data</label>
+                            <input id="agendaDate" type="date" class="form-control">
+                        </div>
+                        <div id="agendaProfessionalGroup" class="form-group" style="flex: 1; min-width: 280px; margin-bottom: 0;">
+                            <label for="agendaProfessional">Profissional</label>
+                            <select id="agendaProfessional" class="form-control">
+                                <option value="">Selecione...</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0; display: flex; gap: 0.5rem;">
+                            <button id="btnAgendaRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
+                            <button id="btnAgendaNew" class="btn btn-primary"><i class="ri-add-line"></i> Novo</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div style="display:flex; justify-content: space-between; align-items:center; padding: 1rem 1rem 0; gap: 1rem; flex-wrap: wrap;">
+                        <h3 style="margin:0;">Horários do Dia</h3>
+                        <div id="agendaSummary" style="color: var(--text-muted); font-size: 0.9rem;">—</div>
+                    </div>
+                    <div class="table-container" style="margin-top: 0.5rem;">
+                        <table class="main-table" id="agendaSlotsTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 90px;">Hora</th>
+                                    <th>Paciente</th>
+                                    <th style="width: 140px;">Status</th>
+                                    <th style="width: 170px;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="agendaSlotsBody">
+                                <tr>
+                                    <td colspan="4" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+                                        Selecione a data e o profissional.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div id="agendaEmptyState" class="empty-state hidden">
+                            <i class="ri-calendar-schedule-line"></i>
+                            <p>Nenhum horário disponível para este dia.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CANCELLED BUDGETS LOG VIEW -->
+            <section id="cancelledBudgetsView" class="view-section hidden">
+                <div class="section-header">
+                    <div>
+                        <h2><i class="ri-history-line"></i> Audit de Orçamentos Cancelados</h2>
+                        <p>Trilha de auditoria e logs de segurança para cancelamentos críticos.</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="table-container">
+                        <table class="main-table" id="cancelledBudgetsTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 80px;">Orc. #</th>
+                                    <th>Paciente</th>
+                                    <th>Data Cancel.</th>
+                                    <th style="text-align: right;">Pago na Época</th>
+                                    <th>Motivo do Cancelamento</th>
+                                    <th>Responsável</th>
+                                    <th style="width: 110px; text-align: center;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cancelledBudgetsTableBody">
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                        <div id="cancelledBudgetsEmptyState" class="empty-state hidden">
+                            <i class="ri-history-line"></i>
+                            <p>Nenhum log de cancelamento registrado até o momento.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Modal: Novo Lançamento Financeiro -->
+            <div id="modalNovaTransacao" class="modal-overlay hidden">
+                <div class="modal-content" style="max-width: 520px;">
                     <div class="modal-header">
-                        <h3 id="budgetDetailTitle">Detalhes do Orçamento</h3>
-                        <button type="button" class="btn-close-modal" id="btnCloseBudgetDetail">
+                        <h3 id="modalTransacaoTitulo"><i class="ri-add-circle-line"></i> Novo Lançamento</h3>
+                        <button type="button" class="btn-close-modal" id="btnCloseModalTransacao">
                             <i class="ri-close-line"></i>
                         </button>
                     </div>
-                    <div class="modal-body" id="budgetDetailBody"
-                        style="max-height: 70vh; overflow-y: auto; padding: 1.5rem;">
-                        <!-- Conteúdo injetado via JS -->
+                    <div class="modal-body">
+                        <form id="formNovaTransacao" style="display: flex; flex-direction: column; gap: 1rem;">
+                            <input type="hidden" id="transacaoId">
+                            <div class="form-group">
+                                <label for="transacaoPaciente">Paciente *</label>
+                                <select id="transacaoPaciente" class="form-control" required>
+                                    <option value="">Selecione o paciente...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="transacaoCategoria">Categoria *</label>
+                                <select id="transacaoCategoria" class="form-control" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="PAGAMENTO">Pagamento (Crédito do Paciente)</option>
+                                    <option value="REEMBOLSO">Reembolso (Devolução ao Paciente)</option>
+                                    <option value="TRANSFERENCIA">Transferência de Saldo</option>
+                                    <option value="ESTORNO">Estorno</option>
+                                </select>
+                            </div>
+                            <!-- Campo específico para Transferência -->
+                            <div class="form-group hidden" id="grpPacienteDestino">
+                                <label for="transacaoPacienteDestino">Paciente Destino *</label>
+                                <select id="transacaoPacienteDestino" class="form-control">
+                                    <option value="">Selecione o paciente destino...</option>
+                                </select>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div class="form-group">
+                                    <label for="transacaoValor">Valor (R$) *</label>
+                                    <input type="number" id="transacaoValor" class="form-control" step="0.01" min="0.01"
+                                        required placeholder="0,00">
+                                </div>
+                                <div class="form-group">
+                                    <label for="transacaoForma">Forma de Pagamento</label>
+                                    <select id="transacaoForma" class="form-control">
+                                        <option value="">Não informado</option>
+                                        <option value="PIX">PIX</option>
+                                        <option value="Cartão Débito">Cartão Débito</option>
+                                        <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                        <option value="Dinheiro">Dinheiro</option>
+                                        <option value="Boleto">Boleto</option>
+                                        <option value="Cheque">Cheque</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="transacaoObs">Observações</label>
+                                <textarea id="transacaoObs" class="form-control" rows="2"
+                                    placeholder="Ex: Pagamento referente ao orçamento #10..."></textarea>
+                            </div>
+                        </form>
                     </div>
                     <div class="modal-footer"
                         style="display: flex; justify-content: flex-end; gap: 1rem; padding: 1rem;">
-                        <button type="button" class="btn btn-primary" id="btnCloseBudgetDetail2">Fechar</button>
+                        <button type="button" id="btnCancelarTransacao" class="btn btn-secondary">Cancelar</button>
+                        <button type="button" id="btnSalvarTransacao" class="btn btn-primary">
+                            <i class="ri-save-line"></i> Salvar Lançamento
+                        </button>
                     </div>
                 </div>
             </div>
+
+            <div id="modalAgenda" class="modal-overlay hidden">
+                <div class="modal-content" style="max-width: 560px;">
+                    <div class="modal-header">
+                        <h3 id="modalAgendaTitle"><i class="ri-calendar-event-line"></i> Novo Agendamento</h3>
+                        <button type="button" class="btn-close-modal" id="btnCloseModalAgenda">
+                            <i class="ri-close-line"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="formAgenda" style="display: flex; flex-direction: column; gap: 1rem;">
+                            <input type="hidden" id="agendaId">
+                            <div class="form-group">
+                                <label for="agendaPaciente">Paciente</label>
+                                <select id="agendaPaciente" class="form-control">
+                                    <option value="">(Sem paciente)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="agendaTitulo">Título</label>
+                                <input id="agendaTitulo" type="text" class="form-control" placeholder="Ex: Consulta / Retorno">
+                            </div>
+                            <div class="form-group">
+                                <label for="agendaInicio">Início</label>
+                                <input id="agendaInicio" type="datetime-local" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="agendaFim">Fim</label>
+                                <input id="agendaFim" type="datetime-local" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="agendaStatus">Status</label>
+                                <select id="agendaStatus" class="form-control">
+                                    <option value="MARCADO">MARCADO</option>
+                                    <option value="CONCLUIDO">CONCLUIDO</option>
+                                    <option value="FALTOU">FALTOU</option>
+                                    <option value="CANCELADO">CANCELADO</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="agendaObs">Observações</label>
+                                <textarea id="agendaObs" class="form-control" rows="3" placeholder="Anotações..."></textarea>
+                            </div>
+                            <div style="display:flex; gap: 0.75rem; justify-content: flex-end;">
+                                <button type="button" id="btnAgendaDelete" class="btn btn-danger hidden"><i class="ri-delete-bin-line"></i> Excluir</button>
+                                <button type="button" id="btnAgendaCancel" class="btn btn-secondary">Cancelar</button>
+                                <button type="submit" id="btnAgendaSave" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal: Transferência de Saldo -->
+            <div id="modalTransferencia" class="modal-overlay hidden">
+                <div class="modal-content" style="max-width: 480px;">
+                    <div class="modal-header">
+                        <h3><i class="ri-arrow-left-right-line"></i> Transferir Saldo</h3>
+                        <button type="button" class="btn-close-modal" id="btnCloseModalTransferencia">
+                            <i class="ri-close-line"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>Saldo de origem</label>
+                            <p id="transOrigem" style="font-weight: 600;"></p>
+                        </div>
+                        <div class="form-group">
+                            <label for="transPacienteDestino">Paciente Destino *</label>
+                            <select id="transPacienteDestino" class="form-control">
+                                <option value="">Selecione...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="transValor">Valor a Transferir (R$) *</label>
+                            <input type="number" id="transValor" class="form-control" step="0.01" min="0.01"
+                                placeholder="0,00">
+                        </div>
+                        <div class="form-group">
+                            <label for="transObs">Observação</label>
+                            <textarea id="transObs" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer"
+                        style="display: flex; justify-content: flex-end; gap: 1rem; padding: 1rem;">
+                        <button type="button" id="btnCancelarTransferencia" class="btn btn-secondary">Cancelar</button>
+                        <button type="button" id="btnConfirmarTransferencia" class="btn btn-primary">
+                            <i class="ri-check-line"></i> Confirmar Transferência
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 
@@ -1442,6 +2276,128 @@
         </div>
     </div>
 
+
+    <!-- Modal: Detalhes do Orçamento e Pagamentos -->
+    <div id="budgetDetailModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 800px; width: 95%;">
+            <div class="modal-header">
+                <h3>Gestão de Pagamentos e Liberação</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseBudgetDetail">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="budgetDetailBody" style="max-height: 70vh; overflow-y: auto;">
+                <!-- Conteúdo gerado dinamicamente via JS -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="btnCloseBudgetDetail2">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Autorização do Supervisor -->
+    <div id="supervisorAuthModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 400px; width: 90%;">
+            <div class="modal-header">
+                <h3><i class="ri-shield-user-line"></i> Autorização Superior</h3>
+                <button class="btn-icon"
+                    onclick="document.getElementById('supervisorAuthModal').classList.add('hidden')">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <p style="font-size: 0.9rem; margin-bottom: 1.5rem; color: var(--text-muted);">
+                    A liberação deste item requer autorização superior pois o valor pago ainda não cobre o total orçado.
+                </p>
+                <div class="form-group">
+                    <label>Senha do Supervisor *</label>
+                    <input type="password" id="supervisorPinInput" class="form-control" placeholder="Digite a senha"
+                        style="text-align: center; font-size: 1.2rem; letter-spacing: 0.5rem;">
+                </div>
+                <button id="btnConfirmSupervisorAuth" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+                    Confirmar Autorização
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="commTransferModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 520px; width: 92%;">
+            <div class="modal-header">
+                <h3><i class="ri-user-shared-2-line"></i> Trocar Profissional (Comissão)</h3>
+                <button class="btn-icon" onclick="document.getElementById('commTransferModal').classList.add('hidden')">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <div class="form-group">
+                    <label>Comissão selecionada</label>
+                    <div id="commTransferSummary" class="form-control" style="height:auto; min-height: 42px; display:flex; align-items:center;"></div>
+                </div>
+                <div class="form-group">
+                    <label for="commTransferNewProfessional">Novo profissional *</label>
+                    <select id="commTransferNewProfessional" class="form-control"></select>
+                </div>
+                <div class="form-group">
+                    <label for="commTransferObs">Observação *</label>
+                    <textarea id="commTransferObs" class="form-control" rows="3" placeholder="Ex.: Paciente solicitou troca de profissional. Estornar comissão do profissional anterior e gerar para o novo."></textarea>
+                </div>
+                <div style="display:flex; gap: 0.75rem; justify-content:flex-end; margin-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" id="btnCommTransferCancel">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnCommTransferConfirm">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Termo de Cancelamento -->
+    <div id="cancellationTermModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 800px; width: 95%;">
+            <div class="modal-header no-print">
+                <h3><i class="ri-file-paper-line"></i> Termo de Cancelamento</h3>
+                <button class="btn-icon"
+                    onclick="document.getElementById('cancellationTermModal').classList.add('hidden')">&times;</button>
+            </div>
+            <div class="modal-body" id="cancellationTermBody" style="padding: 2rem; background: white;">
+                <!-- Conteúdo preenchido via JS -->
+            </div>
+            <div class="modal-footer no-print" style="display: flex; justify-content: flex-end; gap: 1rem;">
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('cancellationTermModal').classList.add('hidden')">Fechar</button>
+                <button type="button" class="btn btn-primary" onclick="printCancellationTerm()">
+                    <i class="ri-printer-line"></i> Imprimir Termo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="atendimentoEvolucaoModal" class="modal-overlay hidden">
+        <div class="modal-content modal-lg" style="max-width: 760px; width: 95%;">
+            <div class="modal-header">
+                <h3><i class="ri-file-edit-line"></i> Registrar evolução</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseAtendimentoEvolucao">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="atEvoPacienteId">
+                <input type="hidden" id="atEvoProfSeqId">
+                <input type="hidden" id="atEvoOrcamentoId">
+                <input type="hidden" id="atEvoItemId">
+                <input type="hidden" id="atEvoAgendamentoId">
+                <div class="form-group">
+                    <label>Resumo do atendimento</label>
+                    <div id="atEvoResumo" class="form-control" style="height:auto; min-height: 42px; display:flex; align-items:center;"></div>
+                </div>
+                <div class="form-group">
+                    <label for="atEvoTexto">Evolução *</label>
+                    <textarea id="atEvoTexto" class="form-control" rows="5" placeholder="Descreva o atendimento..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="btnCancelAtendimentoEvolucao">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnSaveAtendimentoEvolucao">
+                    <i class="ri-check-line"></i> Salvar no Prontuário
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toastNotification" class="toast hidden">
         <div class="toast-content">
@@ -1456,7 +2412,7 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <!-- App Script -->
-    <script src="app.js"></script>
+    <script src="app_v20.js?v=20260312-0742"></script>
 </body>
 
 </html>

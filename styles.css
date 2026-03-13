@@ -150,6 +150,82 @@ body {
     font-weight: 600;
 }
 
+/* =========================================
+   ESTILOS DE IMPRESSÃO
+   ========================================= */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    #cancellationTermModal,
+    #cancellationTermModal *,
+    #cancellationTermBody,
+    #cancellationTermBody * {
+        visibility: visible;
+    }
+
+    #cancellationTermModal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: auto;
+        background: white;
+        display: block !important;
+        visibility: visible !important;
+    }
+
+    .modal-overlay {
+        background: none !important;
+        position: static !important;
+    }
+
+    .modal-content {
+        box-shadow: none !important;
+        border: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+
+    .modal-body {
+        padding: 0 !important;
+    }
+
+    /* Garantir que o conteúdo do termo seja impresso corretamente */
+    .term-print-container {
+        font-family: serif;
+        line-height: 1.5;
+        color: #000;
+    }
+
+    .term-header {
+        text-align: center;
+        border-bottom: 2px solid #000;
+        padding-bottom: 20px;
+        margin-bottom: 30px;
+    }
+
+    .term-footer {
+        margin-top: 50px;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .sig-box {
+        border-top: 1px solid #000;
+        width: 250px;
+        text-align: center;
+        padding-top: 10px;
+    }
+}
+
 .nav-item.active i {
     color: white;
 }
@@ -188,14 +264,35 @@ body {
     white-space: nowrap;
 }
 
-.sidebar.collapsed .user-info .details,
-.sidebar.collapsed .sidebar-footer button span {
-    display: none;
+/* Sidebar Hover Expansion (High Specificity) */
+#sidebar.collapsed:hover {
+    width: 280px !important;
+    padding: 1.5rem !important;
+    transition: width 0.3s ease, padding 0.3s ease;
+    overflow-x: visible !important;
 }
 
-.sidebar.collapsed .sidebar-footer button {
-    justify-content: center;
-    padding: 0.5rem;
+#sidebar.collapsed:hover .logo span,
+#sidebar.collapsed:hover .nav-section,
+#sidebar.collapsed:hover .nav-item span,
+#sidebar.collapsed:hover .user-info .details,
+#sidebar.collapsed:hover .sidebar-footer button span {
+    display: flex !important;
+}
+
+#sidebar.collapsed:hover .logo span {
+    display: inline !important;
+}
+
+#sidebar.collapsed:hover .nav-item {
+    justify-content: flex-start !important;
+    padding: 0.75rem 1rem !important;
+}
+
+#sidebar.collapsed:hover .logo {
+    justify-content: flex-start !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
 }
 
 .user-info .name {
@@ -275,6 +372,16 @@ h2 {
     background-color: #f9fafb;
 }
 
+.btn-muted {
+    background-color: #dcfce7;
+    color: var(--text-main);
+    border: 1px solid #86efac;
+}
+
+.btn-muted:hover {
+    background-color: #bbf7d0;
+}
+
 .btn-danger {
     background-color: white;
     color: var(--danger-color);
@@ -303,6 +410,127 @@ h2 {
 .btn-icon.delete-btn:hover {
     color: var(--danger-color);
     background: #fef2f2;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.dashboard-grid-2 {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 1rem;
+}
+
+.kpi-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.kpi-title {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.kpi-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-top: 0.3rem;
+}
+
+.kpi-sub {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.dash-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.dash-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 1rem 1rem 0.5rem;
+    flex-wrap: wrap;
+}
+
+.dash-card-title {
+    font-size: 1rem;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dash-card-sub {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.dash-chart {
+    padding: 0 1rem;
+}
+
+.dash-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    padding: 0.75rem 1rem 1rem;
+}
+
+.mini-card {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.75rem;
+    background: #f9fafb;
+}
+
+.mini-title {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.mini-value {
+    font-size: 1.15rem;
+    font-weight: 800;
+    margin-top: 0.25rem;
+}
+
+@media (max-width: 1200px) {
+    .dashboard-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .dashboard-grid-2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+    .dash-mini-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Sections */
@@ -378,6 +606,14 @@ td {
 
 tbody tr:hover {
     background-color: #f9fafb;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #eef2f7;
 }
 
 .actions-cell {
@@ -637,7 +873,8 @@ textarea {
     transform: translateY(100px);
     opacity: 0;
     transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    z-index: 1000;
+    z-index: 9999 !important;
+    pointer-events: all !important;
 }
 
 .toast.show {
@@ -1038,4 +1275,65 @@ textarea {
     margin-bottom: 1rem;
     padding-bottom: 0.5rem;
     border-bottom: 2px solid var(--border-color);
+}
+
+/* =========================================
+   FINANCIAL MODULE & LEDGER
+   ========================================= */
+
+.saldo-card {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border-left: 4px solid var(--primary-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.saldo-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.modal-lg {
+    max-width: 800px !important;
+}
+
+.simple-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.simple-table th,
+.simple-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.875rem;
+}
+
+.simple-table th {
+    background: #f9fafb;
+    font-weight: 600;
+    text-align: left;
+}
+
+.badge-credito {
+    background: rgba(40, 167, 69, 0.1);
+    color: var(--success-color);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-debito {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
 }

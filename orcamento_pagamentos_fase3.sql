@@ -1,5 +1,29 @@
--- ORCAMENTO PAGAMENTOS - FASE 3
--- Este script implementa a base para a gestão de pagamentos e liberação clínica.
+-- 0. Limpeza de Duplicatas e Garantia de Unicidade no ID de Orçamentos
+DO $$ 
+DECLARE
+    dup_count INTEGER;
+BEGIN 
+    -- 1. Verifica se existem duplicatas antes de tentar criar a constraint
+    SELECT COUNT(*) INTO dup_count 
+    FROM (SELECT seqid FROM public.orcamentos GROUP BY seqid HAVING COUNT(*) > 1) d;
+
+    IF dup_count > 0 THEN
+        -- Resolve as duplicatas movendo-as para IDs altos (não utilizados)
+        UPDATE public.orcamentos o
+        SET seqid = sub.new_seq
+        FROM (
+            SELECT id, (SELECT MAX(seqid) FROM public.orcamentos) + ROW_NUMBER() OVER (ORDER BY created_at) as new_seq
+            FROM public.orcamentos 
+            WHERE seqid IN (SELECT seqid FROM public.orcamentos GROUP BY seqid HAVING COUNT(*) > 1)
+        ) sub
+        WHERE o.id = sub.id;
+    END IF;
+
+    -- 2. Cria a constraint de unicidade se não existir
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orcamentos_seqid_unique') THEN
+        ALTER TABLE public.orcamentos ADD CONSTRAINT orcamentos_seqid_unique UNIQUE (seqid);
+    END IF;
+END $$;
 
 -- 1. Tabela de Pagamentos (Financeiro)
 -- Mantém a rastreabilidade de cada valor recebido vinculado ao orçamento.
@@ -11,7 +35,7 @@ CREATE TABLE IF NOT EXISTS public.orcamento_pagamentos (
     data_pagamento TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
     forma_pagamento TEXT NOT NULL CHECK (forma_pagamento IN ('PIX', 'Cartão', 'Dinheiro', 'Boleto', 'Cheque')),
     status_pagamento TEXT NOT NULL DEFAULT 'Confirmado' CHECK (status_pagamento IN ('Confirmado', 'Pendente', 'Cancelado', 'Compensando')),
-    tenant_id UUID REFERENCES public.empresas(id) ON DELETE CASCADE,
+    empresa_id TEXT REFERENCES public.empresas(id) ON DELETE CASCADE,
     observacoes TEXT,
     criado_em TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
@@ -26,7 +50,7 @@ ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pendente';
 
 -- 3. Índices para Performance
 CREATE INDEX IF NOT EXISTS idx_pagamentos_orcamento ON public.orcamento_pagamentos(orcamento_id);
-CREATE INDEX IF NOT EXISTS idx_pagamentos_tenant ON public.orcamento_pagamentos(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_pagamentos_empresa ON public.orcamento_pagamentos(empresa_id);
 
 -- NOTA PARA DISCUSSÃO:
 -- Implementaremos uma lógica no frontend (app.js) que calcula o TOTAL PAGO vs TOTAL ORÇADO.

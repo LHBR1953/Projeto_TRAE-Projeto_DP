@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Debug Supabase Connection</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+    <h1>Manual Debug Tool</h1>
+    <div id="status">Testing connection...</div>
+    <pre id="logs" style="background: #eee; padding: 10px;"></pre>
+
+    <script>
+        const logs = document.getElementById('logs');
+        const status = document.getElementById('status');
+        function log(msg) { logs.innerText += msg + '\n'; }
+
+        async function test() {
+            try {
+                const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
+                const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
+                const db = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+                log("Supabase Client initialized.");
+
+                const { data: { session }, error: authError } = await db.auth.getSession();
+                if (authError) throw authError;
+
+                if (!session) {
+                    log("No active session found. Please log in to the main app first.");
+                    status.innerText = "NOT LOGGED IN";
+                    return;
+                }
+
+                log("Active Session Found for: " + session.user.email);
+
+                const { data: mappings, error: mapError } = await db.from('usuario_empresas')
+                    .select('*, empresas(nome)')
+                    .eq('usuario_id', session.user.id);
+
+                if (mapError) {
+                    log("Mapping Error: " + JSON.stringify(mapError));
+                } else {
+                    log("Found " + mappings.length + " mappings.");
+                    mappings.forEach(m => log("- Company: " + (m.empresas?.nome || m.empresa_id) + " | Role: " + m.perfil));
+                }
+
+                const { data: budgets, error: budError } = await db.from('orcamentos').select('id').limit(1);
+                if (budError) log("Budget Access Error: " + JSON.stringify(budError));
+                else log("Budget Access: OK");
+
+                status.innerText = "TEST COMPLETE";
+            } catch (err) {
+                log("FATAL ERROR: " + err.message);
+                status.innerText = "FAILED";
+            }
+        }
+        test();
+    </script>
+</body>
+
+</html>
