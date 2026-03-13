@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260313-0805';
+const APP_BUILD = '20260313-0835';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -1556,15 +1556,15 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
         // Carregar opções do dropdown de subdivisões
         const subSelect = document.getElementById('servSubdivisao');
         if (subSelect) {
-            subSelect.innerHTML = '<option value="">Nenhuma / Geral</option>';
+            subSelect.innerHTML = '<option value="">Selecione...</option>';
             specialties.forEach(spec => {
                 if (spec.subdivisoes && spec.subdivisoes.length > 0) {
                     const optgroup = document.createElement('optgroup');
-                    optgroup.label = `${spec.seqid} - ${spec.nome} `;
+                    optgroup.label = `${spec.seqid} - ${spec.nome}`;
 
                     spec.subdivisoes.forEach((sub, i) => {
-                        const subId = `${spec.seqid}.${i + 1} `;
-                        const displayStr = `${subId} - ${sub.nome} `;
+                        const subId = `${spec.seqid}.${i + 1}`;
+                        const displayStr = `${subId} - ${sub.nome}`;
                         const opt = document.createElement('option');
                         opt.value = displayStr;
                         opt.textContent = displayStr;
@@ -5701,11 +5701,19 @@ if (serviceForm) {
             showToast("Você não tem permissão para esta ação.", true);
             return;
         }
+
+        const subEl = document.getElementById('servSubdivisao');
+        if (!subEl || !String(subEl.value || '').trim()) {
+            if (subEl) subEl.classList.add('input-error');
+            showToast("Selecione a Subdivisão do item.", true);
+            return;
+        }
+
         const servData = {
             descricao: document.getElementById('servDescricao').value.toUpperCase(),
             valor: parseFloat(document.getElementById('servValor').value) || 0,
             ie: document.getElementById('servTipoIE').value,
-            subdivisao: document.getElementById('servSubdivisao').value || '',
+            subdivisao: String(subEl.value || '').trim(),
             empresa_id: currentEmpresaId
         };
 
@@ -5746,7 +5754,32 @@ window.editService = function (id) {
     document.getElementById('servDescricao').value = s.descricao;
     document.getElementById('servValor').value = s.valor;
     document.getElementById('servTipoIE').value = s.ie;
-    document.getElementById('servSubdivisao').value = s.subdivisao || '';
+    const subSel = document.getElementById('servSubdivisao');
+    const raw = String(s.subdivisao || '').trim();
+    if (subSel) {
+        subSel.classList.remove('input-error');
+        if (raw) {
+            const norm = (v) => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+            const options = Array.from(subSel.querySelectorAll('option'));
+            const match = options.find(o => norm(o.value) === norm(raw));
+            if (match) {
+                subSel.value = match.value;
+            } else {
+                const opt = document.createElement('option');
+                opt.value = raw;
+                opt.textContent = raw;
+                const firstOpt = subSel.querySelector('option');
+                if (firstOpt && firstOpt.parentNode) {
+                    firstOpt.parentNode.insertBefore(opt, firstOpt.nextSibling);
+                } else {
+                    subSel.appendChild(opt);
+                }
+                subSel.value = raw;
+            }
+        } else {
+            subSel.value = '';
+        }
+    }
 };
 
 window.deleteService = async function (id) {
@@ -5980,10 +6013,32 @@ if (btnCancelAddItem) {
 
 // Función para atualizar campos do serviço selecionado
 function updateBudgetItemFromService(serviceId) {
+    function ensureBudgetSubOption(selectEl, rawValue) {
+        if (!selectEl) return;
+        const v = String(rawValue || '').trim();
+        if (!v) return;
+        const options = Array.from(selectEl.querySelectorAll('option'));
+        const exact = options.find(o => String(o.value || '').trim().toLowerCase() === v.toLowerCase());
+        if (exact) return;
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        const firstOpt = selectEl.querySelector('option');
+        if (firstOpt && firstOpt.parentNode) {
+            firstOpt.parentNode.insertBefore(opt, firstOpt.nextSibling);
+        } else {
+            selectEl.appendChild(opt);
+        }
+    }
+
     if (!serviceId) {
         // Se deselecionar, limpa os campos
         document.getElementById('budItemDescricao').value = '';
-        document.getElementById('budItemSubdivisao').value = '-';
+        const subSelect = document.getElementById('budItemSubdivisao');
+        if (subSelect) {
+            subSelect.value = '';
+            subSelect.disabled = false;
+        }
         document.getElementById('budItemValor').value = '';
         return false;
     }
@@ -5993,7 +6048,15 @@ function updateBudgetItemFromService(serviceId) {
 
         const subSelect = document.getElementById('budItemSubdivisao');
         if (subSelect) {
-            subSelect.value = serv.subdivisao || '';
+            const subVal = String(serv.subdivisao || '').trim();
+            if (subVal) {
+                ensureBudgetSubOption(subSelect, subVal);
+                subSelect.value = subVal;
+                subSelect.disabled = true;
+            } else {
+                subSelect.value = '';
+                subSelect.disabled = false;
+            }
         }
 
         const valorEl = document.getElementById('budItemValor');
@@ -6243,10 +6306,32 @@ window.editBudgetItem = function (itemId) {
     populateBudgetProfDropdown();
     populateBudgetItemSubdivisaoDropdown();
 
-    document.getElementById('budItemServicoId').value = item.servicoId || '';
-    document.getElementById('budItemDescricao').value = item.servicoDescricao || '';
-    document.getElementById('budItemSubdivisao').value = item.subdivisao || '';
-    document.getElementById('budItemValor').value = item.valor !== undefined ? item.valor : '';
+    const servId = item.servicoId || '';
+    document.getElementById('budItemServicoId').value = servId;
+    updateBudgetItemFromService(servId);
+
+    document.getElementById('budItemDescricao').value = item.servicoDescricao || document.getElementById('budItemDescricao').value || '';
+    const subEl = document.getElementById('budItemSubdivisao');
+    if (subEl) {
+        const v = String(item.subdivisao || '').trim();
+        if (v) {
+            const options = Array.from(subEl.querySelectorAll('option'));
+            const exact = options.find(o => String(o.value || '').trim().toLowerCase() === v.toLowerCase());
+            if (!exact) {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.textContent = v;
+                const firstOpt = subEl.querySelector('option');
+                if (firstOpt && firstOpt.parentNode) {
+                    firstOpt.parentNode.insertBefore(opt, firstOpt.nextSibling);
+                } else {
+                    subEl.appendChild(opt);
+                }
+            }
+            subEl.value = v;
+        }
+    }
+    document.getElementById('budItemValor').value = item.valor !== undefined ? item.valor : document.getElementById('budItemValor').value || '';
     document.getElementById('budItemQtde').value = item.qtde || 1;
     document.getElementById('budItemExecutorId').value = item.profissionalId || '';
     document.getElementById('budItemProfissionalId').value = item.proteticoId || '';
