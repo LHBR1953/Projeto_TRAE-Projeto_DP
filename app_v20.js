@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260313-1705';
+const APP_BUILD = '20260315-2320';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -129,6 +129,8 @@ let professionals = [];
 let specialties = [];
 let services = [];
 let budgets = [];
+let proteseOrders = [];
+let proteseLabs = [];
 let activeEmpresasList = []; // Store companies list for admins
 let transactions = []; // Global transactions state
 
@@ -273,6 +275,8 @@ async function switchCompany(newEmpId) {
     specialties = [];
     services = [];
     budgets = [];
+    proteseOrders = [];
+    proteseLabs = [];
 
     // Reload App Data
     try {
@@ -296,6 +300,7 @@ function getModuleKey(type) {
         'commissions': 'comissoes',
         'agenda': 'agenda',
         'atendimento': 'atendimento',
+        'protese': 'protese',
         'dashboard': 'dashboard'
     };
     return map[type] || type;
@@ -429,7 +434,7 @@ async function initializeApp(isContextSwitch = false) {
 
         const reqs = [
             { key: 'pacientes', required: true, timeoutMs: 15000, promise: db.from('pacientes').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }) },
-            { key: 'profissionais', required: true, timeoutMs: 25000, promise: db.from('profissionais').select('id, seqid, nome, celular, email, tipo, status, especialidadeid, empresa_id').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }) },
+            { key: 'profissionais', required: true, timeoutMs: 25000, promise: db.from('profissionais').select('id, seqid, nome, celular, email, tipo, status, especialidadeid, empresa_id, photo').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }) },
             { key: 'especialidades', required: true, timeoutMs: 15000, promise: db.from('especialidades').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }) },
             { key: 'especialidade_subdivisoes', required: true, timeoutMs: 15000, promise: db.from('especialidade_subdivisoes').select('*').eq('empresa_id', currentEmpresaId) },
             { key: 'servicos', required: true, timeoutMs: 15000, promise: db.from('servicos').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }) },
@@ -659,6 +664,7 @@ const navFinanceiro = document.getElementById('navFinanceiro');
 const navCommissions = document.getElementById('navCommissions');
 const navAtendimento = document.getElementById('navAtendimento');
 const navAgenda = document.getElementById('navAgenda');
+const navProtese = document.getElementById('navProtese');
 const navEmpresas = document.getElementById('navEmpresas');
 const navUsersAdminBtn = document.getElementById('navUsersAdmin');
 
@@ -682,6 +688,7 @@ const commissionsView = document.getElementById('commissionsView');
 const dashboardView = document.getElementById('dashboardView');
 const atendimentoView = document.getElementById('atendimentoView');
 const agendaView = document.getElementById('agendaView');
+const proteseView = document.getElementById('proteseView');
 const btnAddNewEmpresa = document.getElementById('btnAddNewEmpresa');
 const btnBackEmpresa = document.getElementById('btnBackEmpresa');
 const btnCancelEmpresa = document.getElementById('btnCancelEmpresa');
@@ -700,7 +707,8 @@ const systemModules = [
     { id: 'financeiro', label: 'Financeiro' },
     { id: 'comissoes', label: 'Comissões' },
     { id: 'atendimento', label: 'Atendimento' },
-    { id: 'agenda', label: 'Agenda' }
+    { id: 'agenda', label: 'Agenda' },
+    { id: 'protese', label: 'Produção Protética' }
 ];
 
 function renderPermissionsGrid(existingPerms = null) {
@@ -856,6 +864,60 @@ const agendaFim = document.getElementById('agendaFim');
 const agendaStatus = document.getElementById('agendaStatus');
 const agendaObs = document.getElementById('agendaObs');
 
+// Próteses DOM Elements
+const btnProteseRefresh = document.getElementById('btnProteseRefresh');
+const btnProteseNew = document.getElementById('btnProteseNew');
+const btnProteseLabs = document.getElementById('btnProteseLabs');
+const proteseStatusFilter = document.getElementById('proteseStatusFilter');
+const proteseExecucaoFilter = document.getElementById('proteseExecucaoFilter');
+const proteseOverdueFilter = document.getElementById('proteseOverdueFilter');
+const proteseSearch = document.getElementById('proteseSearch');
+const proteseTableBody = document.getElementById('proteseTableBody');
+const proteseEmptyState = document.getElementById('proteseEmptyState');
+const proteseKpiTotal = document.getElementById('proteseKpiTotal');
+const proteseKpiOverdue = document.getElementById('proteseKpiOverdue');
+const proteseKpiExterna = document.getElementById('proteseKpiExterna');
+const proteseKpiInterna = document.getElementById('proteseKpiInterna');
+
+const modalProtese = document.getElementById('modalProtese');
+const btnCloseModalProtese = document.getElementById('btnCloseModalProtese');
+const btnProteseCancel = document.getElementById('btnProteseCancel');
+const btnProteseSave = document.getElementById('btnProteseSave');
+const modalProteseTitle = document.getElementById('modalProteseTitle');
+const protesePaciente = document.getElementById('protesePaciente');
+const proteseTipoExecucao = document.getElementById('proteseTipoExecucao');
+const proteseLabGroup = document.getElementById('proteseLabGroup');
+const proteseLaboratorio = document.getElementById('proteseLaboratorio');
+const proteseProteticoGroup = document.getElementById('proteseProteticoGroup');
+const proteseProtetico = document.getElementById('proteseProtetico');
+const protesePrazo = document.getElementById('protesePrazo');
+const protesePrioridade = document.getElementById('protesePrioridade');
+const proteseNota = document.getElementById('proteseNota');
+const proteseTimeline = document.getElementById('proteseTimeline');
+const proteseOrcamentoSeqid = document.getElementById('proteseOrcamentoSeqid');
+const proteseAnexoFile = document.getElementById('proteseAnexoFile');
+const btnProteseAnexoUpload = document.getElementById('btnProteseAnexoUpload');
+const proteseAnexosList = document.getElementById('proteseAnexosList');
+
+const btnProteseEventSend = document.getElementById('btnProteseEventSend');
+const btnProteseEventReceive = document.getElementById('btnProteseEventReceive');
+const btnProteseEventTryIn = document.getElementById('btnProteseEventTryIn');
+const btnProteseEventApprove = document.getElementById('btnProteseEventApprove');
+const btnProteseEventReprove = document.getElementById('btnProteseEventReprove');
+const btnProteseEventClose = document.getElementById('btnProteseEventClose');
+
+const modalProteseLabs = document.getElementById('modalProteseLabs');
+const btnCloseModalProteseLabs = document.getElementById('btnCloseModalProteseLabs');
+const btnProteseLabsClose = document.getElementById('btnProteseLabsClose');
+const proteseLabId = document.getElementById('proteseLabId');
+const proteseLabNome = document.getElementById('proteseLabNome');
+const proteseLabContato = document.getElementById('proteseLabContato');
+const proteseLabPrazo = document.getElementById('proteseLabPrazo');
+const proteseLabAtivo = document.getElementById('proteseLabAtivo');
+const btnProteseLabSave = document.getElementById('btnProteseLabSave');
+const proteseLabsBody = document.getElementById('proteseLabsBody');
+const proteseLabsEmpty = document.getElementById('proteseLabsEmpty');
+
 // Dashboard DOM Elements
 const dashDate = document.getElementById('dashDate');
 const dashProfessional = document.getElementById('dashProfessional');
@@ -958,7 +1020,8 @@ function updateSidebarVisibility() {
         'navFinanceiro': 'financeiro',
         'navCommissions': 'commissions',
         'navAtendimento': 'atendimento',
-        'navAgenda': 'agenda'
+        'navAgenda': 'agenda',
+        'navProtese': 'protese'
     };
 
     Object.entries(sidebarMapping).forEach(([id, type]) => {
@@ -994,6 +1057,7 @@ function getDefaultHomeTab() {
         'dashboard',
         'agenda',
         'atendimento',
+        'protese',
         'patients',
         'budgets',
         'financeiro',
@@ -1043,7 +1107,7 @@ function setActiveTab(tab) {
     // 1. Prepare Navigation Elements safely
     const navElements = [
         navDashboard, navPatients, navProfessionals, navSpecialties, navServices,
-        navBudgets, navFinanceiro, navCommissions, navAtendimento, navAgenda, navUsersAdminBtn, navEmpresas, document.getElementById('navCancelledBudgets')
+        navBudgets, navFinanceiro, navCommissions, navAtendimento, navAgenda, navProtese, navUsersAdminBtn, navEmpresas, document.getElementById('navCancelledBudgets')
     ];
 
     // 2. Prepare View Elements safely
@@ -1060,6 +1124,7 @@ function setActiveTab(tab) {
         'commissions': [commissionsView],
         'atendimento': [atendimentoView],
         'agenda': [agendaView],
+        'protese': [proteseView],
         'cancelledBudgets': [document.getElementById('cancelledBudgetsView')]
     };
 
@@ -1122,6 +1187,10 @@ function setActiveTab(tab) {
         const navA = document.getElementById('navAgenda');
         if (navA) navA.classList.add('active');
         showList('agenda');
+    } else if (tab === 'protese') {
+        const navP = document.getElementById('navProtese');
+        if (navP) navP.classList.add('active');
+        showList('protese');
     } else {
         if (navProfessionals) navProfessionals.classList.add('active');
         showList('professionals');
@@ -1145,6 +1214,7 @@ function setupNavigationListeners() {
         'navCommissions': 'commissions',
         'navAtendimento': 'atendimento',
         'navAgenda': 'agenda',
+        'navProtese': 'protese',
         'navUsersAdmin': 'usersAdmin',
         'navEmpresas': 'empresas',
         'navCancelledBudgets': 'cancelledBudgets'
@@ -1426,6 +1496,50 @@ function renderTable(data = [], type = 'patients') {
                 </td>
             `;
             budgetsTableBody.appendChild(tr);
+        });
+    } else if (type === 'protese') {
+        if (!proteseTableBody) return;
+        proteseTableBody.innerHTML = '';
+        if (!Array.isArray(data) || data.length === 0) {
+            if (proteseTableBody.parentElement) proteseTableBody.parentElement.style.display = 'none';
+            if (proteseEmptyState) proteseEmptyState.classList.remove('hidden');
+            return;
+        }
+        if (proteseTableBody.parentElement) proteseTableBody.parentElement.style.display = 'table';
+        if (proteseEmptyState) proteseEmptyState.classList.add('hidden');
+
+        data.forEach(o => {
+            const tr = document.createElement('tr');
+            const pacienteNome = getPatientNameById(o.paciente_id);
+            const exec = String(o.tipo_execucao || '');
+            const execLabel = exec === 'INTERNA' ? 'Interna' : 'Externa';
+            const execName = exec === 'INTERNA' ? getProteticoNameById(o.protetico_id) : getLaboratorioNameById(o.laboratorio_id);
+            const prazo = o.prazo_previsto ? String(o.prazo_previsto).slice(0, 10).split('-').reverse().join('/') : '';
+            const overdue = isProteseOverdue(o);
+            const st = String(o.status_geral || 'EM_ANDAMENTO');
+            const stBg = st === 'CONCLUIDA' ? '#dcfce7' : (st === 'CANCELADA' ? '#fee2e2' : (st === 'PAUSADA' ? '#fef3c7' : 'var(--bg-hover)'));
+            const stColor = st === 'CONCLUIDA' ? '#166534' : (st === 'CANCELADA' ? '#991b1b' : (st === 'PAUSADA' ? '#92400e' : 'var(--text-main)'));
+            tr.innerHTML = `
+                <td><strong>#${escapeHtml(String(o.seqid || ''))}</strong></td>
+                <td>${escapeHtml(String(pacienteNome || '—'))}</td>
+                <td>${escapeHtml(formatBudgetDisplay(o.orcamento_id))}</td>
+                <td>${escapeHtml(execLabel)}</td>
+                <td>${escapeHtml(String(execName || '—'))}</td>
+                <td>${escapeHtml(String(o.fase_atual || '—'))}</td>
+                <td style="color:${overdue ? 'var(--danger-color)' : 'var(--text-main)'}; font-weight:${overdue ? '800' : '500'};">${escapeHtml(prazo || '—')}</td>
+                <td><span style="background:${stBg}; color:${stColor}; padding: 3px 8px; border-radius: 10px; font-size: 0.8rem; font-weight: 800;">${escapeHtml(st)}</span></td>
+                <td class="actions-cell">
+                    <button class="btn-icon" data-action="open" data-id="${o.id}" title="Abrir"><i class="ri-eye-line"></i></button>
+                </td>
+            `;
+            proteseTableBody.appendChild(tr);
+        });
+
+        proteseTableBody.querySelectorAll('button[data-action="open"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-id');
+                openProteseModal({ orderId: id });
+            });
         });
     } else if (type === 'financeiro') {
         const body = document.getElementById('finTransacoesBody');
@@ -1879,6 +1993,11 @@ function showList(type = 'patients') {
         initAgendaFilters();
         renderAgendaPlaceholder();
         fetchAgendaForUI();
+    } else if (type === 'protese') {
+        if (proteseView) proteseView.classList.remove('hidden');
+        initProteseFilters();
+        renderProtesePlaceholder();
+        fetchProteseFromUI();
     } else if (type === 'cancelledBudgets') {
         const cbView = document.getElementById('cancelledBudgetsView');
         if (cbView) cbView.classList.remove('hidden');
@@ -1903,6 +2022,757 @@ function showList(type = 'patients') {
         document.getElementById('editProfessionalId').value = '';
         comissionCard.style.display = 'none';
         renderTable(professionals, 'professionals');
+    }
+}
+
+let currentProteseOrderId = null;
+
+function getPatientNameById(id) {
+    const p = (patients || []).find(x => String(x.id) === String(id));
+    return p ? p.nome : (id || '-');
+}
+
+function getProteticoNameById(id) {
+    const p = (professionals || []).find(x => String(x.id) === String(id));
+    return p ? p.nome : (id ? `Protético ${String(id).slice(0, 8)}` : '-');
+}
+
+function getLaboratorioNameById(id) {
+    const l = (proteseLabs || []).find(x => String(x.id) === String(id));
+    return l ? l.nome : (id ? `Lab ${String(id).slice(0, 8)}` : '-');
+}
+
+function getBudgetSeqIdById(orcamentoId) {
+    if (!orcamentoId) return null;
+    const raw = String(orcamentoId);
+    const byId = (budgets || []).find(b => String(b.id) === raw);
+    if (byId && byId.seqid != null) return byId.seqid;
+    const n = Number(raw);
+    if (Number.isFinite(n)) {
+        const bySeq = (budgets || []).find(b => Number(b.seqid) === n);
+        if (bySeq && bySeq.seqid != null) return bySeq.seqid;
+    }
+    return null;
+}
+
+function formatBudgetDisplay(orcamentoId) {
+    const seq = getBudgetSeqIdById(orcamentoId);
+    if (seq != null) return String(seq);
+    return '—';
+}
+
+async function resolveBudgetSeqidFromDb(orcamentoId) {
+    if (!orcamentoId) return null;
+    const raw = String(orcamentoId);
+    const n = Number(raw);
+    try {
+        if (Number.isFinite(n)) {
+            const q1 = db.from('orcamentos').select('seqid, id').eq('empresa_id', currentEmpresaId).eq('seqid', n).limit(1);
+            const { data, error } = await withTimeout(q1, 15000, 'orcamentos:seqid_lookup');
+            if (error) throw error;
+            const row = (data || [])[0];
+            if (row && row.seqid != null) return row.seqid;
+            return null;
+        }
+        const q2 = db.from('orcamentos').select('seqid').eq('empresa_id', currentEmpresaId).eq('id', raw).single();
+        const { data, error } = await withTimeout(q2, 15000, 'orcamentos:id_lookup');
+        if (error) throw error;
+        return data && data.seqid != null ? data.seqid : null;
+    } catch (err) {
+        console.warn('Não foi possível resolver seqid do orçamento:', err);
+        return null;
+    }
+}
+
+function renderProtesePlaceholder(msg = 'Carregando...') {
+    if (proteseTableBody) {
+        proteseTableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 2rem; color: var(--text-muted);">${escapeHtml(msg)}</td></tr>`;
+        if (proteseTableBody.parentElement) proteseTableBody.parentElement.style.display = 'table';
+    }
+    if (proteseEmptyState) proteseEmptyState.classList.add('hidden');
+    if (proteseKpiTotal) proteseKpiTotal.textContent = '0';
+    if (proteseKpiOverdue) proteseKpiOverdue.textContent = '0';
+    if (proteseKpiExterna) proteseKpiExterna.textContent = '0';
+    if (proteseKpiInterna) proteseKpiInterna.textContent = '0';
+}
+
+function initProteseFilters() {
+    if (proteseSearch && !proteseSearch.dataset.bound) {
+        proteseSearch.addEventListener('input', () => applyProteseFiltersAndRender());
+        proteseSearch.dataset.bound = '1';
+    }
+    [proteseStatusFilter, proteseExecucaoFilter, proteseOverdueFilter].forEach(el => {
+        if (!el || el.dataset.bound) return;
+        el.addEventListener('change', () => applyProteseFiltersAndRender());
+        el.dataset.bound = '1';
+    });
+
+    if (btnProteseRefresh && !btnProteseRefresh.dataset.bound) {
+        btnProteseRefresh.addEventListener('click', () => fetchProteseFromUI(true));
+        btnProteseRefresh.dataset.bound = '1';
+    }
+    if (btnProteseNew && !btnProteseNew.dataset.bound) {
+        btnProteseNew.addEventListener('click', () => openProteseModal({}));
+        btnProteseNew.dataset.bound = '1';
+    }
+    if (btnProteseLabs && !btnProteseLabs.dataset.bound) {
+        btnProteseLabs.addEventListener('click', () => openProteseLabsModal());
+        btnProteseLabs.dataset.bound = '1';
+    }
+}
+
+function resetProteseFilters() {
+    if (proteseStatusFilter) proteseStatusFilter.value = '';
+    if (proteseExecucaoFilter) proteseExecucaoFilter.value = '';
+    if (proteseOverdueFilter) proteseOverdueFilter.value = '';
+    if (proteseSearch) proteseSearch.value = '';
+}
+
+async function loadProteseLabs(force = false) {
+    if (!force && Array.isArray(proteseLabs) && proteseLabs.length) return;
+    const q = db.from('laboratorios_proteticos')
+        .select('*')
+        .eq('empresa_id', currentEmpresaId)
+        .order('seqid', { ascending: true });
+    const { data, error } = await withTimeout(q, 15000, 'laboratorios_proteticos');
+    if (error) throw error;
+    proteseLabs = data || [];
+}
+
+async function loadProteseOrders(force = false) {
+    if (!force && Array.isArray(proteseOrders) && proteseOrders.length) return;
+    const q = db.from('ordens_proteticas')
+        .select('*')
+        .eq('empresa_id', currentEmpresaId)
+        .order('seqid', { ascending: false })
+        .limit(2000);
+    const { data, error } = await withTimeout(q, 20000, 'ordens_proteticas');
+    if (error) throw error;
+    proteseOrders = data || [];
+}
+
+async function fetchProteseFromUI(force = false) {
+    try {
+        renderProtesePlaceholder('Carregando...');
+        await loadProteseLabs(force);
+        await loadProteseOrders(force);
+        applyProteseFiltersAndRender();
+    } catch (err) {
+        console.error('Erro ao carregar Produção Protética:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        renderProtesePlaceholder(`Falha ao carregar (${code}).`);
+        showToast(`Erro ao carregar Produção Protética (${code}): ${msg}`, true);
+    }
+}
+
+async function openProteseForBudgetItem(itemId) {
+    try {
+        if (!itemId) return;
+        await loadProteseLabs(false);
+        const bId = document.getElementById('editBudgetId')?.value || '';
+        const pId = document.getElementById('budPacienteId')?.value || '';
+        const q = db.from('ordens_proteticas')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('orcamento_item_id', String(itemId))
+            .order('created_at', { ascending: false })
+            .limit(1);
+        const { data, error } = await withTimeout(q, 15000, 'ordens_proteticas:by_item');
+        if (error) throw error;
+        const existing = (data || [])[0];
+        if (existing && existing.id) {
+            await openProteseModal({ orderId: existing.id });
+            return;
+        }
+        await openProteseModal({ pacienteId: pId || null, orcamentoId: bId || null, itemId: String(itemId) });
+    } catch (err) {
+        console.error('Erro ao abrir OP do item:', err);
+        showToast('Erro ao abrir Produção Protética deste item.', true);
+    }
+}
+
+function isProteseOverdue(o) {
+    if (!o || !o.prazo_previsto) return false;
+    if (String(o.status_geral || '') === 'CONCLUIDA' || String(o.status_geral || '') === 'CANCELADA') return false;
+    const today = new Date();
+    const d = new Date(`${String(o.prazo_previsto).slice(0, 10)}T00:00:00`);
+    d.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return d < today;
+}
+
+function applyProteseFiltersAndRender() {
+    const status = proteseStatusFilter ? String(proteseStatusFilter.value || '') : '';
+    const execucao = proteseExecucaoFilter ? String(proteseExecucaoFilter.value || '') : '';
+    const overdue = proteseOverdueFilter ? String(proteseOverdueFilter.value || '') : '';
+    const q = proteseSearch ? String(proteseSearch.value || '').trim().toLowerCase() : '';
+
+    let list = (proteseOrders || []).slice();
+    if (status) list = list.filter(o => String(o.status_geral || '') === status);
+    if (execucao) list = list.filter(o => String(o.tipo_execucao || '') === execucao);
+    if (overdue === '1') list = list.filter(o => isProteseOverdue(o));
+    if (overdue === '0') list = list.filter(o => !isProteseOverdue(o));
+
+    if (q) {
+        list = list.filter(o => {
+            const patient = getPatientNameById(o.paciente_id).toLowerCase();
+            const op = String(o.seqid || '').toLowerCase();
+            const orc = String(o.orcamento_id || '').toLowerCase();
+            const item = String(o.orcamento_item_id || '').toLowerCase();
+            return patient.includes(q) || op.includes(q) || orc.includes(q) || item.includes(q);
+        });
+    }
+
+    const overdueCount = list.filter(o => isProteseOverdue(o)).length;
+    const externaCount = list.filter(o => String(o.tipo_execucao || '') === 'EXTERNA').length;
+    const internaCount = list.filter(o => String(o.tipo_execucao || '') === 'INTERNA').length;
+    if (proteseKpiTotal) proteseKpiTotal.textContent = String(list.length);
+    if (proteseKpiOverdue) proteseKpiOverdue.textContent = String(overdueCount);
+    if (proteseKpiExterna) proteseKpiExterna.textContent = String(externaCount);
+    if (proteseKpiInterna) proteseKpiInterna.textContent = String(internaCount);
+
+    renderTable(list, 'protese');
+}
+
+function syncProteseExecutorFields() {
+    const t = proteseTipoExecucao ? String(proteseTipoExecucao.value || 'EXTERNA') : 'EXTERNA';
+    if (proteseLabGroup) proteseLabGroup.style.display = (t === 'EXTERNA') ? '' : 'none';
+    if (proteseProteticoGroup) proteseProteticoGroup.style.display = (t === 'INTERNA') ? '' : 'none';
+}
+
+async function loadProteseTimeline(orderId) {
+    if (!proteseTimeline) return;
+    proteseTimeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Carregando...</div>';
+    try {
+        const q = db.from('ordens_proteticas_eventos')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('ordem_id', orderId)
+            .order('created_at', { ascending: false })
+            .limit(500);
+        const { data, error } = await withTimeout(q, 15000, 'ordens_proteticas_eventos');
+        if (error) throw error;
+        const events = data || [];
+        if (!events.length) {
+            proteseTimeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Nenhum evento registrado.</div>';
+            return;
+        }
+        proteseTimeline.innerHTML = events.map(ev => {
+            const dt = ev.created_at ? formatDateTime(ev.created_at) : '-';
+            const tipo = escapeHtml(String(ev.tipo_evento || ''));
+            const fase = escapeHtml(String(ev.fase_resultante || ''));
+            const de = escapeHtml(String(ev.de_local || ''));
+            const para = escapeHtml(String(ev.para_local || ''));
+            const nota = escapeHtml(String(ev.nota || '')).replace(/\n/g, '<br>');
+            const path = (de || para) ? `${de}${(de && para) ? ' → ' : ''}${para}` : '';
+            return `
+                <div class="protese-timeline-item">
+                    <div class="protese-timeline-meta">
+                        <div><i class="ri-calendar-line"></i> ${escapeHtml(dt)}</div>
+                        ${tipo ? `<div><i class="ri-flashlight-line"></i> ${tipo}</div>` : ''}
+                        ${fase ? `<div><i class="ri-flag-line"></i> ${fase}</div>` : ''}
+                        ${path ? `<div><i class="ri-route-line"></i> ${path}</div>` : ''}
+                    </div>
+                    ${nota ? `<div class="protese-timeline-note">${nota}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Erro ao carregar timeline:', err);
+        proteseTimeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--danger-color);">Falha ao carregar histórico.</div>';
+    }
+}
+
+function renderProteseAnexos(items) {
+    if (!proteseAnexosList) return;
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+        proteseAnexosList.innerHTML = '<div style="text-align:center; padding: 0.75rem; color: var(--text-muted);">Nenhum anexo.</div>';
+        return;
+    }
+    proteseAnexosList.innerHTML = list.map(a => {
+        const dt = a.created_at ? formatDateTime(a.created_at) : '-';
+        const nome = escapeHtml(String(a.nome_arquivo || 'arquivo'));
+        const tipo = escapeHtml(String(a.mime_type || ''));
+        const href = String(a.conteudo_base64 || '');
+        const canOpen = href && href.startsWith('data:');
+        const openBtn = canOpen
+            ? `<a class="btn btn-secondary btn-sm" href="${href}" download="${nome}" style="text-decoration:none;"><i class="ri-download-2-line"></i> Baixar</a>`
+            : '';
+        return `
+            <div class="protese-timeline-item" style="border-left-color: var(--primary-color);">
+                    <div class="protese-timeline-meta">
+                    <div><i class="ri-attachment-2-line"></i> ${nome}</div>
+                    ${tipo ? `<div>${tipo}</div>` : ''}
+                    <div><i class="ri-calendar-line"></i> ${escapeHtml(dt)}</div>
+                </div>
+                <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">${openBtn}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadProteseAnexos(orderId) {
+    if (!proteseAnexosList) return;
+    proteseAnexosList.innerHTML = '<div style="text-align:center; padding: 0.75rem; color: var(--text-muted);">Carregando anexos...</div>';
+    try {
+        const q = db.from('ordens_proteticas_anexos')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('ordem_id', orderId)
+            .order('created_at', { ascending: false })
+            .limit(100);
+        const { data, error } = await withTimeout(q, 20000, 'ordens_proteticas_anexos');
+        if (error) throw error;
+        renderProteseAnexos(data || []);
+    } catch (err) {
+        console.error('Erro ao carregar anexos:', err);
+        proteseAnexosList.innerHTML = '<div style="text-align:center; padding: 0.75rem; color: var(--danger-color);">Falha ao carregar anexos.</div>';
+    }
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Falha ao ler arquivo.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function uploadProteseAnexo() {
+    if (!currentProteseOrderId) {
+        showToast('Salve a OP antes de anexar arquivos.', true);
+        return;
+    }
+    const file = proteseAnexoFile && proteseAnexoFile.files ? proteseAnexoFile.files[0] : null;
+    if (!file) {
+        showToast('Selecione um arquivo.', true);
+        return;
+    }
+    try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const payload = {
+            empresa_id: currentEmpresaId,
+            ordem_id: currentProteseOrderId,
+            tipo: (file.type || '').startsWith('image/') ? 'IMAGEM' : ((file.type || '').includes('pdf') ? 'PDF' : 'ARQUIVO'),
+            nome_arquivo: file.name || 'arquivo',
+            mime_type: file.type || null,
+            conteudo_base64: dataUrl
+        };
+        const q = db.from('ordens_proteticas_anexos').insert(payload).select().single();
+        const { error } = await withTimeout(q, 25000, 'ordens_proteticas_anexos:insert');
+        if (error) throw error;
+        if (proteseAnexoFile) proteseAnexoFile.value = '';
+        await loadProteseAnexos(currentProteseOrderId);
+        showToast('Anexo enviado.');
+    } catch (err) {
+        console.error('Erro ao enviar anexo:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Erro ao enviar anexo (${code}): ${msg}`, true);
+    }
+}
+
+async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId = null, itemId = null } = {}) {
+    if (!modalProtese) return;
+    await loadProteseLabs(false);
+
+    currentProteseOrderId = orderId ? String(orderId) : null;
+    if (proteseNota) proteseNota.value = '';
+
+    if (protesePaciente) {
+        const opts = ['<option value="">Selecione...</option>'];
+        (patients || []).slice().sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR')).forEach(p => {
+            opts.push(`<option value="${p.id}">${escapeHtml(String(p.seqid || ''))} - ${escapeHtml(String(p.nome || ''))}</option>`);
+        });
+        protesePaciente.innerHTML = opts.join('');
+    }
+
+    if (proteseLaboratorio) {
+        const opts = ['<option value="">Selecione...</option>'];
+        (proteseLabs || []).filter(l => l.ativo !== false).forEach(l => {
+            opts.push(`<option value="${l.id}">${escapeHtml(String(l.seqid || ''))} - ${escapeHtml(String(l.nome || ''))}</option>`);
+        });
+        proteseLaboratorio.innerHTML = opts.join('');
+    }
+
+    if (proteseProtetico) {
+        const opts = ['<option value="">Selecione...</option>'];
+        (professionals || []).filter(p => String(p.tipo || '').toLowerCase() === 'protetico').forEach(p => {
+            opts.push(`<option value="${p.id}">${escapeHtml(String(p.seqid || ''))} - ${escapeHtml(String(p.nome || ''))}</option>`);
+        });
+        proteseProtetico.innerHTML = opts.join('');
+    }
+
+    if (currentProteseOrderId) {
+        const local = (proteseOrders || []).find(o => String(o.id) === currentProteseOrderId);
+        let o = local;
+        if (!o) {
+            const q = db.from('ordens_proteticas').select('*').eq('empresa_id', currentEmpresaId).eq('id', currentProteseOrderId).single();
+            const { data, error } = await withTimeout(q, 15000, 'ordens_proteticas:single');
+            if (error) throw error;
+            o = data;
+        }
+        if (modalProteseTitle) modalProteseTitle.textContent = `Ordem Protética #${o.seqid || ''}`;
+        if (protesePaciente) protesePaciente.value = o.paciente_id || '';
+        if (proteseTipoExecucao) proteseTipoExecucao.value = o.tipo_execucao || 'EXTERNA';
+        if (proteseLaboratorio) proteseLaboratorio.value = o.laboratorio_id || '';
+        if (proteseProtetico) proteseProtetico.value = o.protetico_id != null ? String(o.protetico_id) : '';
+        if (protesePrazo) protesePrazo.value = o.prazo_previsto ? String(o.prazo_previsto).slice(0, 10) : '';
+        if (protesePrioridade) protesePrioridade.value = o.prioridade || 'NORMAL';
+        if (proteseTipoExecucao) proteseTipoExecucao.dataset.orcamentoId = o.orcamento_id || '';
+        if (proteseTipoExecucao) proteseTipoExecucao.dataset.itemId = o.orcamento_item_id || '';
+        if (proteseOrcamentoSeqid) {
+            const seqLocal = getBudgetSeqIdById(o.orcamento_id);
+            proteseOrcamentoSeqid.value = (seqLocal != null) ? String(seqLocal) : '—';
+            if (seqLocal == null && o.orcamento_id) {
+                resolveBudgetSeqidFromDb(o.orcamento_id).then(seqDb => {
+                    if (seqDb != null && currentProteseOrderId && String(currentProteseOrderId) === String(o.id)) {
+                        proteseOrcamentoSeqid.value = String(seqDb);
+                    }
+                });
+            }
+        }
+        syncProteseExecutorFields();
+        await loadProteseTimeline(currentProteseOrderId);
+        await loadProteseAnexos(currentProteseOrderId);
+    } else {
+        if (modalProteseTitle) modalProteseTitle.textContent = 'Nova Ordem Protética';
+        if (protesePaciente) protesePaciente.value = pacienteId || '';
+        if (proteseTipoExecucao) proteseTipoExecucao.value = 'EXTERNA';
+        if (proteseLaboratorio) proteseLaboratorio.value = '';
+        if (proteseProtetico) proteseProtetico.value = '';
+        if (protesePrazo) protesePrazo.value = '';
+        if (protesePrioridade) protesePrioridade.value = 'NORMAL';
+        if (proteseTipoExecucao) proteseTipoExecucao.dataset.orcamentoId = orcamentoId || '';
+        if (proteseTipoExecucao) proteseTipoExecucao.dataset.itemId = itemId || '';
+        if (proteseOrcamentoSeqid) {
+            const seqLocal = getBudgetSeqIdById(orcamentoId);
+            proteseOrcamentoSeqid.value = (seqLocal != null) ? String(seqLocal) : '—';
+            if (seqLocal == null && orcamentoId) {
+                resolveBudgetSeqidFromDb(orcamentoId).then(seqDb => {
+                    if (seqDb != null && !currentProteseOrderId) {
+                        proteseOrcamentoSeqid.value = String(seqDb);
+                    }
+                });
+            }
+        }
+        syncProteseExecutorFields();
+        if (proteseTimeline) proteseTimeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Salve a OP para iniciar o histórico.</div>';
+        if (proteseAnexosList) proteseAnexosList.innerHTML = '<div style="text-align:center; padding: 0.75rem; color: var(--text-muted);">Salve a OP para anexar arquivos.</div>';
+        if (proteseAnexoFile) proteseAnexoFile.value = '';
+    }
+
+    if (proteseTipoExecucao && !proteseTipoExecucao.dataset.bound) {
+        proteseTipoExecucao.addEventListener('change', syncProteseExecutorFields);
+        proteseTipoExecucao.dataset.bound = '1';
+    }
+
+    if (btnProteseSave && !btnProteseSave.dataset.bound) {
+        btnProteseSave.addEventListener('click', saveProteseOrderFromModal);
+        btnProteseSave.dataset.bound = '1';
+    }
+    if (btnCloseModalProtese && !btnCloseModalProtese.dataset.bound) {
+        btnCloseModalProtese.addEventListener('click', closeProteseModal);
+        btnCloseModalProtese.dataset.bound = '1';
+    }
+    if (btnProteseCancel && !btnProteseCancel.dataset.bound) {
+        btnProteseCancel.addEventListener('click', closeProteseModal);
+        btnProteseCancel.dataset.bound = '1';
+    }
+    if (modalProtese && !modalProtese.dataset.bound) {
+        modalProtese.addEventListener('click', (e) => { if (e.target === modalProtese) closeProteseModal(); });
+        modalProtese.dataset.bound = '1';
+    }
+    if (btnProteseAnexoUpload && !btnProteseAnexoUpload.dataset.bound) {
+        btnProteseAnexoUpload.addEventListener('click', async (e) => { e.preventDefault(); await uploadProteseAnexo(); });
+        btnProteseAnexoUpload.dataset.bound = '1';
+    }
+
+    const bindEventBtn = (btn, eventType, phase, status) => {
+        if (!btn || btn.dataset.bound) return;
+        btn.addEventListener('click', async () => { await addProteseEvent(eventType, phase, status); });
+        btn.dataset.bound = '1';
+    };
+    bindEventBtn(btnProteseEventSend, 'ENVIO', 'ENVIADA', null);
+    bindEventBtn(btnProteseEventReceive, 'RECEBIMENTO', 'RECEBIDA', null);
+    bindEventBtn(btnProteseEventTryIn, 'PROVA_PACIENTE', 'PROVA_PACIENTE', null);
+    bindEventBtn(btnProteseEventApprove, 'APROVACAO', 'APROVADA', null);
+    bindEventBtn(btnProteseEventReprove, 'REPROVACAO', 'REPROVADA', 'PAUSADA');
+    bindEventBtn(btnProteseEventClose, 'ENCERRAMENTO', 'ENCERRADA', 'CONCLUIDA');
+
+    modalProtese.classList.remove('hidden');
+}
+
+function closeProteseModal() {
+    if (modalProtese) modalProtese.classList.add('hidden');
+    currentProteseOrderId = null;
+}
+
+async function deleteProteseOrder(orderId) {
+    if (!orderId) return;
+    if (!confirm('Deseja excluir esta OP?')) return;
+    try {
+        const { error } = await withTimeout(
+            db.from('ordens_proteticas').delete().eq('empresa_id', currentEmpresaId).eq('id', String(orderId)),
+            20000,
+            'ordens_proteticas:delete'
+        );
+        if (error) throw error;
+        proteseOrders = (proteseOrders || []).filter(o => String(o.id) !== String(orderId));
+        applyProteseFiltersAndRender();
+        showToast('OP excluída.');
+    } catch (err) {
+        console.error('Erro ao excluir OP:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Erro ao excluir OP (${code}): ${msg}`, true);
+    }
+}
+
+async function saveProteseOrderFromModal() {
+    try {
+        const pacienteId = protesePaciente ? String(protesePaciente.value || '') : '';
+        const tipoExec = proteseTipoExecucao ? String(proteseTipoExecucao.value || 'EXTERNA') : 'EXTERNA';
+        const labId = proteseLaboratorio ? String(proteseLaboratorio.value || '') : '';
+        const protId = proteseProtetico ? String(proteseProtetico.value || '') : '';
+        const prazo = protesePrazo ? String(protesePrazo.value || '') : '';
+        const prioridade = protesePrioridade ? String(protesePrioridade.value || 'NORMAL') : 'NORMAL';
+
+        if (!pacienteId) { showToast('Selecione o paciente.', true); return; }
+        if (tipoExec === 'EXTERNA' && !labId) { showToast('Selecione o laboratório.', true); return; }
+        if (tipoExec === 'INTERNA' && !protId) { showToast('Selecione o protético interno.', true); return; }
+
+        const orcamentoId = proteseTipoExecucao ? String(proteseTipoExecucao.dataset.orcamentoId || '') : '';
+        const itemId = proteseTipoExecucao ? String(proteseTipoExecucao.dataset.itemId || '') : '';
+
+        if (currentProteseOrderId) {
+            const payload = {
+                paciente_id: pacienteId,
+                tipo_execucao: tipoExec,
+                laboratorio_id: tipoExec === 'EXTERNA' ? (labId || null) : null,
+                protetico_id: tipoExec === 'INTERNA' ? (protId || null) : null,
+                prazo_previsto: prazo || null,
+                prioridade,
+                updated_at: new Date().toISOString()
+            };
+            const q = db.from('ordens_proteticas').update(payload).eq('empresa_id', currentEmpresaId).eq('id', currentProteseOrderId);
+            const { error } = await withTimeout(q, 15000, 'ordens_proteticas:update');
+            if (error) throw error;
+            await fetchProteseFromUI(true);
+            showToast('OP atualizada.');
+            closeProteseModal();
+            return;
+        }
+
+        const pData = {
+            empresa_id: currentEmpresaId,
+            paciente_id: pacienteId,
+            orcamento_id: orcamentoId || null,
+            orcamento_item_id: itemId || null,
+            tipo_execucao: tipoExec,
+            protetico_id: tipoExec === 'INTERNA' ? protId : null,
+            laboratorio_id: tipoExec === 'EXTERNA' ? labId : null,
+            prioridade,
+            prazo_previsto: prazo || null,
+            fase_atual: 'CRIADA',
+            status_geral: 'EM_ANDAMENTO'
+        };
+
+        const { data, error } = await withTimeout(db.rpc('rpc_create_ordem_protetica', { p_data: pData }), 15000, 'rpc_create_ordem_protetica');
+        if (error) throw error;
+        const created = Array.isArray(data) ? data[0] : data;
+        currentProteseOrderId = created && created.id ? String(created.id) : null;
+
+        if (created && created.id) {
+            const keep = (proteseOrders || []).filter(o => String(o.id) !== String(created.id));
+            proteseOrders = [created, ...keep];
+        }
+
+        resetProteseFilters();
+        await fetchProteseFromUI(true);
+        showToast('OP criada.');
+        if (currentProteseOrderId) {
+            await addProteseEvent('CRIACAO', 'CRIADA', null, true);
+        }
+        closeProteseModal();
+    } catch (err) {
+        console.error('Erro ao salvar OP:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Erro ao salvar OP (${code}): ${msg}`, true);
+    }
+}
+
+async function addProteseEvent(tipoEvento, faseResultante, statusResultante, silent = false) {
+    if (!currentProteseOrderId) { showToast('Salve a OP antes de registrar eventos.', true); return; }
+    const o = (proteseOrders || []).find(x => String(x.id) === String(currentProteseOrderId));
+    const tipoExec = proteseTipoExecucao ? String(proteseTipoExecucao.value || (o && o.tipo_execucao) || 'EXTERNA') : ((o && o.tipo_execucao) || 'EXTERNA');
+    const note = proteseNota ? String(proteseNota.value || '').trim() : '';
+
+    const deLocal = 'Clínica';
+    let paraLocal = '';
+    if (tipoExec === 'EXTERNA') {
+        const labId = proteseLaboratorio ? String(proteseLaboratorio.value || (o && o.laboratorio_id) || '') : String(o && o.laboratorio_id || '');
+        paraLocal = getLaboratorioNameById(labId);
+    } else {
+        const pId = proteseProtetico ? String(proteseProtetico.value || (o && o.protetico_id) || '') : String(o && o.protetico_id || '');
+        paraLocal = getProteticoNameById(pId);
+    }
+
+    const evPayload = {
+        empresa_id: currentEmpresaId,
+        ordem_id: currentProteseOrderId,
+        tipo_evento: tipoEvento,
+        fase_resultante: faseResultante || null,
+        de_local: deLocal,
+        para_local: paraLocal || null,
+        nota: note || null
+    };
+
+    try {
+        const { error } = await withTimeout(db.from('ordens_proteticas_eventos').insert(evPayload), 15000, 'ordens_proteticas_eventos:insert');
+        if (error) throw error;
+
+        const up = {
+            fase_atual: faseResultante || 'CRIADA',
+            updated_at: new Date().toISOString()
+        };
+        if (statusResultante) up.status_geral = statusResultante;
+        await withTimeout(db.from('ordens_proteticas').update(up).eq('empresa_id', currentEmpresaId).eq('id', currentProteseOrderId), 15000, 'ordens_proteticas:update_fase');
+
+        if (proteseNota) proteseNota.value = '';
+        await fetchProteseFromUI(true);
+        await loadProteseTimeline(currentProteseOrderId);
+        if (!silent) showToast('Evento registrado.');
+    } catch (err) {
+        console.error('Erro ao registrar evento:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Erro ao registrar evento (${code}): ${msg}`, true);
+    }
+}
+
+function openProteseLabsModal() {
+    if (!modalProteseLabs) return;
+    if (proteseLabId) proteseLabId.value = '';
+    if (proteseLabNome) proteseLabNome.value = '';
+    if (proteseLabContato) proteseLabContato.value = '';
+    if (proteseLabPrazo) proteseLabPrazo.value = '';
+    if (proteseLabAtivo) proteseLabAtivo.value = 'true';
+    renderProteseLabsTable();
+    modalProteseLabs.classList.remove('hidden');
+
+    if (btnCloseModalProteseLabs && !btnCloseModalProteseLabs.dataset.bound) {
+        btnCloseModalProteseLabs.addEventListener('click', closeProteseLabsModal);
+        btnCloseModalProteseLabs.dataset.bound = '1';
+    }
+    if (btnProteseLabsClose && !btnProteseLabsClose.dataset.bound) {
+        btnProteseLabsClose.addEventListener('click', closeProteseLabsModal);
+        btnProteseLabsClose.dataset.bound = '1';
+    }
+    if (modalProteseLabs && !modalProteseLabs.dataset.bound) {
+        modalProteseLabs.addEventListener('click', (e) => { if (e.target === modalProteseLabs) closeProteseLabsModal(); });
+        modalProteseLabs.dataset.bound = '1';
+    }
+    if (btnProteseLabSave && !btnProteseLabSave.dataset.bound) {
+        btnProteseLabSave.addEventListener('click', async () => { await saveProteseLab(); });
+        btnProteseLabSave.dataset.bound = '1';
+    }
+}
+
+function closeProteseLabsModal() {
+    if (modalProteseLabs) modalProteseLabs.classList.add('hidden');
+}
+
+function renderProteseLabsTable() {
+    if (!proteseLabsBody) return;
+    proteseLabsBody.innerHTML = '';
+    const list = (proteseLabs || []).slice().sort((a, b) => Number(a.seqid || 0) - Number(b.seqid || 0));
+    if (!list.length) {
+        if (proteseLabsBody.parentElement) proteseLabsBody.parentElement.style.display = 'none';
+        if (proteseLabsEmpty) proteseLabsEmpty.classList.remove('hidden');
+        return;
+    }
+    if (proteseLabsBody.parentElement) proteseLabsBody.parentElement.style.display = 'table';
+    if (proteseLabsEmpty) proteseLabsEmpty.classList.add('hidden');
+
+    list.forEach(l => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(String(l.seqid || ''))}</td>
+            <td><strong>${escapeHtml(String(l.nome || ''))}</strong></td>
+            <td>${escapeHtml(String(l.contato || ''))}</td>
+            <td>${escapeHtml(l.prazo_padrao_dias != null ? `${l.prazo_padrao_dias}d` : '')}</td>
+            <td>${l.ativo === false ? 'Não' : 'Sim'}</td>
+            <td class="actions-cell">
+                <button class="btn-icon" data-action="edit" data-id="${l.id}" title="Editar"><i class="ri-edit-line"></i></button>
+            </td>
+        `;
+        proteseLabsBody.appendChild(tr);
+    });
+
+    proteseLabsBody.querySelectorAll('button[data-action="edit"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const l = (proteseLabs || []).find(x => String(x.id) === String(id));
+            if (!l) return;
+            if (proteseLabId) proteseLabId.value = l.id;
+            if (proteseLabNome) proteseLabNome.value = l.nome || '';
+            if (proteseLabContato) proteseLabContato.value = l.contato || '';
+            if (proteseLabPrazo) proteseLabPrazo.value = l.prazo_padrao_dias != null ? String(l.prazo_padrao_dias) : '';
+            if (proteseLabAtivo) proteseLabAtivo.value = l.ativo === false ? 'false' : 'true';
+        });
+    });
+}
+
+async function saveProteseLab() {
+    const id = proteseLabId ? String(proteseLabId.value || '') : '';
+    const nome = proteseLabNome ? String(proteseLabNome.value || '').trim() : '';
+    const contato = proteseLabContato ? String(proteseLabContato.value || '').trim() : '';
+    const prazo = proteseLabPrazo ? String(proteseLabPrazo.value || '').trim() : '';
+    const ativo = proteseLabAtivo ? String(proteseLabAtivo.value || 'true') : 'true';
+
+    if (!nome) { showToast('Informe o nome do laboratório.', true); return; }
+
+    try {
+        if (id) {
+            const payload = {
+                nome,
+                contato: contato || null,
+                prazo_padrao_dias: prazo ? (parseInt(prazo, 10) || 0) : null,
+                ativo: ativo === 'true'
+            };
+            const q = db.from('laboratorios_proteticos').update(payload).eq('empresa_id', currentEmpresaId).eq('id', id);
+            const { error } = await withTimeout(q, 15000, 'laboratorios_proteticos:update');
+            if (error) throw error;
+            showToast('Laboratório atualizado.');
+        } else {
+            const pData = {
+                empresa_id: currentEmpresaId,
+                nome,
+                contato: contato || null,
+                prazo_padrao_dias: prazo ? (parseInt(prazo, 10) || 0) : null,
+                ativo
+            };
+            const { error } = await withTimeout(db.rpc('rpc_create_laboratorio_protetico', { p_data: pData }), 15000, 'rpc_create_laboratorio_protetico');
+            if (error) throw error;
+            showToast('Laboratório criado.');
+        }
+        await loadProteseLabs(true);
+        renderProteseLabsTable();
+        if (proteseLabId) proteseLabId.value = '';
+        if (proteseLabNome) proteseLabNome.value = '';
+        if (proteseLabContato) proteseLabContato.value = '';
+        if (proteseLabPrazo) proteseLabPrazo.value = '';
+        if (proteseLabAtivo) proteseLabAtivo.value = 'true';
+    } catch (err) {
+        console.error('Erro ao salvar laboratório:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Erro ao salvar laboratório (${code}): ${msg}`, true);
     }
 }
 
@@ -5452,11 +6322,19 @@ if (specialtyForm) {
 
             // Synchronize subdivisions: Delete old ones and insert new ones
             // This is a simple approach; for large data, a more granular diff would be better
-            const { error: delError } = await db.from('especialidade_subdivisoes').delete().eq('especialidade_id', targetId);
+            const { error: delError } = await db.from('especialidade_subdivisoes').delete().eq('empresa_id', currentEmpresaId).eq('especialidade_id', targetId);
             if (delError) throw delError;
 
             const newSubs = [];
-            for (let sub of currentSpecialtySubdivisions) {
+            const seenSubKeys = new Set();
+            const uniqueSubs = (currentSpecialtySubdivisions || []).filter(sub => {
+                const k = String(sub && sub.nome ? sub.nome : '').trim().toUpperCase();
+                if (!k) return false;
+                if (seenSubKeys.has(k)) return false;
+                seenSubKeys.add(k);
+                return true;
+            });
+            for (let sub of uniqueSubs) {
                 const subData = {
                     id: generateId(),
                     especialidade_id: targetId,
@@ -5554,12 +6432,22 @@ if (btnAddSubSpec) {
         const name = nameInput.value.trim().toUpperCase();
         if (name) {
             if (editingSubSpecIndex > -1) {
+                const exists = currentSpecialtySubdivisions.some((s, i) => i !== editingSubSpecIndex && String(s.nome || '').trim().toUpperCase() === name);
+                if (exists) {
+                    showToast('Esta subdivisão já existe.', true);
+                    return;
+                }
                 currentSpecialtySubdivisions[editingSubSpecIndex].nome = name;
                 editingSubSpecIndex = -1;
                 btnAddSubSpec.textContent = 'Adicionar';
                 btnAddSubSpec.classList.remove('btn-primary');
                 btnAddSubSpec.classList.add('btn-secondary');
             } else {
+                const exists = currentSpecialtySubdivisions.some(s => String(s.nome || '').trim().toUpperCase() === name);
+                if (exists) {
+                    showToast('Esta subdivisão já existe.', true);
+                    return;
+                }
                 currentSpecialtySubdivisions.push({ nome: name });
             }
             nameInput.value = '';
@@ -5733,11 +6621,15 @@ window.renderTable = function (data, type) {
                 </td>
             `;
         } else if (type === 'professionals') {
+            const photoHtml = item.photo
+                ? `<img src="${item.photo}" alt="Foto" style="width:34px; height:34px; border-radius:50%; object-fit:cover; display:block;">`
+                : `<div style="width:34px; height:34px; border-radius:50%; background:#e5e7eb; display:flex; align-items:center; justify-content:center; color:var(--text-muted);"><i class="ri-user-3-line"></i></div>`;
             tr.innerHTML = `
                 <td>${item.seqid}</td>
+                <td>${photoHtml}</td>
                 <td style="font-weight: 600;">${item.nome}</td>
+                <td>${item.celular || '-'}</td>
                 <td>${item.tipo}</td>
-                <td>${item.especialidadeid ? getSpecialtyName(item.especialidadeid) : '-'}</td>
                 <td><span class="badge badge-${(item.status || 'Ativo').toLowerCase()}">${item.status || 'Ativo'}</span></td>
                 <td>
                     <div class="actions">
@@ -5777,6 +6669,36 @@ window.renderTable = function (data, type) {
                     </div>
                 </td>
             `;
+        } else if (type === 'protese') {
+            const pacienteNome = getPatientNameById(item.paciente_id);
+            const exec = String(item.tipo_execucao || '');
+            const execLabel = exec === 'INTERNA' ? 'Interna' : 'Externa';
+            const execName = exec === 'INTERNA' ? getProteticoNameById(item.protetico_id) : getLaboratorioNameById(item.laboratorio_id);
+            const prazo = item.prazo_previsto ? String(item.prazo_previsto).slice(0, 10).split('-').reverse().join('/') : '';
+            const overdue = isProteseOverdue(item);
+            const st = String(item.status_geral || 'EM_ANDAMENTO');
+            const stBg = st === 'CONCLUIDA' ? '#dcfce7' : (st === 'CANCELADA' ? '#fee2e2' : (st === 'PAUSADA' ? '#fef3c7' : 'var(--bg-hover)'));
+            const stColor = st === 'CONCLUIDA' ? '#166534' : (st === 'CANCELADA' ? '#991b1b' : (st === 'PAUSADA' ? '#92400e' : 'var(--text-main)'));
+            tr.innerHTML = `
+                <td><strong>#${escapeHtml(String(item.seqid || ''))}</strong></td>
+                <td>${escapeHtml(String(pacienteNome || '—'))}</td>
+                <td>${escapeHtml(formatBudgetDisplay(item.orcamento_id))}</td>
+                <td>${escapeHtml(execLabel)}</td>
+                <td>${escapeHtml(String(execName || '—'))}</td>
+                <td>${escapeHtml(String(item.fase_atual || '—'))}</td>
+                <td style="color:${overdue ? 'var(--danger-color)' : 'var(--text-main)'}; font-weight:${overdue ? '800' : '500'};">${escapeHtml(prazo || '—')}</td>
+                <td><span style="background:${stBg}; color:${stColor}; padding: 3px 8px; border-radius: 10px; font-size: 0.8rem; font-weight: 800;">${escapeHtml(st)}</span></td>
+                <td class="actions-cell">
+                    <button class="btn-icon" data-action="edit" data-id="${item.id}" title="Editar"><i class="ri-edit-line"></i></button>
+                    <button class="btn-icon" data-action="delete" data-id="${item.id}" title="Excluir" style="background:#ef444411; color:#ef4444;"><i class="ri-delete-bin-line"></i></button>
+                </td>
+            `;
+
+            const btnEdit = tr.querySelector('button[data-action="edit"]');
+            if (btnEdit) btnEdit.addEventListener('click', () => openProteseModal({ orderId: item.id }));
+
+            const btnDelete = tr.querySelector('button[data-action="delete"]');
+            if (btnDelete) btnDelete.addEventListener('click', async () => { await deleteProteseOrder(item.id); });
         } else if (type === 'financeiro') {
             const isCredit = item.tipo === 'CREDITO';
             const valorFormatado = Number(item.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -6422,6 +7344,9 @@ function renderBudgetItemsTable() {
                     <button type="button" class="btn-icon edit-btn" data-id="${item.id}" title="Editar Item" style="background:#0066cc11; color:#0066cc; border:none; padding:5px; border-radius:4px;">
                         <i class="ri-edit-line"></i>
                     </button>
+                    <button type="button" class="btn-icon protese-btn" data-id="${item.id}" title="Ordem Protética (OP)" style="background:#10b98111; color:#10b981; border:none; padding:5px; border-radius:4px;">
+                        <i class="ri-settings-3-line"></i>
+                    </button>
                     <button type="button" class="btn-icon delete-btn" data-id="${item.id}" title="Remover Item" style="background:#ef444411; color:#ef4444; border:none; padding:5px; border-radius:4px;">
                         <i class="ri-delete-bin-line"></i>
                     </button>
@@ -6445,6 +7370,14 @@ function renderBudgetItemsTable() {
         btn.addEventListener('click', (e) => {
             const id = e.currentTarget.getAttribute('data-id');
             editBudgetItem(id);
+        });
+    });
+
+    tbody.querySelectorAll('.protese-btn').forEach(btn => {
+        btn.onclick = null;
+        btn.addEventListener('click', async (e) => {
+            const itemId = e.currentTarget.getAttribute('data-id');
+            await openProteseForBudgetItem(itemId);
         });
     });
 

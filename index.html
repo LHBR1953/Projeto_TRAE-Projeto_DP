@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260313-1705">
+    <link rel="stylesheet" href="styles.css?v=20260315-2320">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260313-1705
+        build 20260315-2320
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -163,6 +163,9 @@
                 </button>
                 <button id="navAgenda" class="nav-item">
                     <i class="ri-calendar-2-line"></i> <span>Agenda</span>
+                </button>
+                <button id="navProtese" class="nav-item">
+                    <i class="ri-tools-line"></i> <span>Produção Protética</span>
                 </button>
 
                 <div class="nav-section mt-4" id="navConfigSection" style="display: none;">Configurações</div>
@@ -2024,6 +2027,87 @@
                 </div>
             </section>
 
+            <!-- PRODUÇÃO PROTÉTICA VIEW -->
+            <section id="proteseView" class="view-section hidden">
+                <div class="section-header">
+                    <div>
+                        <h2><i class="ri-tools-line"></i> Produção Protética</h2>
+                        <p>Controle de ordens protéticas internas e externas com linha do tempo.</p>
+                    </div>
+                    <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button id="btnProteseLabs" class="btn btn-secondary"><i class="ri-building-2-line"></i> Laboratórios</button>
+                        <button id="btnProteseRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
+                        <button id="btnProteseNew" class="btn btn-primary"><i class="ri-add-line"></i> Nova OP</button>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display:flex; gap: 1rem; align-items:flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="min-width: 180px; margin-bottom: 0;">
+                            <label for="proteseStatusFilter">Status</label>
+                            <select id="proteseStatusFilter" class="form-control">
+                                <option value="">Todos</option>
+                                <option value="EM_ANDAMENTO">Em andamento</option>
+                                <option value="PAUSADA">Pausada</option>
+                                <option value="CONCLUIDA">Concluída</option>
+                                <option value="CANCELADA">Cancelada</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="min-width: 180px; margin-bottom: 0;">
+                            <label for="proteseExecucaoFilter">Execução</label>
+                            <select id="proteseExecucaoFilter" class="form-control">
+                                <option value="">Todas</option>
+                                <option value="INTERNA">Interna</option>
+                                <option value="EXTERNA">Externa</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
+                            <label for="proteseSearch">Busca</label>
+                            <input id="proteseSearch" type="text" class="form-control" placeholder="Paciente, OP#, orçamento#...">
+                        </div>
+                        <div class="form-group" style="min-width: 180px; margin-bottom: 0;">
+                            <label for="proteseOverdueFilter">Atraso</label>
+                            <select id="proteseOverdueFilter" class="form-control">
+                                <option value="">Todos</option>
+                                <option value="1">Somente atrasados</option>
+                                <option value="0">Somente no prazo</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="proteseKpis" style="margin-top: 0.75rem; display:flex; gap: 0.75rem; flex-wrap: wrap; color: var(--text-muted); font-size: 0.9rem;">
+                        <div><strong id="proteseKpiTotal">0</strong> OPs</div>
+                        <div><strong id="proteseKpiOverdue">0</strong> atrasadas</div>
+                        <div><strong id="proteseKpiExterna">0</strong> externas</div>
+                        <div><strong id="proteseKpiInterna">0</strong> internas</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="table-container">
+                        <table class="main-table" id="proteseTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 90px;">OP</th>
+                                    <th>Paciente</th>
+                                    <th style="width: 110px;">Orç.</th>
+                                    <th style="width: 120px;">Execução</th>
+                                    <th>Executor</th>
+                                    <th style="width: 170px;">Fase</th>
+                                    <th style="width: 140px;">Prazo</th>
+                                    <th style="width: 120px;">Status</th>
+                                    <th style="width: 120px;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="proteseTableBody"></tbody>
+                        </table>
+                        <div id="proteseEmptyState" class="empty-state hidden">
+                            <i class="ri-tools-line"></i>
+                            <p>Nenhuma ordem protética encontrada.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- CANCELLED BUDGETS LOG VIEW -->
             <section id="cancelledBudgetsView" class="view-section hidden">
                 <div class="section-header">
@@ -2058,6 +2142,151 @@
                     </div>
                 </div>
             </section>
+
+            <div id="modalProtese" class="modal-overlay hidden">
+                <div class="modal-content" style="max-width: 920px; width: 95%;">
+                    <div class="modal-header">
+                        <h3 id="modalProteseTitle"><i class="ri-tools-line"></i> Ordem Protética</h3>
+                        <button type="button" class="btn-close-modal" id="btnCloseModalProtese"><i class="ri-close-line"></i></button>
+                    </div>
+                    <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+                        <div style="display:flex; gap: 1rem; flex-wrap: wrap; align-items:flex-end;">
+                            <div class="form-group" style="min-width: 200px; flex:1; margin-bottom: 0;">
+                                <label for="protesePaciente">Paciente *</label>
+                                <select id="protesePaciente" class="form-control"></select>
+                            </div>
+                            <div class="form-group" style="min-width: 110px; margin-bottom: 0;">
+                                <label for="proteseOrcamentoSeqid">Orçamento</label>
+                                <input id="proteseOrcamentoSeqid" type="text" class="form-control" readonly>
+                            </div>
+                            <div class="form-group" style="min-width: 160px; margin-bottom: 0;">
+                                <label for="proteseTipoExecucao">Execução *</label>
+                                <select id="proteseTipoExecucao" class="form-control">
+                                    <option value="EXTERNA">Externa</option>
+                                    <option value="INTERNA">Interna</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="min-width: 220px; flex:1; margin-bottom: 0;" id="proteseLabGroup">
+                                <label for="proteseLaboratorio">Laboratório *</label>
+                                <select id="proteseLaboratorio" class="form-control"></select>
+                            </div>
+                            <div class="form-group" style="min-width: 220px; flex:1; margin-bottom: 0;" id="proteseProteticoGroup">
+                                <label for="proteseProtetico">Protético (interno) *</label>
+                                <select id="proteseProtetico" class="form-control"></select>
+                            </div>
+                            <div class="form-group" style="min-width: 160px; margin-bottom: 0;">
+                                <label for="protesePrazo">Prazo</label>
+                                <input id="protesePrazo" type="date" class="form-control">
+                            </div>
+                            <div class="form-group" style="min-width: 160px; margin-bottom: 0;">
+                                <label for="protesePrioridade">Prioridade</label>
+                                <select id="protesePrioridade" class="form-control">
+                                    <option value="NORMAL">Normal</option>
+                                    <option value="BAIXA">Baixa</option>
+                                    <option value="ALTA">Alta</option>
+                                    <option value="URGENTE">Urgente</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 1rem;">
+                            <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button id="btnProteseEventSend" class="btn btn-secondary"><i class="ri-send-plane-line"></i> Registrar envio</button>
+                                <button id="btnProteseEventReceive" class="btn btn-secondary"><i class="ri-inbox-archive-line"></i> Registrar recebimento</button>
+                                <button id="btnProteseEventTryIn" class="btn btn-secondary"><i class="ri-user-smile-line"></i> Prova paciente</button>
+                                <button id="btnProteseEventApprove" class="btn btn-secondary"><i class="ri-check-line"></i> Aprovar</button>
+                                <button id="btnProteseEventReprove" class="btn btn-secondary"><i class="ri-close-line"></i> Reprovar</button>
+                                <button id="btnProteseEventClose" class="btn btn-secondary"><i class="ri-flag-line"></i> Encerrar</button>
+                            </div>
+                        </div>
+
+                        <div class="section-divider" style="margin: 1.25rem 0 1rem;"><span>Nova anotação</span></div>
+                        <div class="form-group">
+                            <label for="proteseNota">Observação</label>
+                            <textarea id="proteseNota" class="form-control" rows="3" placeholder="Descreva o evento, instruções ao laboratório, retorno do paciente..."></textarea>
+                        </div>
+
+                        <div class="section-divider" style="margin: 1.25rem 0 1rem;"><span>Histórico</span></div>
+                        <div id="proteseTimeline"></div>
+
+                        <div class="section-divider" style="margin: 1.25rem 0 1rem;"><span>Anexos</span></div>
+                        <div style="display:flex; gap: 0.75rem; flex-wrap: wrap; align-items:flex-end;">
+                            <div class="form-group" style="min-width: 280px; flex: 1; margin-bottom: 0;">
+                                <label for="proteseAnexoFile">Adicionar arquivo</label>
+                                <input type="file" id="proteseAnexoFile" class="form-control" accept="image/*,application/pdf">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <button id="btnProteseAnexoUpload" class="btn btn-primary"><i class="ri-upload-2-line"></i> Enviar</button>
+                            </div>
+                        </div>
+                        <div id="proteseAnexosList" style="margin-top: 0.75rem;"></div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
+                        <button type="button" id="btnProteseCancel" class="btn btn-secondary">Fechar</button>
+                        <button type="button" id="btnProteseSave" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="modalProteseLabs" class="modal-overlay hidden">
+                <div class="modal-content" style="max-width: 860px; width: 95%;">
+                    <div class="modal-header">
+                        <h3><i class="ri-building-2-line"></i> Laboratórios Protéticos</h3>
+                        <button type="button" class="btn-close-modal" id="btnCloseModalProteseLabs"><i class="ri-close-line"></i></button>
+                    </div>
+                    <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+                        <div style="display:flex; gap: 1rem; flex-wrap: wrap; align-items:flex-end;">
+                            <input type="hidden" id="proteseLabId">
+                            <div class="form-group" style="min-width: 260px; flex:1; margin-bottom: 0;">
+                                <label for="proteseLabNome">Nome *</label>
+                                <input id="proteseLabNome" type="text" class="form-control">
+                            </div>
+                            <div class="form-group" style="min-width: 200px; flex:1; margin-bottom: 0;">
+                                <label for="proteseLabContato">Contato</label>
+                                <input id="proteseLabContato" type="text" class="form-control">
+                            </div>
+                            <div class="form-group" style="min-width: 160px; margin-bottom: 0;">
+                                <label for="proteseLabPrazo">Prazo (dias)</label>
+                                <input id="proteseLabPrazo" type="number" class="form-control" min="0" step="1">
+                            </div>
+                            <div class="form-group" style="min-width: 140px; margin-bottom: 0;">
+                                <label for="proteseLabAtivo">Ativo</label>
+                                <select id="proteseLabAtivo" class="form-control">
+                                    <option value="true">Sim</option>
+                                    <option value="false">Não</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <button id="btnProteseLabSave" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
+                            </div>
+                        </div>
+
+                        <div class="section-divider" style="margin: 1.25rem 0 1rem;"><span>Lista</span></div>
+                        <div class="table-container">
+                            <table class="main-table" id="proteseLabsTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 80px;">ID</th>
+                                        <th>Nome</th>
+                                        <th style="width: 200px;">Contato</th>
+                                        <th style="width: 120px;">Prazo</th>
+                                        <th style="width: 100px;">Ativo</th>
+                                        <th style="width: 120px;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="proteseLabsBody"></tbody>
+                            </table>
+                            <div id="proteseLabsEmpty" class="empty-state hidden">
+                                <i class="ri-building-2-line"></i>
+                                <p>Nenhum laboratório cadastrado.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
+                        <button type="button" id="btnProteseLabsClose" class="btn btn-secondary">Fechar</button>
+                    </div>
+                </div>
+            </div>
 
             <!-- Modal: Novo Lançamento Financeiro -->
             <div id="modalNovaTransacao" class="modal-overlay hidden">
@@ -2415,7 +2644,7 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260313-1705"></script>
+    <script src="app_v20.js?v=20260315-2320"></script>
 </body>
 
 </html>
