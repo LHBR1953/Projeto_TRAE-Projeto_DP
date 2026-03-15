@@ -329,6 +329,32 @@ body {
     color: var(--text-muted);
 }
 
+.header-company {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 180px;
+    justify-content: flex-end;
+    color: var(--text-main);
+    font-weight: 700;
+}
+
+#headerCompanyLogo {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    object-fit: contain;
+    border: 1px solid var(--border-color);
+    background: #fff;
+}
+
+#headerCompanyName {
+    max-width: 320px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* Base Styles */
 h2 {
     font-size: 1.5rem;
@@ -1275,6 +1301,42 @@ textarea {
     margin-bottom: 1rem;
     padding-bottom: 0.5rem;
     border-bottom: 2px solid var(--border-color);
+}
+
+.evolution-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 1rem 1.25rem;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 0.75rem;
+}
+
+.evol-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+}
+
+.evol-content {
+    font-size: 0.95rem;
+    color: var(--text-main);
+}
+
+.evol-desc {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.evol-footer {
+    margin-top: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-muted);
+    font-size: 0.8rem;
 }
 
 /* =========================================

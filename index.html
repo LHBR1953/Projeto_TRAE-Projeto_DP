@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260313-0940">
+    <link rel="stylesheet" href="styles.css?v=20260313-1705">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260313-0940
+        build 20260313-1705
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -207,8 +207,9 @@
                     <i class="ri-menu-line"></i>
                 </button>
                 <h2>OCC - Odonto Connect Cloud</h2>
-                <div class="theme-toggle">
-                    <!-- Theme toggle can go here -->
+                <div class="header-company" id="headerCompanyBox">
+                    <img id="headerCompanyLogo" alt="Logo da empresa" class="hidden">
+                    <div id="headerCompanyName">—</div>
                 </div>
             </header>
 
@@ -234,6 +235,7 @@
                         </div>
                         <div class="form-group" style="margin-bottom: 0; display:flex; gap: 0.5rem;">
                             <button id="btnDashRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
+                            <button id="btnDashPrint" class="btn btn-secondary"><i class="ri-printer-line"></i> Imprimir</button>
                         </div>
                     </div>
                 </div>
@@ -1132,6 +1134,7 @@
                                 <th>Paciente</th>
                                 <th>Qtd Itens</th>
                                 <th>Valor Total</th>
+                                <th>Total Pago</th>
                                 <th>Status</th>
                                 <th>Ações</th>
                             </tr>
@@ -2412,7 +2415,7 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260313-0940"></script>
+    <script src="app_v20.js?v=20260313-1705"></script>
 </body>
 
 </html>

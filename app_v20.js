@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260313-0940';
+const APP_BUILD = '20260313-1705';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -265,6 +265,7 @@ async function switchCompany(newEmpId) {
 
     const uiRole = document.getElementById('userRoleDisplay');
     if (uiRole) uiRole.textContent = `Unidade: ${newEmpId} (${currentUserRole || 'user'})`;
+    updateHeaderCompanyBox();
 
     // Clear current state
     patients = [];
@@ -497,6 +498,7 @@ async function initializeApp(isContextSwitch = false) {
         patients = patientsRes.data || [];
         professionals = professionalsRes.data || [];
         activeEmpresasList = (empresasRes && !empresasRes.error) ? (empresasRes.data || []) : [];
+        updateHeaderCompanyBox();
 
         // De-duplicate specialties and map subdivisions
         const rawSpecialties = specialtiesRes.data || [];
@@ -858,6 +860,7 @@ const agendaObs = document.getElementById('agendaObs');
 const dashDate = document.getElementById('dashDate');
 const dashProfessional = document.getElementById('dashProfessional');
 const btnDashRefresh = document.getElementById('btnDashRefresh');
+const btnDashPrint = document.getElementById('btnDashPrint');
 const kpiAgendados = document.getElementById('kpiAgendados');
 const kpiAgendadosSub = document.getElementById('kpiAgendadosSub');
 const kpiRecebido = document.getElementById('kpiRecebido');
@@ -3396,6 +3399,25 @@ function getEmpresaName(id) {
     return e ? e.nome : id;
 }
 
+function updateHeaderCompanyBox() {
+    const nameEl = document.getElementById('headerCompanyName');
+    const logoEl = document.getElementById('headerCompanyLogo');
+    if (!nameEl || !logoEl) return;
+
+    const e = currentEmpresaId ? activeEmpresasList.find(emp => emp.id === currentEmpresaId) : null;
+    const nome = e && e.nome ? e.nome : getEmpresaName(currentEmpresaId);
+    nameEl.textContent = nome || '—';
+
+    const logo = e && e.logotipo ? String(e.logotipo) : '';
+    if (logo) {
+        logoEl.src = logo;
+        logoEl.classList.remove('hidden');
+    } else {
+        logoEl.removeAttribute('src');
+        logoEl.classList.add('hidden');
+    }
+}
+
 function resetAgendaForm() {
     agendaFields.forEach(f => {
         if (f.enabled) f.enabled.checked = false;
@@ -3558,28 +3580,6 @@ async function fetchAgendaDay({ empresaId, profSeqId, dateStr }) {
         const jsDay = new Date(`${dateStr}T00:00:00`).getDay();
         const diaSemana = jsDayToAgendaDiaSemana(jsDay);
 
-        const dispQ = db.from('agenda_disponibilidade')
-            .select('*')
-            .eq('empresa_id', empresaId)
-            .eq('profissional_id', Number(profSeqId))
-            .eq('dia_semana', diaSemana)
-            .eq('ativo', true);
-        const { data: disp, error: dispErr } = await withTimeout(dispQ, 15000, 'agenda_disponibilidade');
-        if (dispErr) throw dispErr;
-
-        if (!disp || disp.length === 0) {
-            if (agendaSlotsBody) agendaSlotsBody.innerHTML = '';
-            if (agendaEmptyState) agendaEmptyState.classList.remove('hidden');
-            if (agendaSummary) agendaSummary.textContent = 'Sem disponibilidade cadastrada.';
-            return;
-        }
-
-        window.__agendaLast = window.__agendaLast || { empresaId: null, profSeqId: null, dateStr: null, disponibilidade: [], agendamentos: [] };
-        window.__agendaLast.empresaId = empresaId;
-        window.__agendaLast.profSeqId = Number(profSeqId);
-        window.__agendaLast.dateStr = dateStr;
-        window.__agendaLast.disponibilidade = disp || [];
-
         const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
         const agQ = db.from('agenda_agendamentos')
             .select('*')
@@ -3591,7 +3591,59 @@ async function fetchAgendaDay({ empresaId, profSeqId, dateStr }) {
         const { data: ags, error: agErr } = await withTimeout(agQ, 15000, 'agenda_agendamentos');
         if (agErr) throw agErr;
 
+        const dispQ = db.from('agenda_disponibilidade')
+            .select('*')
+            .eq('empresa_id', empresaId)
+            .eq('profissional_id', Number(profSeqId))
+            .eq('dia_semana', diaSemana)
+            .eq('ativo', true);
+        const { data: disp, error: dispErr } = await withTimeout(dispQ, 15000, 'agenda_disponibilidade');
+        if (dispErr) throw dispErr;
+
+        window.__agendaLast = window.__agendaLast || { empresaId: null, profSeqId: null, dateStr: null, disponibilidade: [], agendamentos: [] };
+        window.__agendaLast.empresaId = empresaId;
+        window.__agendaLast.profSeqId = Number(profSeqId);
+        window.__agendaLast.dateStr = dateStr;
         window.__agendaLast.agendamentos = ags || [];
+
+        if (!disp || disp.length === 0) {
+            window.__agendaLast.disponibilidade = [];
+            if (agendaSummary) agendaSummary.textContent = `${getProfessionalNameBySeqId(profSeqId)} — ${dateStr.split('-').reverse().join('/')} • Sem disponibilidade cadastrada`;
+
+            if (!ags || ags.length === 0) {
+                if (agendaSlotsBody) agendaSlotsBody.innerHTML = '';
+                if (agendaEmptyState) agendaEmptyState.classList.remove('hidden');
+                return;
+            }
+
+            if (agendaEmptyState) agendaEmptyState.classList.add('hidden');
+            if (agendaSlotsBody) agendaSlotsBody.innerHTML = '';
+
+            (ags || []).forEach(a => {
+                const tr = document.createElement('tr');
+                const hora = a.inicio ? formatTimeHHMM(new Date(a.inicio)) : '--:--';
+                const pacienteHtml = a.paciente_id
+                    ? getPacienteSummaryHtmlBySeqId(a.paciente_id)
+                    : `<span style="color: var(--text-muted);">${escapeHtml(String(a.titulo || '(Sem paciente)'))}</span>`;
+                tr.innerHTML = `
+                    <td style="font-weight:700;">${escapeHtml(hora)}</td>
+                    <td>${pacienteHtml}</td>
+                    <td>${escapeHtml(String(a.status || 'MARCADO'))}</td>
+                    <td><button class="btn btn-secondary btn-sm" data-action="edit" data-id="${a.id}"><i class="ri-edit-line"></i> Editar</button></td>
+                `;
+                agendaSlotsBody.appendChild(tr);
+            });
+            agendaSlotsBody.querySelectorAll('button[data-action="edit"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.getAttribute('data-id');
+                    const a = (window.__agendaLast && Array.isArray(window.__agendaLast.agendamentos)) ? window.__agendaLast.agendamentos.find(x => String(x.id) === String(id)) : null;
+                    if (a) openAgendaModalEdit(a);
+                });
+            });
+            return;
+        }
+
+        window.__agendaLast.disponibilidade = disp || [];
 
         renderAgendaSlots({ dateStr, profSeqId, disponibilidade: disp, agendamentos: ags || [] });
     } catch (err) {
@@ -4254,6 +4306,29 @@ async function saveAgendaFromModal() {
     };
 
     try {
+        try {
+            let conflictQ = db.from('agenda_agendamentos')
+                .select('id, inicio, fim, paciente_id, titulo, status')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('profissional_id', Number(profSeqId))
+                .neq('status', 'CANCELADO')
+                .lt('inicio', fimIso)
+                .gt('fim', inicioIso);
+            if (id) conflictQ = conflictQ.neq('id', id);
+            const { data: conflicts, error: cErr } = await withTimeout(conflictQ, 15000, 'agenda_agendamentos:conflicts');
+            if (cErr) throw cErr;
+            if (conflicts && conflicts.length) {
+                const c = conflicts[0];
+                const cStart = c.inicio ? formatTimeHHMM(new Date(c.inicio)) : '--:--';
+                const cEnd = c.fim ? formatTimeHHMM(new Date(c.fim)) : '--:--';
+                const who = c.paciente_id ? getPacienteNameBySeqId(c.paciente_id) : (c.titulo || '(Sem paciente)');
+                showToast(`Conflito de horário (${cStart}-${cEnd}) com ${who}.`, true);
+                return;
+            }
+        } catch (err) {
+            console.warn('Aviso: Falha ao checar conflito de horário.', err);
+        }
+
         if (id) {
             const { error } = await withTimeout(db.from('agenda_agendamentos').update(payload).eq('id', id).eq('empresa_id', currentEmpresaId), 15000, 'agenda_agendamentos:update');
             if (error) throw error;
@@ -4423,6 +4498,7 @@ if (btnAgendaPrintWeekCompact) btnAgendaPrintWeekCompact.addEventListener('click
 if (dashDate) dashDate.addEventListener('change', () => fetchDashboardFromUI());
 if (dashProfessional) dashProfessional.addEventListener('change', () => fetchDashboardFromUI());
 if (btnDashRefresh) btnDashRefresh.addEventListener('click', () => fetchDashboardFromUI());
+if (btnDashPrint) btnDashPrint.addEventListener('click', () => window.printDashboard && window.printDashboard());
 
 if (atendimentoDate) atendimentoDate.addEventListener('change', () => fetchAtendimentoForUI());
 if (atendimentoProfessional) atendimentoProfessional.addEventListener('change', () => fetchAtendimentoForUI());
@@ -4436,7 +4512,48 @@ if (btnAgendaNew) btnAgendaNew.addEventListener('click', () => {
     const profSeqId = agendaProfessional.value;
     const dateStr = agendaDate.value;
     if (!profSeqId || !dateStr) { showToast('Selecione data e profissional.', true); return; }
-    openAgendaModalNew({ dateStr, time: '08:00', step: 30, profSeqId: Number(profSeqId) });
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const isToday = dateStr === todayStr;
+    const nowMinutes = (now.getHours() * 60) + now.getMinutes();
+
+    let pickedTime = '08:00';
+    let pickedStep = 30;
+
+    const last = window.__agendaLast;
+    const lastOk = last
+        && String(last.dateStr || '') === String(dateStr)
+        && String(last.profSeqId || '') === String(profSeqId)
+        && Array.isArray(last.disponibilidade)
+        && last.disponibilidade.length;
+
+    if (lastOk) {
+        const slots = [];
+        last.disponibilidade.forEach(d => {
+            const startM = parseTimeToMinutes(d.hora_inicio);
+            const endM = parseTimeToMinutes(d.hora_fim);
+            const step = Number(d.slot_minutos || 30);
+            if (startM == null || endM == null || !step) return;
+            for (let m = startM; m + step <= endM; m += step) {
+                slots.push({ minutes: m, step, time: `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}` });
+            }
+        });
+        slots.sort((a, b) => a.minutes - b.minutes);
+        if (slots.length) {
+            const next = isToday ? (slots.find(s => s.minutes >= nowMinutes) || slots[0]) : slots[0];
+            pickedTime = next.time;
+            pickedStep = next.step;
+        }
+    } else if (isToday) {
+        const rem = nowMinutes % 30;
+        const rounded = rem ? (nowMinutes + (30 - rem)) : nowMinutes;
+        const hh = String(Math.floor(rounded / 60)).padStart(2, '0');
+        const mi = String(rounded % 60).padStart(2, '0');
+        pickedTime = `${hh}:${mi}`;
+        pickedStep = 30;
+    }
+
+    openAgendaModalNew({ dateStr, time: pickedTime, step: pickedStep, profSeqId: Number(profSeqId) });
 });
 
 if (btnCloseModalAgenda) btnCloseModalAgenda.addEventListener('click', closeAgendaModal);
@@ -6474,6 +6591,232 @@ if (budgetForm) {
         };
 
         try {
+            function isFreeBudgetTipo(tipo) {
+                const k = normalizeKey(tipo);
+                return k === 'CORTESIA' || k === 'RETRABALHO';
+            }
+
+            function isChargeableBudgetTipo(tipo) {
+                const k = normalizeKey(tipo);
+                return k === 'NORMAL' || k === 'URGENCIA';
+            }
+
+            async function requireSupervisorApproval(message) {
+                if (currentUserRole === 'admin' || currentUserRole === 'supervisor') return true;
+                const modalAuth = document.getElementById('supervisorAuthModal');
+                const pinInput = document.getElementById('supervisorPinInput');
+                const btnConfirm = document.getElementById('btnConfirmSupervisorAuth');
+                if (!modalAuth || !pinInput || !btnConfirm) return false;
+
+                const modalMsg = modalAuth.querySelector('p');
+                if (modalMsg) modalMsg.innerText = message;
+                modalAuth.classList.remove('hidden');
+                pinInput.value = '';
+                pinInput.focus();
+
+                return await new Promise(resolve => {
+                    btnConfirm.onclick = async () => {
+                        try {
+                            const enteredPin = String(pinInput.value || '');
+                            const { data: emp } = await db.from('empresas').select('supervisor_pin').eq('id', currentEmpresaId).single();
+                            if (enteredPin && enteredPin === emp?.supervisor_pin) {
+                                modalAuth.classList.add('hidden');
+                                resolve(true);
+                            } else {
+                                showToast("Senha de supervisor incorreta!", true);
+                                resolve(false);
+                            }
+                        } catch {
+                            showToast("Erro ao validar permissão.", true);
+                            resolve(false);
+                        }
+                    };
+                });
+            }
+
+            async function convertBudgetTypeIfNeeded({ budgetId, oldBudgetRow, newTipo }) {
+                if (!oldBudgetRow) return;
+                const oldTipo = String(oldBudgetRow.tipo || 'Normal');
+                const oldIsCharge = isChargeableBudgetTipo(oldTipo);
+                const newIsFree = isFreeBudgetTipo(newTipo);
+                if (!(oldIsCharge && newIsFree)) return;
+
+                const budgetSeq = Number(oldBudgetRow.seqid);
+                if (!Number.isFinite(budgetSeq) || budgetSeq <= 0) return;
+
+                const itemIds = await (async () => {
+                    try {
+                        const q = await withTimeout(
+                            db.from('orcamento_itens').select('id').eq('orcamento_id', budgetId),
+                            15000,
+                            'orcamento_itens:ids_for_tipo_change'
+                        );
+                        return (q.data || []).map(r => String(r.id));
+                    } catch {
+                        return [];
+                    }
+                })();
+
+                let pagamentosCount = 0;
+                let comissoesPagasCount = 0;
+                let consumoDebitosTotal = 0;
+                let pagamentoCreditosTotal = 0;
+
+                try {
+                    const payQ = withTimeout(
+                        db.from('orcamento_pagamentos')
+                            .select('id', { count: 'exact', head: true })
+                            .eq('empresa_id', currentEmpresaId)
+                            .eq('orcamento_id', budgetSeq)
+                            .neq('status_pagamento', 'Cancelado'),
+                        15000,
+                        'orcamento_pagamentos:count_for_tipo_change'
+                    );
+                    const [payRes] = await Promise.all([payQ]);
+                    pagamentosCount = Number(payRes?.count || 0);
+                } catch {
+                }
+
+                if (itemIds.length) {
+                    try {
+                        const q = await withTimeout(
+                            db.from('financeiro_comissoes')
+                                .select('id, status')
+                                .eq('empresa_id', currentEmpresaId)
+                                .in('item_id', itemIds),
+                            15000,
+                            'financeiro_comissoes:for_tipo_change'
+                        );
+                        const rows = q.data || [];
+                        comissoesPagasCount = rows.filter(r => String(r.status || '') === 'PAGA').length;
+                    } catch {
+                    }
+                }
+
+                const pacIdRaw = oldBudgetRow.pacienteid || oldBudgetRow.paciente_id;
+                const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
+                const pacNumId = patientObj ? Number(patientObj.seqid) : null;
+
+                try {
+                    const q = await withTimeout(
+                        db.from('financeiro_transacoes')
+                            .select('valor, tipo, categoria, observacoes')
+                            .eq('empresa_id', currentEmpresaId)
+                            .eq('referencia_id', budgetSeq)
+                            .in('categoria', ['PAGAMENTO']),
+                        15000,
+                        'financeiro_transacoes:for_tipo_change'
+                    );
+                    const rows = q.data || [];
+                    pagamentoCreditosTotal = rows
+                        .filter(r => String(r.tipo || '') === 'CREDITO' && String(r.categoria || '') === 'PAGAMENTO')
+                        .reduce((acc, r) => acc + Number(r.valor || 0), 0);
+                    consumoDebitosTotal = rows
+                        .filter(r => String(r.tipo || '') === 'DEBITO' && String(r.categoria || '') === 'PAGAMENTO' && String(r.observacoes || '').includes('[Consumo]'))
+                        .reduce((acc, r) => acc + Number(r.valor || 0), 0);
+                } catch {
+                }
+
+                const needsApproval = pagamentosCount > 0 || comissoesPagasCount > 0 || pagamentoCreditosTotal > 0;
+                if (needsApproval) {
+                    const ok = await requireSupervisorApproval(`Mudança de tipo: ${oldTipo} → ${newTipo}. Existe histórico financeiro/comissões. Confirmar estornos?`);
+                    if (!ok) throw new Error('Mudança de tipo cancelada');
+                }
+
+                try {
+                    await withTimeout(
+                        db.from('orcamento_pagamentos')
+                            .update({ status_pagamento: 'Cancelado' })
+                            .eq('empresa_id', currentEmpresaId)
+                            .eq('orcamento_id', budgetSeq)
+                            .neq('status_pagamento', 'Cancelado'),
+                        15000,
+                        'orcamento_pagamentos:cancel_for_tipo_change'
+                    );
+                } catch {
+                }
+
+                if (itemIds.length) {
+                    const nowIso = new Date().toISOString();
+                    const updFull = { status: 'ESTORNADA', estornado_em: nowIso, estornado_por: currentUser?.id || null, observacoes: `Conversão de tipo ${oldTipo} → ${newTipo}` };
+                    try {
+                        const q = db.from('financeiro_comissoes')
+                            .update(updFull)
+                            .eq('empresa_id', currentEmpresaId)
+                            .in('item_id', itemIds)
+                            .neq('status', 'ESTORNADA');
+                        const r = await withTimeout(q, 15000, 'financeiro_comissoes:estornar_full_tipo_change');
+                        if (r.error) throw r.error;
+                    } catch {
+                        try {
+                            await withTimeout(
+                                db.from('financeiro_comissoes')
+                                    .update({ status: 'ESTORNADA' })
+                                    .eq('empresa_id', currentEmpresaId)
+                                    .in('item_id', itemIds)
+                                    .neq('status', 'ESTORNADA'),
+                                15000,
+                                'financeiro_comissoes:estornar_fallback_tipo_change'
+                            );
+                        } catch {
+                        }
+                    }
+                }
+
+                if (pacNumId && Number.isFinite(pacNumId)) {
+                    try {
+                        const already = await withTimeout(
+                            db.from('financeiro_transacoes')
+                                .select('id', { count: 'exact', head: true })
+                                .eq('empresa_id', currentEmpresaId)
+                                .eq('referencia_id', budgetSeq)
+                                .eq('categoria', 'ESTORNO')
+                                .ilike('observacoes', '%[Conversão de Tipo]%'),
+                            15000,
+                            'financeiro_transacoes:estorno_exists_tipo_change'
+                        );
+                        const hasAny = Number(already?.count || 0) > 0;
+                        if (!hasAny) {
+                            if (pagamentoCreditosTotal > 0.005) {
+                                await withTimeout(
+                                    db.from('financeiro_transacoes').insert({
+                                        paciente_id: pacNumId,
+                                        tipo: 'DEBITO',
+                                        categoria: 'ESTORNO',
+                                        valor: Number(pagamentoCreditosTotal.toFixed(2)),
+                                        forma_pagamento: null,
+                                        referencia_id: budgetSeq,
+                                        observacoes: `[Conversão de Tipo] Estorno Pagamento (Orçamento #${budgetSeq}) ${oldTipo} → ${newTipo}`,
+                                        empresa_id: currentEmpresaId,
+                                        criado_por: currentUser?.id || null
+                                    }),
+                                    15000,
+                                    'financeiro_transacoes:estorno_pagamento_tipo_change'
+                                );
+                            }
+                            if (consumoDebitosTotal > 0.005) {
+                                await withTimeout(
+                                    db.from('financeiro_transacoes').insert({
+                                        paciente_id: pacNumId,
+                                        tipo: 'CREDITO',
+                                        categoria: 'ESTORNO',
+                                        valor: Number(consumoDebitosTotal.toFixed(2)),
+                                        forma_pagamento: null,
+                                        referencia_id: budgetSeq,
+                                        observacoes: `[Conversão de Tipo] Estorno Consumo (Orçamento #${budgetSeq}) ${oldTipo} → ${newTipo}`,
+                                        empresa_id: currentEmpresaId,
+                                        criado_por: currentUser?.id || null
+                                    }),
+                                    15000,
+                                    'financeiro_transacoes:estorno_consumo_tipo_change'
+                                );
+                            }
+                        }
+                    } catch {
+                    }
+                }
+            }
+
             let orcamentoId = id;
 
             // Prepare items properly formatted for PostgreSQL DB
@@ -6498,6 +6841,9 @@ if (budgetForm) {
             });
 
             if (id) {
+                const oldBudget = budgets.find(b => b.id === id);
+                await convertBudgetTypeIfNeeded({ budgetId: id, oldBudgetRow: oldBudget, newTipo: budgetData.tipo });
+
                 const { error } = await db.from('orcamentos').update(budgetData).eq('id', id);
                 if (error) throw error;
 
@@ -6725,6 +7071,156 @@ window.deleteBudget = async function (id) {
 
 // Print Budget Report
 
+window.printDashboard = function () {
+    try {
+        const dateStr = dashDate && dashDate.value ? dashDate.value : '';
+        const dateLabel = dateStr ? formatDateBR(dateStr) : '';
+        const empresaLabel = currentEmpresaId ? getEmpresaName(currentEmpresaId) : '—';
+        const profLabel = dashProfessional
+            ? (dashProfessional.options[dashProfessional.selectedIndex]?.textContent || 'Todos')
+            : 'Todos';
+
+        const canFinance = can('financeiro', 'select');
+
+        const kpis = [
+            { title: 'Agendados do dia', value: (kpiAgendados && kpiAgendados.textContent) || '—', sub: (kpiAgendadosSub && kpiAgendadosSub.textContent) || '—' },
+            { title: 'Recebido hoje', value: canFinance ? ((kpiRecebido && kpiRecebido.textContent) || '—') : '—', sub: (kpiRecebidoSub && kpiRecebidoSub.textContent) || '—' },
+            { title: 'Orçamentos criados', value: (kpiOrcamentosHoje && kpiOrcamentosHoje.textContent) || '—', sub: (kpiOrcamentosHojeSub && kpiOrcamentosHojeSub.textContent) || '—' },
+            { title: 'Pacientes cadastrados', value: (kpiPacientesHoje && kpiPacientesHoje.textContent) || '—', sub: (kpiPacientesHojeSub && kpiPacientesHojeSub.textContent) || '—' }
+        ];
+
+        const agendaRows = dashAgendaBody ? dashAgendaBody.innerHTML : '';
+        const paymentsRows = dashPaymentsBody ? dashPaymentsBody.innerHTML : '';
+
+        const hoje = new Date().toLocaleString('pt-BR');
+        const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard • ${escapeHtml(empresaLabel)} • ${escapeHtml(dateLabel || '—')}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #1f2937; padding: 20px; }
+    .header { display:flex; justify-content: space-between; gap: 16px; align-items:flex-start; border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 14px; }
+    .brand { font-size: 18px; font-weight: 800; color: #0066cc; line-height: 1.1; }
+    .meta { text-align: right; color: #6b7280; font-size: 11px; line-height: 1.4; }
+    .title { font-size: 14px; font-weight: 800; color: #111827; margin-top: 4px; }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-weight: 800; font-size: 11px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0 14px; }
+    .kpi { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; background: #fff; }
+    .kpi-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; font-weight: 800; }
+    .kpi-value { font-size: 16px; font-weight: 900; margin-top: 6px; }
+    .kpi-sub { margin-top: 4px; font-size: 10px; color: #6b7280; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f3f4f6; padding: 7px 8px; text-align: left; font-size: 10px; text-transform: uppercase; color: #6b7280; border: 1px solid #e5e7eb; }
+    td { padding: 7px 8px; border: 1px solid #e5e7eb; vertical-align: top; }
+    tr:nth-child(even) td { background: #f9fafb; }
+    .two { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; background: #fff; }
+    .section-title { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 8px; }
+    .mini { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+    .mini .kpi-value { font-size: 14px; }
+    .footer { margin-top: 16px; text-align: center; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; }
+    @media print {
+      body { padding: 10px; }
+      .grid { grid-template-columns: repeat(2, 1fr); }
+      .two { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">OCC</div>
+      <div class="title">Dashboard <span class="pill">${escapeHtml(dateLabel || '—')}</span></div>
+      <div style="margin-top:4px; color:#6b7280; font-size:11px;">Unidade: ${escapeHtml(empresaLabel)} • Profissional (agenda): ${escapeHtml(profLabel)}</div>
+    </div>
+    <div class="meta">
+      <div>Gerado em: ${escapeHtml(hoje)}</div>
+      <div>Build: ${escapeHtml(String(APP_BUILD || ''))}</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    ${kpis.map(k => `
+      <div class="kpi">
+        <div class="kpi-title">${escapeHtml(k.title)}</div>
+        <div class="kpi-value">${escapeHtml(String(k.value || '—'))}</div>
+        <div class="kpi-sub">${escapeHtml(String(k.sub || '—'))}</div>
+      </div>
+    `).join('')}
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <div class="section-title">Agenda do dia</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 90px;">Hora</th>
+            <th>Paciente</th>
+            <th style="width: 160px;">Profissional</th>
+            <th style="width: 140px;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${agendaRows || '<tr><td colspan="4" style="text-align:center;color:#9ca3af">Sem dados</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    ${canFinance ? `
+    <div class="card">
+      <div class="section-title">Pagamentos do dia</div>
+      <div style="color:#6b7280; font-size:11px; margin-bottom:8px;">${escapeHtml((dashFinanceSummary && dashFinanceSummary.textContent) || '')}</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Forma</th>
+            <th style="width: 160px; text-align:right;">Total</th>
+            <th style="width: 110px; text-align:right;">Qtde</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${paymentsRows || '<tr><td colspan="3" style="text-align:center;color:#9ca3af">Sem dados</td></tr>'}
+        </tbody>
+      </table>
+      <div class="mini">
+        <div class="kpi">
+          <div class="kpi-title">Cancelamentos (dia)</div>
+          <div class="kpi-value">${escapeHtml(String((kpiCancelamentosHoje && kpiCancelamentosHoje.textContent) || '—'))}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-title">Comissões a pagar</div>
+          <div class="kpi-value">${escapeHtml(String((kpiComissoesAPagar && kpiComissoesAPagar.textContent) || '—'))}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-title">Ticket médio</div>
+          <div class="kpi-value">${escapeHtml(String((kpiTicketMedio && kpiTicketMedio.textContent) || '—'))}</div>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+  </div>
+
+  <div class="footer">
+    Documento gerado automaticamente pelo OCC.
+  </div>
+</body>
+</html>`;
+
+        const win = window.open('', '_blank', 'width=950,height=750');
+        if (!win) { showToast('Habilite pop-ups para imprimir o dashboard.', true); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 300);
+    } catch (e) {
+        const msg = e && e.message ? e.message : String(e || 'erro');
+        showToast(`Erro ao imprimir dashboard: ${msg}`, true);
+    }
+};
+
 window.printBudget = function (id) {
     const b = budgets.find(x => x.id === id);
     if (!b) { showToast('Or\u00e7amento n\u00e3o encontrado.', true); return; }
@@ -6793,7 +7289,8 @@ window.printBudget = function (id) {
                                 tr:nth-child(even) td {background: #f9fafb; }
                                 .total-row td {font - weight: bold; background: #eff6ff; color: #0066cc; font-size: 14px; }
                                 .status-badge {display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: #dbeafe; color: #1d4ed8; font-weight: bold; }
-                                .signature-section {margin - top: 50px; page-break-inside: avoid; }
+                                .signature-spacer {height: 90px; }
+                                .signature-section {margin-top: 0; page-break-inside: avoid; }
                                 .signature-block {display: flex; gap: 60px; margin-top: 30px; }
                                 .sig-line {flex: 1; text-align: center; }
                                 .sig-line .line {border - top: 1px solid #374151; margin-bottom: 6px; }
@@ -6871,6 +7368,7 @@ window.printBudget = function (id) {
                         </div>
                         ` : ''}
 
+                        <div class="signature-spacer"></div>
                         <div class="signature-section">
                             <div class="section-title">Assinaturas</div>
                             <div class="signature-block">
@@ -7978,12 +8476,12 @@ async function loadEvolution(patientId) {
         timeline.innerHTML = data.map(ev => `
                                     <div class="evolution-item">
                                         <div class="evol-meta">
-                                            <span><i class="ri-calendar-line"></i> ${formatDateTime(ev.created_at)}</span>
-                                            <span><i class="ri-user-smile-line"></i> Profissional: <strong>${ev.profissionais?.nome || 'Não informado'}</strong></span>
+                                            <div><i class="ri-calendar-line"></i> ${escapeHtml(formatDateTime(ev.created_at))}</div>
+                                            <div><i class="ri-user-smile-line"></i> Profissional: <strong>${escapeHtml(ev.profissionais?.nome || 'Não informado')}</strong></div>
                                         </div>
                                         <div class="evol-content">
                                             ${ev.dente_regiao ? `<p style="margin-bottom:0.5rem;"><strong>Dente/Região:</strong> ${ev.dente_regiao}</p>` : ''}
-                                            ${ev.descricao}
+                                            <div class="evol-desc">${escapeHtml(String(ev.descricao || '')).replace(/\n/g, '<br>')}</div>
                                         </div>
                                         <div class="evol-footer">
                                             <span>IP: ${ev.user_ip || 'Auditado'}</span>
@@ -9180,6 +9678,10 @@ window.viewBudgetPayments = async function (budgetId) {
     const budget = budgets.find(b => b.id === budgetId || b.seqid == budgetId);
     if (!budget) return;
 
+    const tipoBudget = String(budget.tipo || 'Normal').trim();
+    const tipoKey = normalizeKey(tipoBudget);
+    const isFreeBudget = tipoKey === 'CORTESIA' || tipoKey === 'RETRABALHO';
+
     if (modalNovaTransacao) modalNovaTransacao.classList.add('hidden');
     const budgetDetailModal = document.getElementById('budgetDetailModal');
     if (budgetDetailModal) budgetDetailModal.classList.remove('hidden');
@@ -9224,15 +9726,18 @@ window.viewBudgetPayments = async function (budgetId) {
         return true;
     });
 
-    const totalPagoOrc = (budget.pagamentos || []).reduce((acc, curr) => acc + (parseFloat(curr.valor_pago) || 0), 0);
+    const pagamentosOrcAll = (budget.pagamentos || []);
+    const pagamentosOrc = pagamentosOrcAll.filter(p => String(p && p.status_pagamento) !== 'Cancelado');
+    const totalPagoOrc = pagamentosOrc.reduce((acc, curr) => acc + (parseFloat(curr.valor_pago) || 0), 0);
     const totalPagoFin = (financePaymentsFiltered || []).reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
-    const totalPago = totalPagoOrc + totalPagoFin;
-    const saldo = totalOrcado - totalPago;
+    const totalPagoRaw = totalPagoOrc + totalPagoFin;
+    const totalPago = isFreeBudget ? totalOrcado : totalPagoRaw;
+    const saldo = isFreeBudget ? 0 : (totalOrcado - totalPagoRaw);
 
     const body = document.getElementById('budgetDetailBody');
     if (!body) return;
 
-    const pagamentosOrc = budget.pagamentos || [];
+    // pagamentosOrc já filtrado acima
     const pagamentosFin = financePaymentsFiltered || [];
     let paymentsHtml = '';
     if (pagamentosOrc.length === 0 && pagamentosFin.length === 0) {
@@ -9347,6 +9852,7 @@ window.viewBudgetPayments = async function (budgetId) {
         <div style="background: var(--bg-hover); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div>
                 <p><strong>Paciente:</strong> ${budget.pacientenome || '—'}</p>
+                <p><strong>Tipo:</strong> ${escapeHtml(tipoBudget)}</p>
                 <p><strong>Total Orçado:</strong> R$ ${totalOrcado.toFixed(2)}</p>
             </div>
             <div>
@@ -9366,34 +9872,43 @@ window.viewBudgetPayments = async function (budgetId) {
             </div>
         </div>
 
-        <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1rem; background: #fdfdfd; padding: 1rem; border-radius: 8px;">
-            <h4>Registrar Novo Pagamento</h4>
-            <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
-                <div class="form-group">
-                    <label>Valor do Pagamento *</label>
-                    <input type="number" id="payBudgetAmount" value="${saldo > 0 ? saldo.toFixed(2) : ''}" step="0.01" style="width: 100%;">
-                </div>
-                <div class="form-group">
-                    <label>Forma de Pagamento *</label>
-                    <select id="payBudgetForma" style="width: 100%;">
-                        <option value="PIX">PIX</option>
-                        <option value="Cartão Débito">Cartão Débito</option>
-                        <option value="Cartão de Crédito">Cartão de Crédito</option>
-                        <option value="Dinheiro">Dinheiro</option>
-                        <option value="Boleto">Boleto</option>
-                        <option value="Cheque">Cheque</option>
-                        <option value="Saldo em Conta">Saldo em Conta (Crédito Interno)</option>
-                    </select>
-                </div>
-                <div class="form-group" style="grid-column: span 2;">
-                    <label>Observações</label>
-                    <input type="text" id="payBudgetObs" placeholder="Ex: Pagamento 1a parcela" style="width: 100%;">
+        ${isFreeBudget ? `
+            <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1rem; background: #fdfdfd; padding: 1rem; border-radius: 8px;">
+                <h4>Pagamentos</h4>
+                <div style="margin-top: 0.5rem; color: var(--text-muted);">
+                    Este orçamento é do tipo <strong>${escapeHtml(tipoBudget)}</strong>. Não há cobrança, então não são registrados pagamentos.
                 </div>
             </div>
-            <button class="btn btn-primary" onclick="recordBudgetPayment('${budget.id}')" style="margin-top: 1rem; width: 100%;">
-                <i class="ri-save-line"></i> Confirmar Pagamento
-            </button>
-        </div>
+        ` : `
+            <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1rem; background: #fdfdfd; padding: 1rem; border-radius: 8px;">
+                <h4>Registrar Novo Pagamento</h4>
+                <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                    <div class="form-group">
+                        <label>Valor do Pagamento *</label>
+                        <input type="number" id="payBudgetAmount" value="${saldo > 0 ? saldo.toFixed(2) : ''}" step="0.01" style="width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label>Forma de Pagamento *</label>
+                        <select id="payBudgetForma" style="width: 100%;">
+                            <option value="PIX">PIX</option>
+                            <option value="Cartão Débito">Cartão Débito</option>
+                            <option value="Cartão de Crédito">Cartão de Crédito</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Boleto">Boleto</option>
+                            <option value="Cheque">Cheque</option>
+                            <option value="Saldo em Conta">Saldo em Conta (Crédito Interno)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Observações</label>
+                        <input type="text" id="payBudgetObs" placeholder="Ex: Pagamento 1a parcela" style="width: 100%;">
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="recordBudgetPayment('${budget.id}')" style="margin-top: 1rem; width: 100%;">
+                    <i class="ri-save-line"></i> Confirmar Pagamento
+                </button>
+            </div>
+        `}
     `;
 };
 
@@ -9492,6 +10007,13 @@ window.deleteBudgetPayment = async function (budgetId, paymentId) {
 window.recordBudgetPayment = async function (budgetId) {
     const budget = budgets.find(b => b.id === budgetId || b.seqid == budgetId);
     if (!budget) return;
+
+    const tipoBudget = String(budget.tipo || 'Normal').trim();
+    const tipoKey = normalizeKey(tipoBudget);
+    if (tipoKey === 'CORTESIA' || tipoKey === 'RETRABALHO') {
+        showToast(`Este orçamento é do tipo "${tipoBudget}" e não aceita pagamentos.`, true);
+        return;
+    }
 
     const valorInput = document.getElementById('payBudgetAmount');
     const formaInput = document.getElementById('payBudgetForma');
@@ -9643,6 +10165,10 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
     const item = (budget.orcamento_itens || []).find(it => it.id === itemId);
     if (!item) return;
 
+    const tipoBudget = String(budget.tipo || 'Normal').trim();
+    const tipoKey = normalizeKey(tipoBudget);
+    const isFreeBudget = tipoKey === 'CORTESIA' || tipoKey === 'RETRABALHO';
+
     // Validar se o item já foi liberado
     if (['Liberado', 'Em Execução', 'Finalizado'].includes(item.status)) {
         showToast("Este item já está liberado.", true);
@@ -9665,7 +10191,7 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
             const profissional = professionals.find(p => p.seqid == profId);
             let valorComissao = 0;
 
-            if (profissional) {
+            if (profissional && !isFreeBudget) {
                 valorComissao = calculateCommission(profissional, item, budget);
             }
 
@@ -9691,7 +10217,7 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
             item.autorizado_por = autorizadoPor;
 
             // Se houve comissão calculada, registra na tabela
-            if (valorComissao > 0) {
+            if (valorComissao > 0 && !isFreeBudget) {
                 const comissaoData = {
                     profissional_id: profId,
                     item_id: item.id,
@@ -9708,28 +10234,32 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
                     showToast(`Item liberado! Comissão de R$ ${valorComissao.toFixed(2)} gerada.`);
                 }
             } else {
-                showToast("Item liberado!");
+                showToast(isFreeBudget ? `Item liberado! (${tipoBudget}: sem comissão/cobrança)` : "Item liberado!");
             }
 
             // --- NOVO: Debitar serviço no financeiro para controle de conta corrente ---
             try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
-                const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
-                const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
-                const desc = item.descricao || 'Serviço';
-                const debitoData = {
-                    paciente_id: pacNumId,
-                    tipo: 'DEBITO',
-                    categoria: 'PAGAMENTO', // Representa o consumo do serviço
-                    valor: valorDesteItem,
-                    observacoes: `[Consumo] ${desc} (Orçamento #${budget.seqid})`,
-                    referencia_id: budget.seqid,
-                    empresa_id: currentEmpresaId,
-                    criado_por: currentUser.id
-                };
-                await db.from('financeiro_transacoes').insert(debitoData);
+                if (!isFreeBudget) {
+                    const pacIdRaw = budget.pacienteid || budget.paciente_id;
+                    const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
+                    const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
+                    const desc = item.descricao || 'Serviço';
+                    const debitoData = {
+                        paciente_id: pacNumId,
+                        tipo: 'DEBITO',
+                        categoria: 'PAGAMENTO', // Representa o consumo do serviço
+                        valor: valorDesteItem,
+                        observacoes: `[Consumo] ${desc} (Orçamento #${budget.seqid})`,
+                        referencia_id: budget.seqid,
+                        empresa_id: currentEmpresaId,
+                        criado_por: currentUser.id
+                    };
+                    await db.from('financeiro_transacoes').insert(debitoData);
+                }
             } catch (debErr) {
-                console.warn("Aviso: Não foi possível registrar o débito do serviço no financeiro.", debErr);
+                if (!isFreeBudget) {
+                    console.warn("Aviso: Não foi possível registrar o débito do serviço no financeiro.", debErr);
+                }
             }
 
             viewBudgetPayments(budgetId);
@@ -9743,6 +10273,11 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
             showToast(`Erro ao liberar item: ${err.message || 'Erro desconhecido'}`, true);
         }
     };
+
+    if (isFreeBudget) {
+        realizarLiberacao(`Auto-Autorizado (${tipoBudget})`);
+        return;
+    }
 
     if (valorLiberado + valorDesteItem > totalPago) {
         // Se o usuário logado já é Admin ou Supervisor, ele pode autorizar sem PIN extra
