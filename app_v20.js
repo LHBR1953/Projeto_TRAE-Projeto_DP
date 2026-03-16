@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260315-2320';
+const APP_BUILD = '20260316-0245';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -837,6 +837,27 @@ const transacaoPacienteDestino = document.getElementById('transacaoPacienteDesti
 const btnFinBuscar = document.getElementById('btnFinBuscar');
 const finPacienteSearch = document.getElementById('finPacienteSearch');
 const btnFinVerTodos = document.getElementById('btnFinVerTodos');
+const btnMovDiaria = document.getElementById('btnMovDiaria');
+const btnFechamentoDiarioFull = document.getElementById('btnFechamentoDiarioFull');
+const movDiariaModal = document.getElementById('movDiariaModal');
+const btnCloseMovDiariaModal = document.getElementById('btnCloseMovDiariaModal');
+const btnCancelMovDiaria = document.getElementById('btnCancelMovDiaria');
+const btnGenerateMovDiaria = document.getElementById('btnGenerateMovDiaria');
+const movDiariaDate = document.getElementById('movDiariaDate');
+const movDiariaProfessional = document.getElementById('movDiariaProfessional');
+
+const fechamentoDiarioFullModal = document.getElementById('fechamentoDiarioFullModal');
+const btnCloseFechamentoDiarioFullModal = document.getElementById('btnCloseFechamentoDiarioFullModal');
+const btnCancelFechamentoDiarioFull = document.getElementById('btnCancelFechamentoDiarioFull');
+const btnGenerateFechamentoDiarioFull = document.getElementById('btnGenerateFechamentoDiarioFull');
+const fechamentoDiarioFullDate = document.getElementById('fechamentoDiarioFullDate');
+const fechamentoDiarioFullProfessional = document.getElementById('fechamentoDiarioFullProfessional');
+const fechamentoDiarioModal = document.getElementById('fechamentoDiarioModal');
+const btnCloseFechamentoDiarioModal = document.getElementById('btnCloseFechamentoDiarioModal');
+const btnCancelFechamentoDiario = document.getElementById('btnCancelFechamentoDiario');
+const btnGenerateFechamentoDiario = document.getElementById('btnGenerateFechamentoDiario');
+const fechamentoDiarioDate = document.getElementById('fechamentoDiarioDate');
+const fechamentoDiarioProfessional = document.getElementById('fechamentoDiarioProfessional');
 
 // Agenda DOM Elements
 const agendaDate = document.getElementById('agendaDate');
@@ -882,6 +903,7 @@ const proteseKpiInterna = document.getElementById('proteseKpiInterna');
 const modalProtese = document.getElementById('modalProtese');
 const btnCloseModalProtese = document.getElementById('btnCloseModalProtese');
 const btnProteseCancel = document.getElementById('btnProteseCancel');
+const btnProtesePrint = document.getElementById('btnProtesePrint');
 const btnProteseSave = document.getElementById('btnProteseSave');
 const modalProteseTitle = document.getElementById('modalProteseTitle');
 const protesePaciente = document.getElementById('protesePaciente');
@@ -948,6 +970,7 @@ const atendimentoDate = document.getElementById('atendimentoDate');
 const atendimentoProfessional = document.getElementById('atendimentoProfessional');
 const atendimentoProfessionalGroup = document.getElementById('atendimentoProfessionalGroup');
 const btnAtendimentoRefresh = document.getElementById('btnAtendimentoRefresh');
+const btnFechamentoDiario = document.getElementById('btnFechamentoDiario');
 const atendimentoSummary = document.getElementById('atendimentoSummary');
 const atendimentoBody = document.getElementById('atendimentoBody');
 const atendimentoEmptyState = document.getElementById('atendimentoEmptyState');
@@ -1530,6 +1553,7 @@ function renderTable(data = [], type = 'patients') {
                 <td><span style="background:${stBg}; color:${stColor}; padding: 3px 8px; border-radius: 10px; font-size: 0.8rem; font-weight: 800;">${escapeHtml(st)}</span></td>
                 <td class="actions-cell">
                     <button class="btn-icon" data-action="open" data-id="${o.id}" title="Abrir"><i class="ri-eye-line"></i></button>
+                    <button class="btn-icon" data-action="print" data-id="${o.id}" title="Imprimir"><i class="ri-printer-line"></i></button>
                 </td>
             `;
             proteseTableBody.appendChild(tr);
@@ -1539,6 +1563,12 @@ function renderTable(data = [], type = 'patients') {
             btn.addEventListener('click', () => {
                 const id = btn.getAttribute('data-id');
                 openProteseModal({ orderId: id });
+            });
+        });
+        proteseTableBody.querySelectorAll('button[data-action="print"]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.getAttribute('data-id');
+                await printProteseOrder(id);
             });
         });
     } else if (type === 'financeiro') {
@@ -2084,6 +2114,213 @@ async function resolveBudgetSeqidFromDb(orcamentoId) {
     }
 }
 
+async function printProteseOrder(orderId) {
+    try {
+        const id = orderId ? String(orderId) : '';
+        if (!id) { showToast('OP não encontrada para impressão.', true); return; }
+
+        let o = (proteseOrders || []).find(x => String(x.id) === id) || null;
+        if (!o) {
+            const q = db.from('ordens_proteticas').select('*').eq('empresa_id', currentEmpresaId).eq('id', id).single();
+            const res = await withTimeout(q, 20000, 'ordens_proteticas:print_single');
+            if (res.error) throw res.error;
+            o = res.data;
+        }
+        if (!o) { showToast('OP não encontrada para impressão.', true); return; }
+
+        const paciente = (patients || []).find(p => String(p.id) === String(o.paciente_id)) || null;
+        const pacienteNome = paciente ? String(paciente.nome || '') : getPatientNameById(o.paciente_id);
+        const pacienteSeq = paciente && paciente.seqid != null ? String(paciente.seqid) : '';
+        const pacienteCel = paciente ? String(paciente.celular || '') : '';
+
+        const exec = String(o.tipo_execucao || '');
+        const execLabel = exec === 'INTERNA' ? 'Interna' : 'Externa';
+        const executorNome = exec === 'INTERNA' ? getProteticoNameById(o.protetico_id) : getLaboratorioNameById(o.laboratorio_id);
+
+        const prazo = o.prazo_previsto ? String(o.prazo_previsto).slice(0, 10).split('-').reverse().join('/') : '';
+        const prioridade = String(o.prioridade || 'NORMAL');
+        const fase = String(o.fase_atual || '');
+        const status = String(o.status_geral || '');
+
+        let orcSeq = getBudgetSeqIdById(o.orcamento_id);
+        if (orcSeq == null && o.orcamento_id) orcSeq = await resolveBudgetSeqidFromDb(o.orcamento_id);
+        const orcDisp = orcSeq != null ? String(orcSeq) : '—';
+
+        const evRes = await withTimeout(
+            db.from('ordens_proteticas_eventos')
+                .select('*')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ordem_id', id)
+                .order('created_at', { ascending: true })
+                .limit(1000),
+            25000,
+            'ordens_proteticas_eventos:print'
+        );
+        if (evRes.error) throw evRes.error;
+        const events = evRes.data || [];
+
+        const anRes = await withTimeout(
+            db.from('ordens_proteticas_anexos')
+                .select('id, tipo, nome_arquivo, mime_type, created_at')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ordem_id', id)
+                .order('created_at', { ascending: true })
+                .limit(500),
+            25000,
+            'ordens_proteticas_anexos:print'
+        );
+        if (anRes.error) throw anRes.error;
+        const anexos = anRes.data || [];
+
+        const evRows = events.length
+            ? events.map((e, idx) => {
+                const dt = e.created_at ? formatDateTime(e.created_at) : '';
+                const tipo = escapeHtml(String(e.tipo_evento || ''));
+                const faseRes = escapeHtml(String(e.fase_resultante || ''));
+                const de = escapeHtml(String(e.de_local || ''));
+                const para = escapeHtml(String(e.para_local || ''));
+                const nota = escapeHtml(String(e.nota || '')).replace(/\n/g, '<br>');
+                return `
+                    <tr>
+                        <td style="width:30px; text-align:right;">${idx + 1}</td>
+                        <td style="white-space:nowrap;">${escapeHtml(dt)}</td>
+                        <td>${tipo}</td>
+                        <td>${faseRes}</td>
+                        <td>${de}</td>
+                        <td>${para}</td>
+                        <td>${nota}</td>
+                    </tr>
+                `;
+            }).join('')
+            : `<tr><td colspan="7" style="text-align:center; color:#6b7280; padding:12px;">Nenhum evento registrado.</td></tr>`;
+
+        const anRows = anexos.length
+            ? anexos.map((a, idx) => {
+                const dt = a.created_at ? formatDateTime(a.created_at) : '';
+                return `
+                    <tr>
+                        <td style="width:30px; text-align:right;">${idx + 1}</td>
+                        <td style="white-space:nowrap;">${escapeHtml(dt)}</td>
+                        <td>${escapeHtml(String(a.tipo || ''))}</td>
+                        <td>${escapeHtml(String(a.nome_arquivo || ''))}</td>
+                        <td>${escapeHtml(String(a.mime_type || ''))}</td>
+                    </tr>
+                `;
+            }).join('')
+            : `<tr><td colspan="5" style="text-align:center; color:#6b7280; padding:12px;">Nenhum anexo.</td></tr>`;
+
+        const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+        const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>OP #${escapeHtml(String(o.seqid || ''))}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111827; padding: 24px; }
+    .header { display:flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 16px; }
+    .brand { font-weight: 800; color:#0066cc; font-size: 20px; line-height: 1.05; }
+    .brand small { display:block; font-size: 11px; font-weight: 600; color:#6b7280; margin-top: 2px; }
+    .doc { text-align:right; }
+    .doc h1 { font-size: 14px; letter-spacing: 0.04em; }
+    .badge { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#eff6ff; color:#1d4ed8; font-weight: 800; font-size: 11px; }
+    .muted { color:#6b7280; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 12px 0 16px; }
+    .item label { display:block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color:#6b7280; }
+    .item div { font-weight: 700; margin-top: 2px; }
+    .section { margin-top: 14px; }
+    .section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color:#6b7280; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background:#f3f4f6; padding: 7px 8px; text-align:left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color:#6b7280; border: 1px solid #e5e7eb; }
+    td { padding: 7px 8px; border: 1px solid #e5e7eb; vertical-align: top; }
+    tr:nth-child(even) td { background:#f9fafb; }
+    .footer { margin-top: 18px; padding-top: 10px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 10px; color:#9ca3af; }
+    @media print { body { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">OCC <small>Odonto Connect Cloud</small></div>
+      <div class="muted" style="margin-top:4px;">Controle de Produção Protética</div>
+    </div>
+    <div class="doc">
+      <h1>ORDEM PROTÉTICA</h1>
+      <div class="muted" style="margin-top:4px;">OP #${escapeHtml(String(o.seqid || ''))}</div>
+      <div style="margin-top:6px;"><span class="badge">${escapeHtml(status || '—')}</span></div>
+      <div class="muted" style="margin-top:6px; font-size: 11px;">Emitido em: ${escapeHtml(hoje)}</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="item"><label>Paciente</label><div>${escapeHtml(pacienteSeq ? `#${pacienteSeq} - ${pacienteNome}` : pacienteNome)}</div></div>
+    <div class="item"><label>Celular</label><div>${escapeHtml(pacienteCel || '—')}</div></div>
+    <div class="item"><label>Orçamento</label><div>#${escapeHtml(orcDisp)}</div></div>
+    <div class="item"><label>Execução</label><div>${escapeHtml(execLabel)}</div></div>
+    <div class="item"><label>Executor</label><div>${escapeHtml(String(executorNome || '—'))}</div></div>
+    <div class="item"><label>Fase / Prioridade</label><div>${escapeHtml(fase || '—')} / ${escapeHtml(prioridade || '—')}</div></div>
+    <div class="item"><label>Prazo</label><div>${escapeHtml(prazo || '—')}</div></div>
+    <div class="item"><label>Empresa</label><div>${escapeHtml(String(currentEmpresaId || '—'))}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Controle de idas e vindas (Histórico)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Data/Hora</th>
+          <th>Evento</th>
+          <th>Fase</th>
+          <th>De</th>
+          <th>Para</th>
+          <th>Observação</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${evRows}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Anexos</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Data/Hora</th>
+          <th>Tipo</th>
+          <th>Arquivo</th>
+          <th>MIME</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${anRows}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Documento gerado automaticamente pelo OCC.
+  </div>
+</body>
+</html>`;
+
+        const win = window.open('', '_blank', 'width=980,height=750');
+        if (!win) { showToast('Habilite pop-ups para imprimir a OP.', true); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 250);
+    } catch (err) {
+        console.error('Erro ao imprimir OP:', err);
+        const msg = err && err.message ? err.message : String(err || 'erro');
+        showToast(`Erro ao imprimir OP: ${msg}`, true);
+    }
+}
+
 function renderProtesePlaceholder(msg = 'Carregando...') {
     if (proteseTableBody) {
         proteseTableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding: 2rem; color: var(--text-muted);">${escapeHtml(msg)}</td></tr>`;
@@ -2473,6 +2710,14 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
     if (btnProteseSave && !btnProteseSave.dataset.bound) {
         btnProteseSave.addEventListener('click', saveProteseOrderFromModal);
         btnProteseSave.dataset.bound = '1';
+    }
+    if (btnProtesePrint && !btnProtesePrint.dataset.bound) {
+        btnProtesePrint.addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (!currentProteseOrderId) { showToast('Salve a OP antes de imprimir.', true); return; }
+            await printProteseOrder(currentProteseOrderId);
+        });
+        btnProtesePrint.dataset.bound = '1';
     }
     if (btnCloseModalProtese && !btnCloseModalProtese.dataset.bound) {
         btnCloseModalProtese.addEventListener('click', closeProteseModal);
@@ -3514,6 +3759,816 @@ async function confirmAtendimentoItem({ agendamentoId, itemId, itemStatus }) {
         const code = err && err.code ? err.code : '-';
         const msg2 = err && err.message ? err.message : 'Erro desconhecido';
         showToast(`Erro ao confirmar atendimento (${code}): ${msg2}`, true);
+    }
+}
+
+function closeFechamentoDiarioModal() {
+    if (fechamentoDiarioModal) fechamentoDiarioModal.classList.add('hidden');
+}
+
+function openFechamentoDiarioModal() {
+    if (!fechamentoDiarioModal) return;
+
+    const setTodayIfEmpty = (el) => {
+        if (!el || el.value) return;
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        el.value = `${yyyy}-${mm}-${dd}`;
+    };
+
+    if (fechamentoDiarioDate) {
+        if (atendimentoDate && atendimentoDate.value) fechamentoDiarioDate.value = String(atendimentoDate.value);
+        setTodayIfEmpty(fechamentoDiarioDate);
+    }
+
+    if (fechamentoDiarioProfessional) {
+        const opts = ['<option value="">Todos</option>'];
+        (professionals || [])
+            .slice()
+            .filter(p => String(p.tipo || '').toLowerCase() !== 'protetico')
+            .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+            .forEach(p => {
+                if (p.seqid == null) return;
+                opts.push(`<option value="${escapeHtml(String(p.seqid))}">${escapeHtml(String(p.nome || ''))}</option>`);
+            });
+        fechamentoDiarioProfessional.innerHTML = opts.join('');
+        if (atendimentoProfessional && atendimentoProfessional.value) {
+            fechamentoDiarioProfessional.value = String(atendimentoProfessional.value);
+        }
+    }
+
+    if (!fechamentoDiarioModal.dataset.bound) {
+        if (btnCloseFechamentoDiarioModal) btnCloseFechamentoDiarioModal.addEventListener('click', closeFechamentoDiarioModal);
+        if (btnCancelFechamentoDiario) btnCancelFechamentoDiario.addEventListener('click', closeFechamentoDiarioModal);
+        if (btnGenerateFechamentoDiario) {
+            btnGenerateFechamentoDiario.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const dateStr = fechamentoDiarioDate ? String(fechamentoDiarioDate.value || '') : '';
+                const profSeqId = fechamentoDiarioProfessional ? String(fechamentoDiarioProfessional.value || '') : '';
+                await printFechamentoDiario({ dateStr, profSeqId });
+            });
+        }
+        fechamentoDiarioModal.addEventListener('click', (e) => { if (e.target === fechamentoDiarioModal) closeFechamentoDiarioModal(); });
+        fechamentoDiarioModal.dataset.bound = '1';
+    }
+
+    fechamentoDiarioModal.classList.remove('hidden');
+}
+
+async function fetchAgendaRowsForFechamento({ dateStr, profSeqId }) {
+    const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
+    let q = db.from('agenda_agendamentos')
+        .select('id,paciente_id,profissional_id,inicio,status,titulo')
+        .eq('empresa_id', currentEmpresaId)
+        .gte('inicio', startIso)
+        .lte('inicio', endIso)
+        .order('inicio', { ascending: true });
+    if (profSeqId) q = q.eq('profissional_id', Number(profSeqId));
+    const { data, error } = await withTimeout(q, 20000, 'agenda_agendamentos:fechamento');
+    if (error) throw error;
+    return data || [];
+}
+
+function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId }) {
+    const list = (agendaRows || []).filter(a => String(a.status || '') !== 'CANCELADO');
+    const byPaciente = new Map();
+    list.forEach(a => {
+        if (!a.paciente_id) return;
+        const k = String(a.paciente_id);
+        if (!byPaciente.has(k)) byPaciente.set(k, []);
+        byPaciente.get(k).push(a);
+    });
+    byPaciente.forEach(arr => arr.sort((a, b) => String(a.inicio || '').localeCompare(String(b.inicio || ''))));
+
+    const rows = [];
+    byPaciente.forEach((arr, pacienteSeqIdStr) => {
+        const paciente = getPacienteDetailsBySeqId(pacienteSeqIdStr);
+        const pacienteUuid = paciente?.id || null;
+        if (!pacienteUuid) return;
+
+        const firstAg = arr[0];
+        const hora = firstAg && firstAg.inicio ? formatTimeHHMM(new Date(firstAg.inicio)) : '--:--';
+
+        const patientBudgets = (budgets || []).filter(b => String(b.pacienteid || b.paciente_id || '') === String(pacienteUuid));
+        patientBudgets.forEach(b => {
+            const itens = (b.orcamento_itens || b.itens || []);
+            itens.forEach(it => {
+                const executor = it.profissional_id ?? it.profissionalId ?? it.executor_id ?? it.executorId;
+                if (String(executor || '') !== String(profSeqId)) return;
+
+                const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
+                const desc = serv ? serv.descricao : (it.servicoDescricao || it.descricao || `#${it.servico_id || it.servicoId || it.id || ''}`);
+                const sub = String(it.subdivisao || it.sub_divisao || '').trim();
+                const itemLabel = sub ? `${desc} — ${sub}` : desc;
+
+                const qtde = Number(it.qtde || 1);
+                const valor = Number(it.valor || 0);
+                const total = (Number.isFinite(qtde) && qtde > 0 ? qtde : 1) * (Number.isFinite(valor) ? valor : 0);
+
+                rows.push({
+                    hora,
+                    pacienteNome: String(paciente?.nome || ''),
+                    budgetSeq: b.seqid,
+                    itemId: it.id,
+                    itemLabel,
+                    itemStatus: it.status || it.item_status || '',
+                    itemTotal: total
+                });
+            });
+        });
+    });
+
+    rows.sort((a, b) => String(a.hora || '').localeCompare(String(b.hora || '')) || String(a.pacienteNome || '').localeCompare(String(b.pacienteNome || ''), 'pt-BR'));
+    return rows;
+}
+
+async function printFechamentoDiario({ dateStr, profSeqId }) {
+    if (!dateStr) { showToast('Selecione a data.', true); return; }
+    if (btnGenerateFechamentoDiario) btnGenerateFechamentoDiario.disabled = true;
+    try {
+        const agendaRows = await fetchAgendaRowsForFechamento({ dateStr, profSeqId });
+        const agendaValid = (agendaRows || []).filter(a => String(a.status || '') !== 'CANCELADO');
+
+        const statusCounts = new Map();
+        const byProf = new Map();
+        agendaValid.forEach(a => {
+            const st = String(a.status || 'MARCADO');
+            statusCounts.set(st, (statusCounts.get(st) || 0) + 1);
+            const p = String(a.profissional_id || '');
+            if (!p) return;
+            if (!byProf.has(p)) byProf.set(p, []);
+            byProf.get(p).push(a);
+        });
+
+        const profKeys = profSeqId ? [String(profSeqId)] : Array.from(byProf.keys()).sort((a, b) => Number(a) - Number(b));
+        const sections = [];
+
+        const { rows: payRows, dateCol } = await fetchMovDiariaPayments({ dateStr });
+        const allMovLines = [];
+
+        payRows.forEach(p => {
+            const budgetSeq = Number(p.orcamento_id);
+            const b = (budgets || []).find(x => Number(x.seqid) === budgetSeq) || null;
+            if (!b) return;
+            const itens = b.orcamento_itens || b.itens || [];
+            if (!Array.isArray(itens) || itens.length === 0) return;
+
+            const pacienteNome = String(b.pacientenome || b.paciente_nome || '') || (patients || []).find(pp => pp.id === b.pacienteid)?.nome || '';
+            const dataRaw = p[dateCol] || p.data_pagamento || p.criado_em || p.created_at || p.data || null;
+            const dataFmt = dataRaw ? formatDateTime(dataRaw) : formatDateBR(dateStr);
+            const formaLabel = normalizeFormaPagamento(p.forma_pagamento);
+            const bucket = movBucketFromForma(p.forma_pagamento);
+            const valorPago = Number(p.valor_pago || 0);
+
+            const alloc = buildAllocationRows(valorPago, itens);
+            itens.forEach((it, idx) => {
+                const execId = it.profissional_id;
+                const execName = findProfessionalNameByAnyId(execId) || String(it.executorNome || '');
+                const servName = findServiceNameById(it.servico_id) || String(it.servicodescricao || it.descricao || '');
+                const itemName = `${servName}${it.subdivisao ? ` • ${it.subdivisao}` : ''}`;
+                const paid = Number(alloc[idx] || 0);
+                if (!(paid > 0)) return;
+                allMovLines.push({
+                    profSeqId: String(execId || ''),
+                    professional: execName || '—',
+                    date: dataFmt,
+                    patient: pacienteNome || '—',
+                    service: itemName || '—',
+                    paid,
+                    forma: formaLabel || '—',
+                    bucket
+                });
+            });
+        });
+
+        let totalProduzido = 0;
+        let totalFinalizados = 0;
+        profKeys.forEach(k => {
+            const ags = byProf.get(String(k)) || [];
+            const profName = getProfessionalNameBySeqId(k);
+
+            const atendimentoRows = buildAtendimentoRowsFromAgenda({ agendaRows: ags, profSeqId: k });
+            const finalizados = atendimentoRows.filter(r => normalizeKey(r.itemStatus) === 'FINALIZADO');
+            const pendentes = atendimentoRows.filter(r => normalizeKey(r.itemStatus) !== 'FINALIZADO');
+            const produzido = finalizados.reduce((acc, r) => acc + Number(r.itemTotal || 0), 0);
+
+            totalProduzido += produzido;
+            totalFinalizados += finalizados.length;
+
+            const movLines = allMovLines.filter(l => String(l.profSeqId || '') === String(k));
+            const movTotals = { PIX: 0, CC: 0, CD: 0, ESPECIE: 0, OUTROS: 0 };
+            movLines.forEach(l => { movTotals[l.bucket] = (movTotals[l.bucket] || 0) + Number(l.paid || 0); });
+            const movTotal = Object.values(movTotals).reduce((a, b) => a + b, 0);
+
+            const finalHtml = finalizados.length ? finalizados.map(r => `
+                <tr>
+                    <td style="padding:8px; border:1px solid #e5e7eb; white-space:nowrap;">${escapeHtml(String(r.hora || ''))}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb;">${escapeHtml(String(r.pacienteNome || '—'))}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb;">${escapeHtml(String(r.itemLabel || '—'))}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb; text-align:center;">${escapeHtml(String(r.budgetSeq || '—'))}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(r.itemTotal || 0))}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="5" style="text-align:center; padding:12px; color:#6b7280;">Nenhum item finalizado.</td></tr>`;
+
+            const movHtml = movLines.length ? movLines.map(l => `
+                <tr>
+                    <td style="padding:8px; border:1px solid #e5e7eb; white-space:nowrap;">${escapeHtml(String(l.date || ''))}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb;">${escapeHtml(String(l.patient || '—'))}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb;">${escapeHtml(String(l.service || '—'))}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(l.paid || 0))}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb;">${escapeHtml(String(l.forma || '—'))}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="5" style="text-align:center; padding:12px; color:#6b7280;">Nenhum recebimento alocado.</td></tr>`;
+
+            sections.push(`
+                <div style="margin-top: 16px; page-break-inside: avoid;">
+                    <div style="display:flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline;">
+                        <div style="font-size: 13px; font-weight: 900; color:#111827;">${escapeHtml(profName)}</div>
+                        <div style="color:#374151; font-size: 12px;">
+                            <strong>Produzido:</strong> ${escapeHtml(fmtMoney(produzido))} &nbsp;•&nbsp;
+                            <strong>Finalizados:</strong> ${escapeHtml(String(finalizados.length))} &nbsp;•&nbsp;
+                            <strong>Pendentes:</strong> ${escapeHtml(String(pendentes.length))} &nbsp;•&nbsp;
+                            <strong>Recebido:</strong> ${escapeHtml(fmtMoney(movTotal))}
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 8px; font-size: 11px; color:#6b7280;">
+                        Recebimentos por forma: PIX ${escapeHtml(fmtMoney(movTotals.PIX))} • CC ${escapeHtml(fmtMoney(movTotals.CC))} • CD ${escapeHtml(fmtMoney(movTotals.CD))} • Espécie ${escapeHtml(fmtMoney(movTotals.ESPECIE))} • Outros ${escapeHtml(fmtMoney(movTotals.OUTROS))}
+                    </div>
+
+                    <div style="margin-top: 10px;">
+                        <div style="font-weight:900; margin-bottom: 6px;">Itens finalizados (fonte oficial)</div>
+                        <table style="width:100%; border-collapse: collapse; font-size: 12px;">
+                            <thead>
+                                <tr>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Hora</th>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Paciente</th>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Serviço</th>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:center;">Orc. #</th>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:right;">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>${finalHtml}</tbody>
+                        </table>
+                    </div>
+
+                    <div style="margin-top: 12px;">
+                        <div style="font-weight:900; margin-bottom: 6px;">Recebimentos do dia (alocados)</div>
+                        <table style="width:100%; border-collapse: collapse; font-size: 12px;">
+                            <thead>
+                                <tr>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Data</th>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Paciente</th>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Serviço</th>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:right;">Valor Pago</th>
+                                    <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Forma</th>
+                                </tr>
+                            </thead>
+                            <tbody>${movHtml}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `);
+        });
+
+        const recebidoTotals = { PIX: 0, CC: 0, CD: 0, ESPECIE: 0, OUTROS: 0 };
+        allMovLines.forEach(l => {
+            if (profSeqId && String(l.profSeqId || '') !== String(profSeqId)) return;
+            recebidoTotals[l.bucket] = (recebidoTotals[l.bucket] || 0) + Number(l.paid || 0);
+        });
+        const recebidoTotal = Object.values(recebidoTotals).reduce((a, b) => a + b, 0);
+
+        const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+        const usuario = String(currentUser?.email || currentUser?.user_metadata?.email || '').trim() || '—';
+        const profLabel = profSeqId ? getProfessionalNameBySeqId(profSeqId) : 'Todos';
+
+        const resumoStatus = Array.from(statusCounts.entries())
+            .sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'pt-BR'))
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' • ');
+
+        const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fechamento Diário - ${escapeHtml(formatDateBR(dateStr))}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; color:#111827; padding: 24px; }
+    .header { display:flex; justify-content: space-between; gap: 12px; border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 16px; }
+    .brand { font-weight: 900; color:#0066cc; font-size: 20px; line-height: 1.05; }
+    .brand small { display:block; font-size: 11px; font-weight: 700; color:#6b7280; margin-top: 2px; }
+    .meta { text-align:right; color:#6b7280; font-size: 11px; }
+    .title { font-size: 14px; font-weight: 900; letter-spacing: 0.04em; }
+    .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #f9fafb; }
+    .sig { margin-top: 18px; display:flex; gap: 40px; }
+    .sig .line { flex:1; border-top: 1px solid #111827; padding-top: 6px; text-align:center; color:#6b7280; font-size: 11px; }
+    @media print { body { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">OCC <small>Odonto Connect Cloud</small></div>
+      <div style="margin-top:6px;" class="title">FECHAMENTO DIÁRIO</div>
+      <div style="margin-top:4px; color:#6b7280; font-size: 11px;">Fonte oficial: itens finalizados via Atendimento</div>
+    </div>
+    <div class="meta">
+      <div>Data: <strong>${escapeHtml(formatDateBR(dateStr))}</strong></div>
+      <div>Profissional: <strong>${escapeHtml(profLabel)}</strong></div>
+      <div>Emitido em: ${escapeHtml(hoje)}</div>
+      <div>Usuário: ${escapeHtml(usuario)}</div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div style="font-weight:900; margin-bottom: 6px;">Resumo</div>
+    <div style="color:#374151; font-size: 12px; line-height: 1.5;">
+      <div><strong>Agenda (status):</strong> ${escapeHtml(resumoStatus || '—')}</div>
+      <div><strong>Itens finalizados:</strong> ${escapeHtml(String(totalFinalizados))} &nbsp;•&nbsp; <strong>Total produzido:</strong> ${escapeHtml(fmtMoney(totalProduzido))}</div>
+      <div><strong>Total recebido (alocado):</strong> ${escapeHtml(fmtMoney(recebidoTotal))}</div>
+      <div><strong>Recebido por forma:</strong>
+        PIX ${escapeHtml(fmtMoney(recebidoTotals.PIX))} •
+        CC ${escapeHtml(fmtMoney(recebidoTotals.CC))} •
+        CD ${escapeHtml(fmtMoney(recebidoTotals.CD))} •
+        Espécie ${escapeHtml(fmtMoney(recebidoTotals.ESPECIE))} •
+        Outros ${escapeHtml(fmtMoney(recebidoTotals.OUTROS))}
+      </div>
+    </div>
+  </div>
+
+  ${sections.join('')}
+
+  <div class="sig">
+    <div class="line">Assinatura responsável do caixa/gestão</div>
+    <div class="line">Observações</div>
+  </div>
+</body>
+</html>`;
+
+        const win = window.open('', '_blank', 'width=1020,height=780');
+        if (!win) { showToast('Habilite pop-ups para imprimir o fechamento.', true); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 250);
+        closeFechamentoDiarioModal();
+    } catch (err) {
+        console.error('Erro ao gerar fechamento diário:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Erro ao gerar fechamento (${code}): ${msg}`, true);
+    } finally {
+        if (btnGenerateFechamentoDiario) btnGenerateFechamentoDiario.disabled = false;
+    }
+}
+
+async function fetchBudgetsForDay({ dateStr }) {
+    const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
+    const baseCols = 'id,seqid,status,tipo,pacienteid,pacientenome,empresa_id';
+    const dateCols = ['created_at', 'criado_em', 'data', 'data_criacao'];
+    let lastErr = null;
+    for (const col of dateCols) {
+        try {
+            const q = db.from('orcamentos')
+                .select(`${baseCols},${col}`)
+                .eq('empresa_id', currentEmpresaId)
+                .gte(col, startIso)
+                .lte(col, endIso)
+                .order(col, { ascending: true })
+                .limit(5000);
+            const { data, error } = await withTimeout(q, 25000, `orcamentos:fechamento:${col}`);
+            if (!error) return { rows: data || [], dateCol: col };
+            lastErr = error;
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    if (lastErr) throw lastErr;
+    return { rows: [], dateCol: 'created_at' };
+}
+
+async function fetchFinanceTransacoesForDay({ dateStr }) {
+    const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
+    const q = db.from('financeiro_transacoes')
+        .select('id,seqid,paciente_id,orcamento_id,referencia_id,tipo,categoria,valor,forma_pagamento,data_transacao,observacoes,criado_por,empresa_id')
+        .eq('empresa_id', currentEmpresaId)
+        .gte('data_transacao', startIso)
+        .lte('data_transacao', endIso)
+        .order('data_transacao', { ascending: true })
+        .limit(10000);
+    const { data, error } = await withTimeout(q, 25000, 'financeiro_transacoes:fechamento');
+    if (error) throw error;
+    return data || [];
+}
+
+async function fetchComissoesForDay({ dateStr }) {
+    const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
+    const baseCols = 'id,profissional_id,status,valor_comissao,data_geracao,data_pagamento,empresa_id';
+    const dateCols = ['data_geracao', 'created_at'];
+    let lastErr = null;
+    for (const col of dateCols) {
+        try {
+            const q = db.from('financeiro_comissoes')
+                .select(baseCols)
+                .eq('empresa_id', currentEmpresaId)
+                .gte(col, startIso)
+                .lte(col, endIso)
+                .order(col, { ascending: true })
+                .limit(10000);
+            const { data, error } = await withTimeout(q, 25000, `financeiro_comissoes:fechamento:${col}`);
+            if (!error) return data || [];
+            lastErr = error;
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    if (lastErr) {
+        try {
+            const q2 = db.from('financeiro_comissoes')
+                .select(baseCols)
+                .eq('empresa_id', currentEmpresaId)
+                .gte('data_pagamento', startIso)
+                .lte('data_pagamento', endIso)
+                .order('data_pagamento', { ascending: true })
+                .limit(10000);
+            const { data, error } = await withTimeout(q2, 25000, 'financeiro_comissoes:fechamento:pagamento');
+            if (!error) return data || [];
+        } catch { }
+    }
+    return [];
+}
+
+function sumByKey(rows, key) {
+    return (rows || []).reduce((acc, r) => acc + Number(r && r[key] || 0), 0);
+}
+
+async function printFechamentoDiarioFull({ dateStr, profSeqId }) {
+    if (!dateStr) { showToast('Selecione a data.', true); return; }
+    if (btnGenerateFechamentoDiarioFull) btnGenerateFechamentoDiarioFull.disabled = true;
+    try {
+        const agendaRows = await fetchAgendaRowsForFechamento({ dateStr, profSeqId: '' });
+        const agendaValid = (agendaRows || []).filter(a => String(a.status || '') !== 'CANCELADO');
+        const statusCounts = new Map();
+        const byProf = new Map();
+        agendaValid.forEach(a => {
+            const st = String(a.status || 'MARCADO');
+            statusCounts.set(st, (statusCounts.get(st) || 0) + 1);
+            const p = String(a.profissional_id || '');
+            if (!p) return;
+            if (!byProf.has(p)) byProf.set(p, []);
+            byProf.get(p).push(a);
+        });
+
+        const profKeysAll = Array.from(byProf.keys()).sort((a, b) => Number(a) - Number(b));
+        const profKeys = profSeqId ? [String(profSeqId)] : profKeysAll;
+
+        const { rows: payRows, dateCol: payDateCol } = await fetchMovDiariaPayments({ dateStr });
+        const allMovLines = [];
+        payRows.forEach(p => {
+            const budgetSeq = Number(p.orcamento_id);
+            const b = (budgets || []).find(x => Number(x.seqid) === budgetSeq) || null;
+            if (!b) return;
+            const itens = b.orcamento_itens || b.itens || [];
+            if (!Array.isArray(itens) || itens.length === 0) return;
+            const pacienteNome = String(b.pacientenome || b.paciente_nome || '') || (patients || []).find(pp => pp.id === b.pacienteid)?.nome || '';
+            const dataRaw = p[payDateCol] || p.data_pagamento || p.criado_em || p.created_at || p.data || null;
+            const dataFmt = dataRaw ? formatDateTime(dataRaw) : formatDateBR(dateStr);
+            const formaLabel = normalizeFormaPagamento(p.forma_pagamento);
+            const bucket = movBucketFromForma(p.forma_pagamento);
+            const valorPago = Number(p.valor_pago || 0);
+            const alloc = buildAllocationRows(valorPago, itens);
+            itens.forEach((it, idx) => {
+                const execId = it.profissional_id;
+                const execName = findProfessionalNameByAnyId(execId) || String(it.executorNome || '');
+                const servName = findServiceNameById(it.servico_id) || String(it.servicodescricao || it.descricao || '');
+                const itemName = `${servName}${it.subdivisao ? ` • ${it.subdivisao}` : ''}`;
+                const paid = Number(alloc[idx] || 0);
+                if (!(paid > 0)) return;
+                allMovLines.push({
+                    profSeqId: String(execId || ''),
+                    professional: execName || '—',
+                    date: dataFmt,
+                    patient: pacienteNome || '—',
+                    service: itemName || '—',
+                    paid,
+                    forma: formaLabel || '—',
+                    bucket
+                });
+            });
+        });
+
+        const finRows = await fetchFinanceTransacoesForDay({ dateStr });
+        const finCred = finRows.filter(r => String(r.tipo || '') === 'CREDITO');
+        const finDeb = finRows.filter(r => String(r.tipo || '') === 'DEBITO');
+        const finTotalCred = sumByKey(finCred, 'valor');
+        const finTotalDeb = sumByKey(finDeb, 'valor');
+        const finSaldoDia = finTotalCred - finTotalDeb;
+
+        const finByCat = new Map();
+        finRows.forEach(r => {
+            const k = String(r.categoria || '—');
+            finByCat.set(k, (finByCat.get(k) || 0) + Number(r.valor || 0) * (String(r.tipo || '') === 'DEBITO' ? -1 : 1));
+        });
+        const finByForma = new Map();
+        finRows.forEach(r => {
+            const k = normalizeFormaPagamento(r.forma_pagamento);
+            finByForma.set(k, (finByForma.get(k) || 0) + Number(r.valor || 0));
+        });
+
+        const { rows: budRows, dateCol: budDateCol } = await fetchBudgetsForDay({ dateStr });
+        const budCriados = budRows.length;
+        const budAprov = budRows.filter(b => normalizeKey(b.status) === 'APROVADO').length;
+        const budCanc = budRows.filter(b => normalizeKey(b.status) === 'CANCELADO').length;
+
+        const commRows = await fetchComissoesForDay({ dateStr });
+        const commAPagar = commRows.filter(c => {
+            const st = normalizeKey(c.status);
+            return st === 'PENDENTE' || st === 'GERADA';
+        });
+        const commPagas = commRows.filter(c => normalizeKey(c.status) === 'PAGA');
+        const commTotalAPagar = sumByKey(commAPagar, 'valor_comissao');
+        const commTotalPagas = sumByKey(commPagas, 'valor_comissao');
+
+        const recebidoTotals = { PIX: 0, CC: 0, CD: 0, ESPECIE: 0, OUTROS: 0 };
+        allMovLines.forEach(l => {
+            if (profSeqId && String(l.profSeqId || '') !== String(profSeqId)) return;
+            recebidoTotals[l.bucket] = (recebidoTotals[l.bucket] || 0) + Number(l.paid || 0);
+        });
+        const recebidoTotal = Object.values(recebidoTotals).reduce((a, b) => a + b, 0);
+
+        const orcPayTotal = (payRows || []).filter(p => String(p.status_pagamento || '') !== 'Cancelado').reduce((acc, p) => acc + Number(p.valor_pago || 0), 0);
+        const finPayRows = finRows.filter(r => String(r.categoria || '') === 'PAGAMENTO' && String(r.tipo || '') === 'CREDITO');
+        const finPayTotal = sumByKey(finPayRows, 'valor');
+        const concDiff = Number((orcPayTotal - finPayTotal).toFixed(2));
+
+        const proteseOver = (proteseOrders || []).filter(o => {
+            if (!isProteseOverdue(o)) return false;
+            const st = normalizeKey(o.status_geral || '');
+            return st !== 'CONCLUIDA' && st !== 'CANCELADA';
+        });
+
+        const productionSections = [];
+        let totalProduzido = 0;
+        let totalFinalizados = 0;
+        let totalPendentes = 0;
+        const pendenciasRows = [];
+
+        profKeys.forEach(k => {
+            const ags = byProf.get(String(k)) || [];
+            const profName = getProfessionalNameBySeqId(k);
+            const atendimentoRows = buildAtendimentoRowsFromAgenda({ agendaRows: ags, profSeqId: k });
+            const finalizados = atendimentoRows.filter(r => normalizeKey(r.itemStatus) === 'FINALIZADO');
+            const pendentes = atendimentoRows.filter(r => normalizeKey(r.itemStatus) !== 'FINALIZADO');
+            const produzido = finalizados.reduce((acc, r) => acc + Number(r.itemTotal || 0), 0);
+            totalProduzido += produzido;
+            totalFinalizados += finalizados.length;
+            totalPendentes += pendentes.length;
+            pendentes.forEach(r => pendenciasRows.push({ profName, ...r }));
+
+            const movLines = allMovLines.filter(l => String(l.profSeqId || '') === String(k));
+            const movTotals = { PIX: 0, CC: 0, CD: 0, ESPECIE: 0, OUTROS: 0 };
+            movLines.forEach(l => { movTotals[l.bucket] = (movTotals[l.bucket] || 0) + Number(l.paid || 0); });
+            const movTotal = Object.values(movTotals).reduce((a, b) => a + b, 0);
+
+            const finalHtml = finalizados.length ? finalizados.map(r => `
+                <tr>
+                    <td style="padding:7px; border:1px solid #e5e7eb; white-space:nowrap;">${escapeHtml(String(r.hora || ''))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(r.pacienteNome || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(r.itemLabel || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb; text-align:center;">${escapeHtml(String(r.budgetSeq || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(r.itemTotal || 0))}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="5" style="text-align:center; padding:10px; color:#6b7280;">Nenhum item finalizado.</td></tr>`;
+
+            productionSections.push(`
+                <div style="margin-top: 18px; page-break-inside: avoid;">
+                    <div style="display:flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline;">
+                        <div style="font-size: 13px; font-weight: 900; color:#111827;">${escapeHtml(profName)}</div>
+                        <div style="color:#374151; font-size: 12px;">
+                            <strong>Produzido:</strong> ${escapeHtml(fmtMoney(produzido))} •
+                            <strong>Finalizados:</strong> ${escapeHtml(String(finalizados.length))} •
+                            <strong>Pendentes:</strong> ${escapeHtml(String(pendentes.length))} •
+                            <strong>Recebido (alocado):</strong> ${escapeHtml(fmtMoney(movTotal))}
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <table style="width:100%; border-collapse: collapse; font-size: 12px;">
+                            <thead>
+                                <tr>
+                                    <th style="padding:7px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Hora</th>
+                                    <th style="padding:7px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Paciente</th>
+                                    <th style="padding:7px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Serviço</th>
+                                    <th style="padding:7px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:center;">Orc. #</th>
+                                    <th style="padding:7px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:right;">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>${finalHtml}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `);
+        });
+
+        const pendList = pendenciasRows.slice(0, 60).map(r => `
+            <tr>
+                <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(r.profName || '—'))}</td>
+                <td style="padding:7px; border:1px solid #e5e7eb; white-space:nowrap;">${escapeHtml(String(r.hora || ''))}</td>
+                <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(r.pacienteNome || '—'))}</td>
+                <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(r.itemLabel || '—'))}</td>
+                <td style="padding:7px; border:1px solid #e5e7eb; text-align:center;">${escapeHtml(String(r.budgetSeq || '—'))}</td>
+            </tr>
+        `).join('') || `<tr><td colspan="5" style="text-align:center; padding:10px; color:#6b7280;">Sem pendências.</td></tr>`;
+
+        const finDetails = finRows.slice(0, 300).map((t, idx) => {
+            const pacNome = t.paciente_id ? (getPacienteDetailsBySeqId(t.paciente_id)?.nome || `Paciente #${t.paciente_id}`) : '—';
+            return `
+                <tr>
+                    <td style="padding:7px; border:1px solid #e5e7eb; text-align:right;">${escapeHtml(String(t.seqid || idx + 1))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(formatDateTime(t.data_transacao) || ''))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(pacNome || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(t.categoria || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(normalizeFormaPagamento(t.forma_pagamento) || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(t.valor || 0))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb; text-align:center;">${escapeHtml(String(t.tipo || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(t.observacoes || '—'))}</td>
+                </tr>
+            `;
+        }).join('') || `<tr><td colspan="8" style="text-align:center; padding:10px; color:#6b7280;">Sem lançamentos.</td></tr>`;
+
+        const finCatHtml = Array.from(finByCat.entries())
+            .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+            .map(([k, v]) => `
+                <tr>
+                    <td style="padding:7px; border:1px solid #e5e7eb; font-weight:800;">${escapeHtml(String(k || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(v || 0))}</td>
+                </tr>
+            `).join('') || `<tr><td colspan="2" style="text-align:center; padding:10px; color:#6b7280;">—</td></tr>`;
+
+        const finFormaHtml = Array.from(finByForma.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([k, v]) => `
+                <tr>
+                    <td style="padding:7px; border:1px solid #e5e7eb; font-weight:800;">${escapeHtml(String(k || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(v || 0))}</td>
+                </tr>
+            `).join('') || `<tr><td colspan="2" style="text-align:center; padding:10px; color:#6b7280;">—</td></tr>`;
+
+        const resumoStatus = Array.from(statusCounts.entries())
+            .sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'pt-BR'))
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' • ');
+
+        const hoje = new Date();
+        const emissao = hoje.toLocaleString('pt-BR');
+        const usuario = String(currentUser?.email || currentUser?.user_metadata?.email || '').trim() || '—';
+        const profLabel = profSeqId ? getProfessionalNameBySeqId(profSeqId) : 'Todos';
+
+        const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fechamento Diário - ${escapeHtml(formatDateBR(dateStr))}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; color:#111827; padding: 24px; font-size: 12px; }
+    .header { display:flex; justify-content: space-between; gap: 12px; border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 16px; }
+    .brand { font-weight: 900; color:#0066cc; font-size: 20px; line-height: 1.05; }
+    .brand small { display:block; font-size: 11px; font-weight: 700; color:#6b7280; margin-top: 2px; }
+    .meta { text-align:right; color:#6b7280; font-size: 11px; }
+    .title { font-size: 14px; font-weight: 900; letter-spacing: 0.04em; }
+    .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #f9fafb; margin-top: 12px; }
+    .section { margin-top: 16px; }
+    .section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color:#6b7280; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background:#f3f4f6; padding: 7px; text-align:left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color:#6b7280; border: 1px solid #e5e7eb; }
+    td { padding: 7px; border: 1px solid #e5e7eb; vertical-align: top; }
+    tr:nth-child(even) td { background:#f9fafb; }
+    .sig { margin-top: 18px; display:flex; gap: 40px; }
+    .sig .line { flex:1; border-top: 1px solid #111827; padding-top: 6px; text-align:center; color:#6b7280; font-size: 11px; }
+    @media print { body { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">OCC <small>Odonto Connect Cloud</small></div>
+      <div style="margin-top:6px;" class="title">FECHAMENTO DIÁRIO (COMPLETO)</div>
+      <div style="margin-top:4px; color:#6b7280; font-size: 11px;">Fonte oficial: itens finalizados via Atendimento</div>
+    </div>
+    <div class="meta">
+      <div>Data: <strong>${escapeHtml(formatDateBR(dateStr))}</strong> (00:00–23:59)</div>
+      <div>Profissional: <strong>${escapeHtml(profLabel)}</strong></div>
+      <div>Empresa: <strong>${escapeHtml(String(currentEmpresaId || '—'))}</strong></div>
+      <div>Gerado por: ${escapeHtml(usuario)}</div>
+      <div>Emissão: ${escapeHtml(emissao)}</div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div style="font-weight:900; margin-bottom: 6px;">Resumo executivo</div>
+    <div style="color:#374151; line-height: 1.55;">
+      <div><strong>Atendimentos do dia (status):</strong> ${escapeHtml(resumoStatus || '—')}</div>
+      <div><strong>Produção (fonte oficial):</strong> ${escapeHtml(String(totalFinalizados))} itens finalizados • ${escapeHtml(fmtMoney(totalProduzido))}</div>
+      <div><strong>Pendências do dia:</strong> ${escapeHtml(String(totalPendentes))} itens não finalizados</div>
+      <div><strong>Recebido (alocado):</strong> ${escapeHtml(fmtMoney(recebidoTotal))} • PIX ${escapeHtml(fmtMoney(recebidoTotals.PIX))} • CC ${escapeHtml(fmtMoney(recebidoTotals.CC))} • CD ${escapeHtml(fmtMoney(recebidoTotals.CD))} • Espécie ${escapeHtml(fmtMoney(recebidoTotals.ESPECIE))} • Outros ${escapeHtml(fmtMoney(recebidoTotals.OUTROS))}</div>
+      <div><strong>Orçamentos do dia:</strong> ${escapeHtml(String(budCriados))} criados • ${escapeHtml(String(budAprov))} aprovados • ${escapeHtml(String(budCanc))} cancelados</div>
+      <div><strong>Financeiro do dia:</strong> Entradas ${escapeHtml(fmtMoney(finTotalCred))} • Saídas ${escapeHtml(fmtMoney(finTotalDeb))} • Saldo ${escapeHtml(fmtMoney(finSaldoDia))}</div>
+      <div><strong>Comissões do dia:</strong> A pagar ${escapeHtml(fmtMoney(commTotalAPagar))} • Pagas ${escapeHtml(fmtMoney(commTotalPagas))}</div>
+      <div><strong>Próteses vencidas:</strong> ${escapeHtml(String(proteseOver.length))}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Conciliação</h2>
+    <div class="box">
+      <div><strong>Pagamentos do Orçamento (orcamento_pagamentos):</strong> ${escapeHtml(fmtMoney(orcPayTotal))}</div>
+      <div><strong>Financeiro (categoria PAGAMENTO, crédito):</strong> ${escapeHtml(fmtMoney(finPayTotal))}</div>
+      <div><strong>Diferença (Orçamento - Financeiro):</strong> ${escapeHtml(fmtMoney(concDiff))}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Financeiro do dia</h2>
+    <div class="box" style="margin-bottom: 10px;">
+      <div style="display:flex; gap: 16px; flex-wrap: wrap;">
+        <div style="flex:1; min-width: 240px;">
+          <div style="font-weight:900; margin-bottom: 6px;">Totais por categoria (saldo)</div>
+          <table><tbody>${finCatHtml}</tbody></table>
+        </div>
+        <div style="flex:1; min-width: 240px;">
+          <div style="font-weight:900; margin-bottom: 6px;">Totais por forma (bruto)</div>
+          <table><tbody>${finFormaHtml}</tbody></table>
+        </div>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Data/Hora</th>
+          <th>Paciente</th>
+          <th>Categoria</th>
+          <th>Forma</th>
+          <th style="text-align:right;">Valor</th>
+          <th style="text-align:center;">Tipo</th>
+          <th>Obs</th>
+        </tr>
+      </thead>
+      <tbody>${finDetails}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Produção por profissional</h2>
+    ${productionSections.join('')}
+  </div>
+
+  <div class="section">
+    <h2>Pendências e próximos passos</h2>
+    <div class="box" style="margin-bottom: 10px;">
+      <div><strong>Itens não finalizados (limitado a 60 linhas):</strong></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Profissional</th>
+          <th>Hora</th>
+          <th>Paciente</th>
+          <th>Item</th>
+          <th style="text-align:center;">Orc. #</th>
+        </tr>
+      </thead>
+      <tbody>${pendList}</tbody>
+    </table>
+    <div class="box" style="margin-top: 10px;">
+      <div><strong>Próteses vencidas:</strong> ${escapeHtml(String(proteseOver.length))}</div>
+    </div>
+  </div>
+
+  <div class="sig">
+    <div class="line">Assinatura responsável do caixa/gestão</div>
+    <div class="line">Observações</div>
+  </div>
+</body>
+</html>`;
+
+        const win = window.open('', '_blank', 'width=1100,height=800');
+        if (!win) { showToast('Habilite pop-ups para imprimir o fechamento.', true); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 250);
+        if (fechamentoDiarioFullModal) fechamentoDiarioFullModal.classList.add('hidden');
+    } catch (err) {
+        console.error('Erro ao gerar fechamento diário completo:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Erro ao gerar fechamento (${code}): ${msg}`, true);
+    } finally {
+        if (btnGenerateFechamentoDiarioFull) btnGenerateFechamentoDiarioFull.disabled = false;
     }
 }
 
@@ -5373,6 +6428,7 @@ if (btnDashPrint) btnDashPrint.addEventListener('click', () => window.printDashb
 if (atendimentoDate) atendimentoDate.addEventListener('change', () => fetchAtendimentoForUI());
 if (atendimentoProfessional) atendimentoProfessional.addEventListener('change', () => fetchAtendimentoForUI());
 if (btnAtendimentoRefresh) btnAtendimentoRefresh.addEventListener('click', () => fetchAtendimentoForUI());
+if (btnFechamentoDiario) btnFechamentoDiario.addEventListener('click', () => openFechamentoDiarioModal());
 if (btnCloseAtendimentoEvolucao) btnCloseAtendimentoEvolucao.addEventListener('click', closeAtendimentoEvolucaoModal);
 if (btnCancelAtendimentoEvolucao) btnCancelAtendimentoEvolucao.addEventListener('click', closeAtendimentoEvolucaoModal);
 if (btnSaveAtendimentoEvolucao) btnSaveAtendimentoEvolucao.addEventListener('click', async () => { await saveAtendimentoEvolucao(); });
@@ -6689,10 +7745,14 @@ window.renderTable = function (data, type) {
                 <td style="color:${overdue ? 'var(--danger-color)' : 'var(--text-main)'}; font-weight:${overdue ? '800' : '500'};">${escapeHtml(prazo || '—')}</td>
                 <td><span style="background:${stBg}; color:${stColor}; padding: 3px 8px; border-radius: 10px; font-size: 0.8rem; font-weight: 800;">${escapeHtml(st)}</span></td>
                 <td class="actions-cell">
+                    <button class="btn-icon" data-action="print" data-id="${item.id}" title="Imprimir"><i class="ri-printer-line"></i></button>
                     <button class="btn-icon" data-action="edit" data-id="${item.id}" title="Editar"><i class="ri-edit-line"></i></button>
                     <button class="btn-icon" data-action="delete" data-id="${item.id}" title="Excluir" style="background:#ef444411; color:#ef4444;"><i class="ri-delete-bin-line"></i></button>
                 </td>
             `;
+
+            const btnPrint = tr.querySelector('button[data-action="print"]');
+            if (btnPrint) btnPrint.addEventListener('click', async () => { await printProteseOrder(item.id); });
 
             const btnEdit = tr.querySelector('button[data-action="edit"]');
             if (btnEdit) btnEdit.addEventListener('click', () => openProteseModal({ orderId: item.id }));
@@ -8330,6 +9390,264 @@ window.printBudget = function (id) {
     win.focus();
     setTimeout(() => win.print(), 500);
 };
+
+function movBucketFromForma(forma) {
+    const k = normalizeKey(normalizeFormaPagamento(forma));
+    if (!k) return 'OUTROS';
+    if (k.includes('PIX')) return 'PIX';
+    if (k.includes('CREDITO')) return 'CC';
+    if (k.includes('DEBITO')) return 'CD';
+    if (k.includes('DINHEIRO') || k.includes('ESPECIE')) return 'ESPECIE';
+    return 'OUTROS';
+}
+
+function formatMovBucketLabel(bucket) {
+    if (bucket === 'PIX') return 'PIX';
+    if (bucket === 'CC') return 'CC (Cartão Crédito)';
+    if (bucket === 'CD') return 'CD (Cartão Débito)';
+    if (bucket === 'ESPECIE') return 'Espécie (Dinheiro)';
+    return 'Outros';
+}
+
+function findProfessionalByAnyId(value) {
+    const v = String(value || '');
+    if (!v) return null;
+    return (professionals || []).find(p => String(p.id) === v || String(p.seqid) === v) || null;
+}
+
+function findProfessionalNameByAnyId(value) {
+    const p = findProfessionalByAnyId(value);
+    return p ? String(p.nome || '') : '';
+}
+
+function findServiceNameById(id) {
+    if (!id) return '';
+    const s = (services || []).find(x => String(x.id) === String(id));
+    return s ? String(s.descricao || '') : '';
+}
+
+function buildAllocationRows(valorPago, items) {
+    const subs = items.map(it => {
+        const qtde = Number(it.qtde || 1);
+        const v = Number(it.valor || 0);
+        return Math.max(0, v * (Number.isFinite(qtde) && qtde > 0 ? qtde : 1));
+    });
+    const total = subs.reduce((a, b) => a + b, 0);
+    if (!(total > 0) || !(Number(valorPago) > 0)) return subs.map(() => 0);
+
+    const raw = subs.map(s => (valorPago * (s / total)));
+    const out = raw.map((r, idx) => idx === raw.length - 1 ? r : Number(r.toFixed(2)));
+    const sumPrev = out.slice(0, -1).reduce((a, b) => a + b, 0);
+    out[out.length - 1] = Number((valorPago - sumPrev).toFixed(2));
+    return out.map(v => (v < 0 ? 0 : v));
+}
+
+async function fetchMovDiariaPayments({ dateStr }) {
+    const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
+    const baseSelectCols = 'id,orcamento_id,valor_pago,forma_pagamento,observacoes,status_pagamento,empresa_id';
+    const dateCols = ['data_pagamento', 'criado_em', 'created_at', 'data'];
+    let lastErr = null;
+    for (const col of dateCols) {
+        try {
+            const q = db.from('orcamento_pagamentos')
+                .select(`${baseSelectCols},${col}`)
+                .eq('empresa_id', currentEmpresaId)
+                .neq('status_pagamento', 'Cancelado')
+                .gte(col, startIso)
+                .lte(col, endIso)
+                .order(col, { ascending: true });
+            const res = await withTimeout(q, 20000, `orcamento_pagamentos:${col}`);
+            if (res && !res.error) {
+                return { rows: res.data || [], dateCol: col };
+            }
+            lastErr = res && res.error ? res.error : lastErr;
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    if (lastErr) throw lastErr;
+    return { rows: [], dateCol: 'data_pagamento' };
+}
+
+async function printMovimentacaoDiaria({ dateStr, profVal }) {
+    if (!dateStr) { showToast('Selecione a data.', true); return; }
+    const selectedProf = findProfessionalByAnyId(profVal);
+    const selectedLabel = selectedProf ? String(selectedProf.nome || '') : 'Todos';
+
+    if (btnGenerateMovDiaria) btnGenerateMovDiaria.disabled = true;
+    try {
+        const { rows: payRows, dateCol } = await fetchMovDiariaPayments({ dateStr });
+
+        const lines = [];
+        payRows.forEach(p => {
+            const budgetSeq = Number(p.orcamento_id);
+            const b = (budgets || []).find(x => Number(x.seqid) === budgetSeq) || null;
+            if (!b) return;
+            const itens = b.orcamento_itens || b.itens || [];
+            if (!Array.isArray(itens) || itens.length === 0) return;
+
+            const pacienteNome = String(b.pacientenome || b.paciente_nome || '') || (patients || []).find(pp => pp.id === b.pacienteid)?.nome || '';
+            const dataRaw = p[dateCol] || p.data_pagamento || p.criado_em || p.created_at || p.data || null;
+            const dataFmt = dataRaw ? formatDateTime(dataRaw) : formatDateBR(dateStr);
+            const formaLabel = normalizeFormaPagamento(p.forma_pagamento);
+            const bucket = movBucketFromForma(p.forma_pagamento);
+            const valorPago = Number(p.valor_pago || 0);
+
+            const alloc = buildAllocationRows(valorPago, itens);
+            itens.forEach((it, idx) => {
+                const execId = it.profissional_id;
+                const execName = findProfessionalNameByAnyId(execId) || String(it.executorNome || '');
+                const servName = findServiceNameById(it.servico_id) || String(it.servicodescricao || it.descricao || '');
+                const itemName = `${servName}${it.subdivisao ? ` • ${it.subdivisao}` : ''}`;
+                const paid = Number(alloc[idx] || 0);
+                const execProf = findProfessionalByAnyId(execId);
+                if (selectedProf && execProf) {
+                    const same = (String(execProf.id) && String(execProf.id) === String(selectedProf.id)) || (String(execProf.seqid) && String(execProf.seqid) === String(selectedProf.seqid));
+                    if (!same) return;
+                } else if (selectedProf && !execProf) {
+                    return;
+                }
+                lines.push({
+                    professional: execName || '—',
+                    date: dataFmt,
+                    patient: pacienteNome || '—',
+                    service: itemName || '—',
+                    paid,
+                    forma: formaLabel || '—',
+                    bucket
+                });
+            });
+        });
+
+        const groups = new Map();
+        lines.forEach(l => {
+            const key = l.professional || '—';
+            const arr = groups.get(key) || [];
+            arr.push(l);
+            groups.set(key, arr);
+        });
+        const groupKeys = Array.from(groups.keys()).sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
+
+        const totals = { PIX: 0, CC: 0, CD: 0, ESPECIE: 0, OUTROS: 0 };
+        lines.forEach(l => { totals[l.bucket] = (totals[l.bucket] || 0) + Number(l.paid || 0); });
+        const totalGeral = Object.values(totals).reduce((a, b) => a + b, 0);
+
+        const totalsHtml = ['PIX', 'CC', 'CD', 'ESPECIE', 'OUTROS'].map(k => `
+            <tr>
+                <td style="padding:8px; border:1px solid #e5e7eb; font-weight:800;">${escapeHtml(formatMovBucketLabel(k))}</td>
+                <td style="padding:8px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(totals[k] || 0))}</td>
+            </tr>
+        `).join('');
+
+        const bodyHtml = groupKeys.length ? groupKeys.map(name => {
+            const rows = (groups.get(name) || []).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+            const rowsHtml = rows.map(r => `
+                <tr>
+                    <td style="padding:8px; border:1px solid #e5e7eb; white-space:nowrap;">${escapeHtml(r.date)}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb;">${escapeHtml(r.patient)}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb;">${escapeHtml(r.service)}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(r.paid || 0))}</td>
+                    <td style="padding:8px; border:1px solid #e5e7eb;">${escapeHtml(r.forma)}</td>
+                </tr>
+            `).join('');
+            const subt = { PIX: 0, CC: 0, CD: 0, ESPECIE: 0, OUTROS: 0 };
+            rows.forEach(r => { subt[r.bucket] = (subt[r.bucket] || 0) + Number(r.paid || 0); });
+            const subtTotal = Object.values(subt).reduce((a, b) => a + b, 0);
+            const subtLine = `<div style="display:flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; color:#374151;">
+                <strong>Total ${escapeHtml(name)}:</strong> ${escapeHtml(fmtMoney(subtTotal))}
+                <span>PIX: ${escapeHtml(fmtMoney(subt.PIX))}</span>
+                <span>CC: ${escapeHtml(fmtMoney(subt.CC))}</span>
+                <span>CD: ${escapeHtml(fmtMoney(subt.CD))}</span>
+                <span>Espécie: ${escapeHtml(fmtMoney(subt.ESPECIE))}</span>
+                <span>Outros: ${escapeHtml(fmtMoney(subt.OUTROS))}</span>
+            </div>`;
+            return `
+                <div style="margin-top: 16px; page-break-inside: avoid;">
+                    <div style="font-size: 13px; font-weight: 900; color:#111827; margin-bottom: 6px;">${escapeHtml(name)}</div>
+                    <table style="width:100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr>
+                                <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Data</th>
+                                <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Paciente</th>
+                                <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Serviço Executado</th>
+                                <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:right;">Valor Pago</th>
+                                <th style="padding:8px; border:1px solid #e5e7eb; background:#f3f4f6; text-align:left;">Forma</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                    ${subtLine}
+                </div>
+            `;
+        }).join('') : `<div style="text-align:center; color:#6b7280; padding: 24px;">Nenhum registro encontrado.</div>`;
+
+        const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+        const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Movimentação Diária - ${escapeHtml(formatDateBR(dateStr))}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; color:#111827; padding: 24px; }
+    .header { display:flex; justify-content: space-between; gap: 12px; border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 16px; }
+    .brand { font-weight: 900; color:#0066cc; font-size: 20px; line-height: 1.05; }
+    .brand small { display:block; font-size: 11px; font-weight: 700; color:#6b7280; margin-top: 2px; }
+    .meta { text-align:right; color:#6b7280; font-size: 11px; }
+    .title { font-size: 14px; font-weight: 900; letter-spacing: 0.04em; }
+    .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #f9fafb; }
+    @media print { body { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">OCC <small>Odonto Connect Cloud</small></div>
+      <div style="margin-top:6px;" class="title">MOVIMENTAÇÃO DIÁRIA</div>
+    </div>
+    <div class="meta">
+      <div>Data: <strong>${escapeHtml(formatDateBR(dateStr))}</strong></div>
+      <div>Profissional: <strong>${escapeHtml(selectedLabel)}</strong></div>
+      <div>Emitido em: ${escapeHtml(hoje)}</div>
+    </div>
+  </div>
+
+  <div class="box" style="margin-bottom: 14px;">
+    <div style="font-weight:900; margin-bottom: 6px;">Totais por forma de pagamento</div>
+    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+      <tbody>
+        ${totalsHtml}
+        <tr>
+          <td style="padding:8px; border:1px solid #e5e7eb; font-weight:900;">TOTAL</td>
+          <td style="padding:8px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(totalGeral))}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top: 8px; font-size: 10px; color:#6b7280;">
+      Cálculo: pagamentos do dia distribuídos proporcionalmente pelos itens do orçamento.
+    </div>
+  </div>
+
+  ${bodyHtml}
+</body>
+</html>`;
+
+        const win = window.open('', '_blank', 'width=980,height=750');
+        if (!win) { showToast('Habilite pop-ups para imprimir o relatório.', true); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 250);
+        if (movDiariaModal) movDiariaModal.classList.add('hidden');
+    } catch (err) {
+        console.error('Erro ao gerar Movimentação Diária:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Erro ao gerar relatório (${code}): ${msg}`, true);
+    } finally {
+        if (btnGenerateMovDiaria) btnGenerateMovDiaria.disabled = false;
+    }
+}
 
 window.printPatient = function (id) {
     const p = patients.find(x => x.id === id);
@@ -10490,6 +11808,113 @@ window.deleteTransaction = deleteTransaction;
             }
             if (modalNovaTransacao) modalNovaTransacao.classList.remove('hidden');
         });
+    }
+
+    const closeMovDiaria = () => {
+        if (movDiariaModal) movDiariaModal.classList.add('hidden');
+    };
+    const openMovDiaria = () => {
+        if (!movDiariaModal) return;
+        if (movDiariaDate && !movDiariaDate.value) {
+            const d = new Date();
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            movDiariaDate.value = `${yyyy}-${mm}-${dd}`;
+        }
+        if (movDiariaProfessional) {
+            const opts = ['<option value="">Todos</option>'];
+            (professionals || [])
+                .slice()
+                .filter(p => String(p.tipo || '').toLowerCase() !== 'protetico')
+                .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+                .forEach(p => {
+                    const v = (p.seqid != null && String(p.seqid)) ? String(p.seqid) : String(p.id || '');
+                    if (!v) return;
+                    opts.push(`<option value="${escapeHtml(v)}">${escapeHtml(String(p.nome || ''))}</option>`);
+                });
+            movDiariaProfessional.innerHTML = opts.join('');
+        }
+        movDiariaModal.classList.remove('hidden');
+    };
+
+    if (btnMovDiaria && !btnMovDiaria.dataset.bound) {
+        btnMovDiaria.addEventListener('click', (e) => { e.preventDefault(); openMovDiaria(); });
+        btnMovDiaria.dataset.bound = '1';
+    }
+    if (btnCloseMovDiariaModal && !btnCloseMovDiariaModal.dataset.bound) {
+        btnCloseMovDiariaModal.addEventListener('click', closeMovDiaria);
+        btnCloseMovDiariaModal.dataset.bound = '1';
+    }
+    if (btnCancelMovDiaria && !btnCancelMovDiaria.dataset.bound) {
+        btnCancelMovDiaria.addEventListener('click', closeMovDiaria);
+        btnCancelMovDiaria.dataset.bound = '1';
+    }
+    if (movDiariaModal && !movDiariaModal.dataset.bound) {
+        movDiariaModal.addEventListener('click', (e) => { if (e.target === movDiariaModal) closeMovDiaria(); });
+        movDiariaModal.dataset.bound = '1';
+    }
+    if (btnGenerateMovDiaria && !btnGenerateMovDiaria.dataset.bound) {
+        btnGenerateMovDiaria.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const dateStr = movDiariaDate ? String(movDiariaDate.value || '') : '';
+            const profVal = movDiariaProfessional ? String(movDiariaProfessional.value || '') : '';
+            await printMovimentacaoDiaria({ dateStr, profVal });
+        });
+        btnGenerateMovDiaria.dataset.bound = '1';
+    }
+
+    const closeFechamentoFull = () => {
+        if (fechamentoDiarioFullModal) fechamentoDiarioFullModal.classList.add('hidden');
+    };
+    const openFechamentoFull = () => {
+        if (!fechamentoDiarioFullModal) return;
+        if (fechamentoDiarioFullDate && !fechamentoDiarioFullDate.value) {
+            const d = new Date();
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            fechamentoDiarioFullDate.value = `${yyyy}-${mm}-${dd}`;
+        }
+        if (fechamentoDiarioFullProfessional) {
+            const opts = ['<option value="">Todos</option>'];
+            (professionals || [])
+                .slice()
+                .filter(p => String(p.tipo || '').toLowerCase() !== 'protetico')
+                .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+                .forEach(p => {
+                    if (p.seqid == null) return;
+                    opts.push(`<option value="${escapeHtml(String(p.seqid))}">${escapeHtml(String(p.nome || ''))}</option>`);
+                });
+            fechamentoDiarioFullProfessional.innerHTML = opts.join('');
+        }
+        fechamentoDiarioFullModal.classList.remove('hidden');
+    };
+
+    if (btnFechamentoDiarioFull && !btnFechamentoDiarioFull.dataset.bound) {
+        btnFechamentoDiarioFull.addEventListener('click', (e) => { e.preventDefault(); openFechamentoFull(); });
+        btnFechamentoDiarioFull.dataset.bound = '1';
+    }
+    if (btnCloseFechamentoDiarioFullModal && !btnCloseFechamentoDiarioFullModal.dataset.bound) {
+        btnCloseFechamentoDiarioFullModal.addEventListener('click', closeFechamentoFull);
+        btnCloseFechamentoDiarioFullModal.dataset.bound = '1';
+    }
+    if (btnCancelFechamentoDiarioFull && !btnCancelFechamentoDiarioFull.dataset.bound) {
+        btnCancelFechamentoDiarioFull.addEventListener('click', closeFechamentoFull);
+        btnCancelFechamentoDiarioFull.dataset.bound = '1';
+    }
+    if (fechamentoDiarioFullModal && !fechamentoDiarioFullModal.dataset.bound) {
+        fechamentoDiarioFullModal.addEventListener('click', (e) => { if (e.target === fechamentoDiarioFullModal) closeFechamentoFull(); });
+        fechamentoDiarioFullModal.dataset.bound = '1';
+    }
+    if (btnGenerateFechamentoDiarioFull && !btnGenerateFechamentoDiarioFull.dataset.bound) {
+        btnGenerateFechamentoDiarioFull.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const dateStr = fechamentoDiarioFullDate ? String(fechamentoDiarioFullDate.value || '') : '';
+            const profSeqId = fechamentoDiarioFullProfessional ? String(fechamentoDiarioFullProfessional.value || '') : '';
+            await printFechamentoDiarioFull({ dateStr, profSeqId });
+        });
+        btnGenerateFechamentoDiarioFull.dataset.bound = '1';
     }
 
     const btnCloseModalTransacao = document.getElementById('btnCloseModalTransacao');

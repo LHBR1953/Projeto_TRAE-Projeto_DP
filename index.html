@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260315-2320">
+    <link rel="stylesheet" href="styles.css?v=20260316-0245">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260315-2320
+        build 20260316-0245
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -1719,9 +1719,17 @@
             <section id="financeiroView" class="view-section hidden">
                 <div class="section-header">
                     <h2><i class="ri-bank-card-line"></i> Financeiro</h2>
-                    <button id="btnNovaTransacao" class="btn btn-primary">
-                        <i class="ri-add-line"></i> Novo Lançamento
-                    </button>
+                    <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button id="btnMovDiaria" class="btn btn-secondary">
+                            <i class="ri-file-list-3-line"></i> Movimentação Diária
+                        </button>
+                        <button id="btnFechamentoDiarioFull" class="btn btn-secondary">
+                            <i class="ri-clipboard-line"></i> Fechamento Diário
+                        </button>
+                        <button id="btnNovaTransacao" class="btn btn-primary">
+                            <i class="ri-add-line"></i> Novo Lançamento
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Painel de Busca por Paciente -->
@@ -1920,6 +1928,7 @@
                         </div>
                         <div class="form-group" style="margin-bottom: 0; display: flex; gap: 0.5rem;">
                             <button id="btnAtendimentoRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
+                            <button id="btnFechamentoDiario" class="btn btn-secondary"><i class="ri-clipboard-line"></i> Fechamento Diário</button>
                         </div>
                     </div>
                 </div>
@@ -2223,6 +2232,7 @@
                     </div>
                     <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
                         <button type="button" id="btnProteseCancel" class="btn btn-secondary">Fechar</button>
+                        <button type="button" id="btnProtesePrint" class="btn btn-secondary"><i class="ri-printer-line"></i> Imprimir</button>
                         <button type="button" id="btnProteseSave" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
                     </div>
                 </div>
@@ -2484,6 +2494,102 @@
         </div>
     </div>
 
+    <div id="movDiariaModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 520px; width: 95%;">
+            <div class="modal-header">
+                <h3>Movimentação Diária</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseMovDiariaModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="movDiariaDate">Data *</label>
+                    <input type="date" id="movDiariaDate" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="movDiariaProfessional">Profissional</label>
+                    <select id="movDiariaProfessional" class="form-control">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 10px;">
+                    Relatório baseado nos pagamentos registrados no dia e distribuídos proporcionalmente por item do orçamento.
+                </p>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 1rem;">
+                <button type="button" class="btn btn-secondary" id="btnCancelMovDiaria">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnGenerateMovDiaria">
+                    <i class="ri-printer-line"></i> Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="fechamentoDiarioModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 560px; width: 95%;">
+            <div class="modal-header">
+                <h3>Fechamento Diário</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseFechamentoDiarioModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="fechamentoDiarioDate">Data *</label>
+                    <input type="date" id="fechamentoDiarioDate" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="fechamentoDiarioProfessional">Profissional</label>
+                    <select id="fechamentoDiarioProfessional" class="form-control">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 10px;">
+                    Fonte oficial: itens finalizados via botão Finalizar do Atendimento.
+                </p>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 1rem;">
+                <button type="button" class="btn btn-secondary" id="btnCancelFechamentoDiario">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnGenerateFechamentoDiario">
+                    <i class="ri-printer-line"></i> Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="fechamentoDiarioFullModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 620px; width: 95%;">
+            <div class="modal-header">
+                <h3>Fechamento Diário (Completo)</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseFechamentoDiarioFullModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="fechamentoDiarioFullDate">Data *</label>
+                    <input type="date" id="fechamentoDiarioFullDate" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="fechamentoDiarioFullProfessional">Profissional</label>
+                    <select id="fechamentoDiarioFullProfessional" class="form-control">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 10px;">
+                    Fonte oficial de produção: itens marcados como Finalizado pelo botão Finalizar do Atendimento.
+                </p>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 1rem;">
+                <button type="button" class="btn btn-secondary" id="btnCancelFechamentoDiarioFull">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnGenerateFechamentoDiarioFull">
+                    <i class="ri-printer-line"></i> Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal para Captura de Câmera -->
     <div id="cameraModal" class="modal-overlay hidden">
         <div class="modal-content camera-modal">
@@ -2644,7 +2750,7 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260315-2320"></script>
+    <script src="app_v20.js?v=20260316-0245"></script>
 </body>
 
 </html>
