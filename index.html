@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260316-0245">
+    <link rel="stylesheet" href="styles.css?v=20260316-0305">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260316-0245
+        build 20260316-0305
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -2736,6 +2736,22 @@
         </div>
     </div>
 
+    <div id="helpModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 920px; width: 95%;">
+            <div class="modal-header">
+                <h3><i class="ri-question-line"></i> <span id="helpModalTitle">Ajuda</span></h3>
+                <button type="button" class="btn-close-modal" id="btnCloseHelpModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="helpModalBody" style="max-height: 75vh; overflow-y: auto;">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="btnCloseHelpModal2">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toastNotification" class="toast hidden">
         <div class="toast-content">
@@ -2750,7 +2766,7 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260316-0245"></script>
+    <script src="app_v20.js?v=20260316-0305"></script>
 </body>
 
 </html>

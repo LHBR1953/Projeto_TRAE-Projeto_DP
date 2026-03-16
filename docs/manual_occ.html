@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manual do OCC - Odonto Connect Cloud</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 28px; line-height: 1.55; font-size: 12.5px; }
+    h1 { font-size: 22px; margin: 0 0 6px 0; color: #0b5ed7; }
+    h2 { font-size: 14px; margin: 22px 0 8px 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; color: #374151; }
+    h3 { font-size: 13px; margin: 14px 0 6px 0; color: #111827; }
+    p { margin: 6px 0; }
+    ul, ol { margin: 6px 0 10px 18px; }
+    li { margin: 3px 0; }
+    .cover { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid #0b5ed7; padding-bottom: 12px; margin-bottom: 18px; }
+    .brand { font-weight: 900; color: #0b5ed7; font-size: 18px; line-height: 1.1; }
+    .brand small { display: block; color: #6b7280; font-weight: 700; margin-top: 2px; font-size: 11px; }
+    .meta { text-align: right; color: #6b7280; font-size: 11px; }
+    .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #f9fafb; }
+    .toc a { color: #0b5ed7; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .note { color: #374151; background: #eff6ff; border: 1px solid #dbeafe; padding: 10px; border-radius: 10px; }
+    .k { font-weight: 800; }
+    @media print {
+      body { padding: 14px; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <div>
+      <div class="brand">OCC <small>Odonto Connect Cloud</small></div>
+      <h1>Manual do Usuário</h1>
+      <div style="color:#6b7280; font-size: 12px;">Guia de uso das telas, formulários e fluxos principais</div>
+    </div>
+    <div class="meta">
+      <div>Versão do manual: 1.0</div>
+      <div>Gerado em: <span id="genDate">—</span></div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2 style="margin-top:0;">Visão geral</h2>
+    <p>O OCC organiza o trabalho em módulos. Em geral, o fluxo recomendado é:</p>
+    <ol>
+      <li>Cadastrar <span class="k">Pacientes</span> e <span class="k">Profissionais</span>.</li>
+      <li>Cadastrar <span class="k">Serviços</span> que serão usados nos <span class="k">Orçamentos</span>.</li>
+      <li>Gerar <span class="k">Orçamentos</span>, registrar <span class="k">Pagamentos</span> e executar itens no <span class="k">Atendimento</span>.</li>
+      <li>Acompanhar <span class="k">Financeiro</span>, <span class="k">Comissões</span>, <span class="k">Agenda</span> e <span class="k">Produção Protética</span>.</li>
+    </ol>
+    <div class="note">
+      <div class="k">Fonte oficial de atendimento realizado</div>
+      <div>Conta como realizado quando o profissional clica em <span class="k">Finalizar</span> no módulo <span class="k">Atendimento</span>. Isso marca o item do orçamento como <span class="k">Finalizado</span>.</div>
+    </div>
+  </div>
+
+  <div class="toc box" style="margin-top: 14px;">
+    <h2 style="margin-top:0;">Sumário</h2>
+    <ol>
+      <li><a href="#pacientes">Pacientes</a></li>
+      <li><a href="#profissionais">Profissionais</a></li>
+      <li><a href="#especialidades">Especialidades</a></li>
+      <li><a href="#servicos">Serviços</a></li>
+      <li><a href="#orcamentos">Orçamentos</a></li>
+      <li><a href="#financeiro">Financeiro</a></li>
+      <li><a href="#comissoes">Comissões</a></li>
+      <li><a href="#atendimento">Atendimento</a></li>
+      <li><a href="#agenda">Agenda</a></li>
+      <li><a href="#producao_protetica">Produção Protética</a></li>
+      <li><a href="#audit_cancelamentos">Audit Cancelamentos</a></li>
+      <li><a href="#usuarios">Gerenciar Usuários</a></li>
+      <li><a href="#dashboard">Dashboard</a></li>
+    </ol>
+  </div>
+
+  <h2 id="pacientes">Pacientes</h2>
+  <h3>O que a tela faz</h3>
+  <p>Permite cadastrar, localizar e acessar pacientes. A partir do paciente você consegue gerar orçamentos, agendar atendimento, acompanhar evolução e consultar extrato financeiro.</p>
+  <h3>Como preencher o cadastro</h3>
+  <ul>
+    <li><span class="k">Nome</span>: preencha completo, sem abreviações.</li>
+    <li><span class="k">Contato</span>: informe pelo menos um telefone/celular válido.</li>
+    <li><span class="k">Documento (CPF)</span>: quando usado, evita duplicidades e facilita auditoria.</li>
+    <li><span class="k">Endereço</span>: útil para documentos e termos, quando aplicável.</li>
+  </ul>
+  <h3>Ações principais</h3>
+  <ul>
+    <li>Novo paciente, editar, excluir (conforme permissão).</li>
+    <li>Abrir prontuário: evolução, documentos e financeiro do paciente.</li>
+  </ul>
+
+  <h2 id="profissionais">Profissionais</h2>
+  <h3>O que a tela faz</h3>
+  <p>Cadastro e gestão de profissionais que executam serviços, aparecem na agenda e podem receber comissões.</p>
+  <h3>Como preencher</h3>
+  <ul>
+    <li><span class="k">Nome</span> e <span class="k">tipo</span>: definem onde o profissional aparece no sistema.</li>
+    <li><span class="k">E-mail</span>: use o mesmo e-mail do usuário, quando houver vínculo com login.</li>
+    <li><span class="k">Comissão</span>: configure quando a clínica usa comissão por produção.</li>
+  </ul>
+
+  <h2 id="especialidades">Especialidades</h2>
+  <h3>O que a tela faz</h3>
+  <p>Lista de especialidades que podem ser associadas aos profissionais e usadas na organização da clínica.</p>
+  <div class="note">
+    <div class="k">Configuração padrão</div>
+    <div>O sistema pode vir com especialidades padrão, mas a empresa pode ajustar livremente (incluir, renomear ou remover) conforme sua realidade.</div>
+  </div>
+  <h3>Boas práticas</h3>
+  <ul>
+    <li>Evite duplicar nomes parecidos.</li>
+    <li>Padronize grafia para facilitar relatórios.</li>
+  </ul>
+
+  <h2 id="servicos">Serviços</h2>
+  <h3>O que a tela faz</h3>
+  <p>Cadastro de procedimentos/serviços que serão usados nos itens do orçamento e no atendimento.</p>
+  <h3>Como preencher</h3>
+  <ul>
+    <li><span class="k">Descrição</span>: nome do procedimento (ex.: Restauração, Limpeza).</li>
+    <li><span class="k">Valor</span>: valor base do serviço.</li>
+    <li><span class="k">Subdivisão</span> (quando existir): variações do serviço (ex.: dente/face/região).</li>
+  </ul>
+  <h3>Dicas</h3>
+  <ul>
+    <li>Cadastre serviços com nomes objetivos para facilitar seleção no orçamento.</li>
+  </ul>
+
+  <h2 id="orcamentos">Orçamentos</h2>
+  <h3>O que a tela faz</h3>
+  <p>Criação de orçamentos e itens (serviços). Permite definir executores, acompanhar status do item e registrar pagamentos.</p>
+  <h3>Fluxo recomendado</h3>
+  <ol>
+    <li>Selecionar paciente.</li>
+    <li>Criar orçamento.</li>
+    <li>Adicionar itens (serviços) e definir executor do item (profissional).</li>
+    <li>Registrar pagamentos e acompanhar saldo.</li>
+    <li>Executar no Atendimento e clicar <span class="k">Finalizar</span> para marcar item como finalizado.</li>
+  </ol>
+  <h3>Como preencher itens</h3>
+  <ul>
+    <li>Serviço, quantidade e valor.</li>
+    <li>Executor do item: define quem aparece no Atendimento e nos relatórios por profissional.</li>
+    <li>Status: acompanha o andamento (Pendente / Em Execução / Finalizado).</li>
+  </ul>
+  <h3>Pagamentos</h3>
+  <ul>
+    <li>Registre valor pago e forma de pagamento.</li>
+    <li>Confira o total pago e o saldo restante.</li>
+  </ul>
+
+  <h2 id="financeiro">Financeiro</h2>
+  <h3>O que a tela faz</h3>
+  <p>Extrato e lançamentos financeiros, com consulta por paciente e relatórios diários.</p>
+  <h3>Principais recursos</h3>
+  <ul>
+    <li>Novo Lançamento: entradas/saídas (conforme permissão).</li>
+    <li>Movimentação Diária: relatório de pagamentos do dia distribuídos por item do orçamento.</li>
+    <li>Fechamento Diário: relatório completo do dia (produção, financeiro, pendências e conciliação).</li>
+  </ul>
+  <h3>Como registrar lançamento</h3>
+  <ul>
+    <li>Selecione paciente (quando aplicável), categoria, valor e forma de pagamento.</li>
+    <li>Use observação para descrever o motivo (principalmente em reembolso/estorno).</li>
+  </ul>
+
+  <h2 id="comissoes">Comissões</h2>
+  <h3>O que a tela faz</h3>
+  <p>Consulta e pagamento de comissões por período e profissional.</p>
+  <h3>Como usar</h3>
+  <ul>
+    <li>Filtre por período e profissional.</li>
+    <li>Selecione comissões e confirme pagamento (quando autorizado).</li>
+    <li>Transferência de comissão: usar somente quando houver necessidade de correção, registrando justificativa.</li>
+  </ul>
+
+  <h2 id="atendimento">Atendimento</h2>
+  <h3>O que a tela faz</h3>
+  <p>Lista os itens que o profissional deve executar no dia, baseada na agenda e no executor do item do orçamento.</p>
+  <h3>Finalizar (fonte oficial)</h3>
+  <p>Quando o profissional clica em <span class="k">Finalizar</span>, o sistema marca o item do orçamento como <span class="k">Finalizado</span>. Isso é o que conta como atendimento realizado para relatórios.</p>
+  <h3>Registro de evolução</h3>
+  <ul>
+    <li>Use a ação de evolução para registrar informações clínicas relevantes.</li>
+    <li>Evite textos genéricos: descreva procedimento, intercorrências e orientações.</li>
+  </ul>
+
+  <h2 id="agenda">Agenda</h2>
+  <h3>O que a tela faz</h3>
+  <p>Gerencia agendamentos por profissional, com impressão de dia/semana.</p>
+  <h3>Como usar</h3>
+  <ul>
+    <li>Selecione data e profissional para visualizar horários.</li>
+    <li>Crie/edite/cancele agendamentos conforme permissão.</li>
+    <li>Mantenha status correto (marcado, concluído, cancelado) para relatórios consistentes.</li>
+  </ul>
+
+  <h2 id="producao_protetica">Produção Protética</h2>
+  <h3>O que a tela faz</h3>
+  <p>Controle de ordens protéticas internas e externas com prazo, status, executor (laboratório/protético), histórico (idas e vindas) e anexos.</p>
+  <h3>Como usar</h3>
+  <ol>
+    <li>Criar OP, selecionar paciente e execução (interna/externa).</li>
+    <li>Definir laboratório ou protético conforme execução.</li>
+    <li>Registrar prazo, prioridade e fase atual.</li>
+    <li>Atualizar histórico e anexos conforme movimentação.</li>
+    <li>Imprimir relatório para conferência/entrega.</li>
+  </ol>
+
+  <h2 id="audit_cancelamentos">Audit Cancelamentos</h2>
+  <h3>O que a tela faz</h3>
+  <p>Auditoria de orçamentos cancelados, permitindo rastrear data, motivo e informações relacionadas para conferência.</p>
+  <h3>Como usar</h3>
+  <ul>
+    <li>Use filtros para localizar cancelamentos.</li>
+    <li>Quando existir termo/justificativa, revise antes de concluir auditoria.</li>
+  </ul>
+
+  <h2 id="usuarios">Gerenciar Usuários</h2>
+  <h3>O que a tela faz</h3>
+  <p>Cadastro de usuários do sistema e controle de permissões por módulo.</p>
+  <h3>Como usar</h3>
+  <ul>
+    <li>Crie usuários com e-mail correto e perfil adequado.</li>
+    <li>Conceda apenas as permissões necessárias (principalmente em Financeiro, Comissões e Cancelamentos).</li>
+  </ul>
+
+  <h2 id="dashboard">Dashboard</h2>
+  <h3>O que a tela faz</h3>
+  <p>Exibe um resumo diário com indicadores e gráficos para apoiar o acompanhamento do dia.</p>
+  <h3>Como usar</h3>
+  <ul>
+    <li>Selecione data/profissional para filtrar a visão.</li>
+    <li>Use os indicadores para acompanhar agendamentos, recebido e eventos do dia.</li>
+  </ul>
+
+  <script>
+    (function () {
+      var el = document.getElementById('genDate');
+      if (el) el.textContent = new Date().toLocaleString('pt-BR');
+    })();
+  </script>
+</body>
+</html>
+

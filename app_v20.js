@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260316-0245';
+const APP_BUILD = '20260316-0305';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -986,6 +986,12 @@ const atEvoItemId = document.getElementById('atEvoItemId');
 const atEvoAgendamentoId = document.getElementById('atEvoAgendamentoId');
 const atEvoResumo = document.getElementById('atEvoResumo');
 const atEvoTexto = document.getElementById('atEvoTexto');
+
+const helpModal = document.getElementById('helpModal');
+const helpModalTitle = document.getElementById('helpModalTitle');
+const helpModalBody = document.getElementById('helpModalBody');
+const btnCloseHelpModal = document.getElementById('btnCloseHelpModal');
+const btnCloseHelpModal2 = document.getElementById('btnCloseHelpModal2');
 
 // Commissions DOM Elements
 const commissionsTable = document.getElementById('commissionsTable');
@@ -4982,6 +4988,313 @@ function escapeHtml(v) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
+
+const HELP_PAGES = {
+    dashboardView: {
+        title: 'Dashboard',
+        html: `
+            <h4>O que é</h4>
+            <p>Visão geral do dia, com indicadores rápidos e atalhos para acompanhamento.</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Selecione a data e o profissional (quando disponível) para atualizar os indicadores.</li>
+                <li>Use os KPIs para acompanhar: agendados, recebido, orçamentos e pacientes do dia.</li>
+                <li>Use o gráfico e a tabela de formas de pagamento para conferir o recebido por forma.</li>
+            </ul>
+        `
+    },
+    patientListView: {
+        title: 'Pacientes',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Cadastro, busca e gerenciamento de pacientes.</p>
+            <h4>Principais ações</h4>
+            <ul>
+                <li>Novo: cria um paciente e habilita os demais módulos (orçamentos, agenda, financeiro).</li>
+                <li>Buscar: digite nome/telefone/CPF para localizar rapidamente.</li>
+                <li>Abrir: acessa o prontuário do paciente (detalhes, evolução, documentos e financeiro).</li>
+            </ul>
+            <h4>Boas práticas</h4>
+            <ul>
+                <li>Preencha nome completo e ao menos um contato válido.</li>
+                <li>Cadastre CPF corretamente para evitar duplicidades e erros de emissão.</li>
+            </ul>
+        `
+    },
+    patientFormView: {
+        title: 'Pacientes (Cadastro)',
+        html: `
+            <h4>Como preencher</h4>
+            <ul>
+                <li>Dados pessoais: nome, data de nascimento e documento (se aplicável).</li>
+                <li>Contato: celular/telefone e e-mail.</li>
+                <li>Endereço: preencha se a clínica utiliza para cobranças/termos.</li>
+            </ul>
+            <h4>Salvar</h4>
+            <p>Após salvar, o paciente passa a ficar disponível para agenda, orçamentos e financeiro.</p>
+        `
+    },
+    patientDetailsView: {
+        title: 'Prontuário do Paciente',
+        html: `
+            <h4>O que contém</h4>
+            <ul>
+                <li>Resumo do paciente e histórico.</li>
+                <li>Evolução/atendimentos (registros do profissional).</li>
+                <li>Documentos e termos (TCLE) anexados.</li>
+                <li>Financeiro: extrato do paciente.</li>
+            </ul>
+            <h4>Dicas</h4>
+            <ul>
+                <li>Use as abas para navegar e manter o registro clínico organizado.</li>
+                <li>Registre evolução com clareza e data/hora corretas.</li>
+            </ul>
+        `
+    },
+    professionalListView: {
+        title: 'Profissionais',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Cadastro e gestão de profissionais (dentistas, auxiliares e demais executores).</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Cadastre nome, tipo e informações necessárias para agenda e comissões.</li>
+                <li>Mantenha e-mail correto para vinculação ao acesso do usuário (quando aplicável).</li>
+            </ul>
+        `
+    },
+    professionalFormView: {
+        title: 'Profissionais (Cadastro)',
+        html: `
+            <h4>Como preencher</h4>
+            <ul>
+                <li>Nome e tipo: definem a atuação e onde aparece no sistema.</li>
+                <li>Especialidade: ajuda em relatórios e organização interna.</li>
+                <li>Comissões: use quando a clínica paga por procedimento/percentual.</li>
+            </ul>
+        `
+    },
+    specialtiesListView: {
+        title: 'Especialidades',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Lista de especialidades usadas pelo sistema. Vem com uma configuração padrão, mas pode ser ajustada conforme a empresa.</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Inclua/remova especialidades conforme os serviços oferecidos.</li>
+                <li>Evite duplicidades para não confundir relatórios e cadastros.</li>
+            </ul>
+        `
+    },
+    specialtyFormView: {
+        title: 'Especialidades (Cadastro)',
+        html: `
+            <h4>Como preencher</h4>
+            <ul>
+                <li>Descrição clara e padronizada (ex.: Ortodontia, Endodontia).</li>
+            </ul>
+        `
+    },
+    servicesListView: {
+        title: 'Serviços',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Cadastro de procedimentos/serviços usados nos orçamentos e no atendimento.</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Cadastre descrição e valor base do serviço.</li>
+                <li>Use subdivisão quando precisar detalhar variações do mesmo serviço.</li>
+            </ul>
+        `
+    },
+    serviceFormView: {
+        title: 'Serviços (Cadastro)',
+        html: `
+            <h4>Como preencher</h4>
+            <ul>
+                <li>Descrição: nome do procedimento.</li>
+                <li>Valor: valor padrão (pode variar por orçamento conforme ajustes).</li>
+                <li>Tipo/IE: define se é serviço/estoque conforme regras da clínica.</li>
+            </ul>
+        `
+    },
+    budgetsListView: {
+        title: 'Orçamentos',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Criação e gestão de orçamentos e itens/procedimentos.</p>
+            <h4>Fluxo recomendado</h4>
+            <ol>
+                <li>Criar orçamento para o paciente.</li>
+                <li>Adicionar itens (serviços) com quantidade e valor.</li>
+                <li>Definir executor do item (profissional).</li>
+                <li>Registrar pagamentos e acompanhar saldo.</li>
+                <li>Finalizar itens via Atendimento (fonte oficial de execução).</li>
+            </ol>
+        `
+    },
+    budgetFormView: {
+        title: 'Orçamentos (Itens e Pagamentos)',
+        html: `
+            <h4>Itens</h4>
+            <ul>
+                <li>Selecione serviço, quantidade e valor.</li>
+                <li>Defina o executor (profissional responsável por executar).</li>
+                <li>Status do item acompanha o andamento (Pendente/Em execução/Finalizado).</li>
+            </ul>
+            <h4>Pagamentos</h4>
+            <ul>
+                <li>Registre valor pago e forma de pagamento.</li>
+                <li>Acompanhe total pago e saldo.</li>
+                <li>Se houver estorno/cancelamento, siga o fluxo do sistema para manter financeiro consistente.</li>
+            </ul>
+        `
+    },
+    financeiroView: {
+        title: 'Financeiro',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Extrato e lançamentos financeiros, incluindo pagamentos e movimentações.</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Novo Lançamento: registra entradas/saídas (conforme permissão).</li>
+                <li>Movimentação Diária: imprime relatório de pagamentos por item (alocado).</li>
+                <li>Fechamento Diário: imprime relatório completo do dia (produção, financeiro, pendências e conciliação).</li>
+            </ul>
+        `
+    },
+    commissionsView: {
+        title: 'Comissões',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Consulta e pagamento de comissões por período e profissional.</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Selecione período e profissional para buscar.</li>
+                <li>Pague comissões selecionadas quando autorizado.</li>
+                <li>Use transferência de profissional quando necessário, com justificativa.</li>
+            </ul>
+        `
+    },
+    atendimentoView: {
+        title: 'Atendimento',
+        html: `
+            <h4>Fonte oficial de execução</h4>
+            <p>Um atendimento conta como realizado quando o profissional clica em <strong>Finalizar</strong> no item.</p>
+            <h4>Como usar</h4>
+            <ol>
+                <li>Selecione data e profissional (executor).</li>
+                <li>Localize o item do dia.</li>
+                <li>Registre evolução (se necessário).</li>
+                <li>Clique em <strong>Finalizar</strong> para marcar o item como FINALIZADO.</li>
+            </ol>
+        `
+    },
+    agendaView: {
+        title: 'Agenda',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Gerenciar agendamentos por profissional e período.</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Selecione data e profissional para ver os horários.</li>
+                <li>Crie/edite/cancele agendamentos conforme necessidade.</li>
+                <li>Imprima agenda do dia/semana para controle interno.</li>
+            </ul>
+        `
+    },
+    proteseView: {
+        title: 'Produção Protética',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Controle de ordens protéticas internas e externas com linha do tempo.</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Crie uma OP vinculada ao paciente e, quando aplicável, ao orçamento.</li>
+                <li>Acompanhe fases e prazos (alerta de vencimento).</li>
+                <li>Registre eventos (idas e vindas) e anexos.</li>
+                <li>Use o botão de imprimir para gerar relatório com histórico e anexos.</li>
+            </ul>
+        `
+    },
+    cancelledBudgetsView: {
+        title: 'Audit Cancelamentos',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Auditoria de orçamentos cancelados, com rastreabilidade e conferência.</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Use filtros e confira os registros de cancelamento.</li>
+                <li>Verifique termos/justificativas quando disponíveis.</li>
+            </ul>
+        `
+    },
+    usersAdminView: {
+        title: 'Gerenciar Usuários',
+        html: `
+            <h4>Objetivo</h4>
+            <p>Cadastro de usuários do sistema e atribuição de permissões.</p>
+            <h4>Como usar</h4>
+            <ul>
+                <li>Crie usuários e defina perfis/roles.</li>
+                <li>Revise permissões para proteger dados e operações críticas.</li>
+            </ul>
+        `
+    },
+    userAdminFormView: {
+        title: 'Gerenciar Usuários (Cadastro)',
+        html: `
+            <h4>Como preencher</h4>
+            <ul>
+                <li>Nome, e-mail e perfil.</li>
+                <li>Permissões por módulo (ex.: financeiro, comissões, cancelamentos).</li>
+            </ul>
+        `
+    }
+};
+
+function getActiveSectionId() {
+    const el = document.querySelector('section.view-section:not(.hidden)');
+    return el ? String(el.id || '') : '';
+}
+
+function openHelpModalForSection(sectionId) {
+    if (!helpModal || !helpModalTitle || !helpModalBody) return;
+    const page = HELP_PAGES[sectionId] || null;
+    const title = page ? page.title : 'Ajuda';
+    const html = page ? page.html : `
+        <p>Ajuda não disponível para esta tela.</p>
+        <p>Telas disponíveis: Pacientes, Profissionais, Especialidades, Serviços, Orçamentos, Financeiro, Comissões, Atendimento, Agenda, Produção Protética, Audit Cancelamentos, Usuários e Dashboard.</p>
+    `;
+    helpModalTitle.textContent = title;
+    helpModalBody.innerHTML = html;
+    helpModal.classList.remove('hidden');
+}
+
+function closeHelpModal() {
+    if (!helpModal) return;
+    helpModal.classList.add('hidden');
+}
+
+function initHelpHotkey() {
+    if (window.__helpBound) return;
+    window.__helpBound = true;
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'F1') {
+            e.preventDefault();
+            openHelpModalForSection(getActiveSectionId());
+            return;
+        }
+        if (e.key === 'Escape') {
+            if (helpModal && !helpModal.classList.contains('hidden')) closeHelpModal();
+        }
+    });
+    if (btnCloseHelpModal) btnCloseHelpModal.addEventListener('click', closeHelpModal);
+    if (btnCloseHelpModal2) btnCloseHelpModal2.addEventListener('click', closeHelpModal);
+    if (helpModal) helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelpModal(); });
+}
+
+initHelpHotkey();
 
 function openCommissionTransferModal() {
     if (!can('comissoes', 'update')) {
