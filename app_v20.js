@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260317-1045';
+const APP_BUILD = '20260317-1120';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -2658,6 +2658,7 @@ async function printProteseOrder(orderId) {
         const events = (evRes.data || []).map(e => ({ kind: 'op', ...e }));
 
         let custodia = [];
+        let custodiaPrintError = '';
         try {
             const cRes = await withTimeout(
                 db.from('ordens_proteticas_custodia_eventos')
@@ -2669,8 +2670,14 @@ async function printProteseOrder(orderId) {
                 25000,
                 'ordens_proteticas_custodia_eventos:print'
             );
-            if (!cRes.error) custodia = (cRes.data || []).map(e => ({ kind: 'custodia', ...e }));
+            if (!cRes.error) {
+                custodia = (cRes.data || []).map(e => ({ kind: 'custodia', ...e }));
+            } else {
+                custodiaPrintError = String(cRes.error.message || cRes.error.code || 'Falha ao carregar custódia');
+                showToast(`Custódia (QR) não apareceu na impressão: ${custodiaPrintError}`, true);
+            }
         } catch {
+            custodiaPrintError = custodiaPrintError || 'Falha ao carregar custódia';
         }
 
         const allEvents = events.concat(custodia).sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
@@ -2688,8 +2695,14 @@ async function printProteseOrder(orderId) {
         if (anRes.error) throw anRes.error;
         const anexos = anRes.data || [];
 
+        const warnPrintRow = custodiaPrintError
+            ? `<tr><td colspan="7" style="color:#b91c1c; background:#fef2f2; padding:10px;">
+                 Custódia (QR) indisponível nesta impressão: ${escapeHtml(custodiaPrintError)}
+               </td></tr>`
+            : '';
+
         const evRows = allEvents.length
-            ? allEvents.map((e, idx) => {
+            ? (warnPrintRow + allEvents.map((e, idx) => {
                 const dt = e.created_at ? formatDateTime(e.created_at) : '';
                 const isCust = e.kind === 'custodia';
                 const tipo = isCust ? escapeHtml(`CUSTÓDIA · ${String(e.acao || '')}`) : escapeHtml(String(e.tipo_evento || ''));
@@ -2711,7 +2724,7 @@ async function printProteseOrder(orderId) {
                         <td>${nota}</td>
                     </tr>
                 `;
-            }).join('')
+            }).join(''))
             : `<tr><td colspan="7" style="text-align:center; color:#6b7280; padding:12px;">Nenhum evento registrado.</td></tr>`;
 
         const anRows = anexos.length
@@ -3012,6 +3025,7 @@ async function loadProteseTimeline(orderId) {
         if (error) throw error;
         const events = (data || []).map(ev => ({ kind: 'op', ...ev }));
         let custodia = [];
+        let custodiaErrMsg = '';
         try {
             const q2 = db.from('ordens_proteticas_custodia_eventos')
                 .select('*')
@@ -3020,15 +3034,26 @@ async function loadProteseTimeline(orderId) {
                 .order('created_at', { ascending: false })
                 .limit(200);
             const { data: d2, error: e2 } = await withTimeout(q2, 12000, 'ordens_proteticas_custodia_eventos');
-            if (!e2) custodia = (d2 || []).map(ev => ({ kind: 'custodia', ...ev }));
+            if (!e2) {
+                custodia = (d2 || []).map(ev => ({ kind: 'custodia', ...ev }));
+            } else {
+                custodiaErrMsg = String(e2.message || e2.code || 'Falha ao carregar custódia');
+            }
         } catch {
+            custodiaErrMsg = custodiaErrMsg || 'Falha ao carregar custódia';
         }
         const all = events.concat(custodia).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
         if (!all.length) {
             proteseTimeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Nenhum evento registrado.</div>';
             return;
         }
-        proteseTimeline.innerHTML = all.map(ev => {
+        const warnHtml = custodiaErrMsg
+            ? `<div style="padding: 10px 12px; border: 1px solid var(--danger-color); background: rgba(239,68,68,0.06); border-radius: 12px; margin-bottom: 10px; color: var(--text-color);">
+                 <div style="font-weight: 900;">Custódia (QR) indisponível no histórico</div>
+                 <div style="margin-top:4px; color: var(--text-muted); font-size: 12px;">${escapeHtml(custodiaErrMsg)}</div>
+               </div>`
+            : '';
+        proteseTimeline.innerHTML = warnHtml + all.map(ev => {
             const dt = ev.created_at ? formatDateTime(ev.created_at) : '-';
             const isCust = ev.kind === 'custodia';
             const tipo = isCust ? `CUSTÓDIA · ${escapeHtml(String(ev.acao || ''))}` : escapeHtml(String(ev.tipo_evento || ''));
@@ -3319,6 +3344,30 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
     bindEventBtn(btnProteseEventApprove, 'APROVACAO', 'APROVADA', null);
     bindEventBtn(btnProteseEventReprove, 'REPROVACAO', 'REPROVADA', 'PAUSADA');
     bindEventBtn(btnProteseEventClose, 'ENCERRAMENTO', 'ENCERRADA', 'CONCLUIDA');
+
+    const isAdminHere = (currentUserRole === 'admin') || Boolean(isSuperAdmin);
+    if (btnProteseEventSend) {
+        btnProteseEventSend.style.display = isAdminHere ? '' : 'none';
+        btnProteseEventSend.innerHTML = '<i class="ri-send-plane-line"></i> Evento interno: envio (sem custódia)';
+        btnProteseEventSend.title = 'NÃO substitui Custódia (QR). Use apenas para registrar nota interna.';
+        if (isAdminHere && !btnProteseEventSend.dataset.warned) {
+            btnProteseEventSend.addEventListener('click', (e) => {
+                if (!confirm('Este evento é interno e NÃO substitui a Custódia (QR). Continuar?')) e.preventDefault();
+            }, { capture: true });
+            btnProteseEventSend.dataset.warned = '1';
+        }
+    }
+    if (btnProteseEventReceive) {
+        btnProteseEventReceive.style.display = isAdminHere ? '' : 'none';
+        btnProteseEventReceive.innerHTML = '<i class="ri-inbox-archive-line"></i> Evento interno: recebimento (sem custódia)';
+        btnProteseEventReceive.title = 'NÃO substitui Custódia (QR). Use apenas para registrar nota interna.';
+        if (isAdminHere && !btnProteseEventReceive.dataset.warned) {
+            btnProteseEventReceive.addEventListener('click', (e) => {
+                if (!confirm('Este evento é interno e NÃO substitui a Custódia (QR). Continuar?')) e.preventDefault();
+            }, { capture: true });
+            btnProteseEventReceive.dataset.warned = '1';
+        }
+    }
 
     if (btnProteseCustodia) {
         updateProteseCustodiaButtonState();
