@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OCC — Confirmação de Custódia</title>
+  <style>
+    :root { --bg:#0b1220; --card:#0f172a; --text:#e5e7eb; --muted:#94a3b8; --border:#22304a; --ok:#10b981; --bad:#ef4444; --btn:#1d4ed8; }
+    *{box-sizing:border-box;}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    .wrap{max-width:860px;margin:0 auto;padding:18px 14px 28px;}
+    .top{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:12px;}
+    .brand{font-weight:900;letter-spacing:0.04em;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;}
+    .muted{color:var(--muted);}
+    .grid{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px;}
+    label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:6px;}
+    input,textarea{width:100%;padding:12px 12px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);outline:none;}
+    input:focus,textarea:focus{border-color:#3b82f6;}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .btn{appearance:none;border:none;border-radius:12px;padding:12px 12px;font-weight:900;cursor:pointer;}
+    .btn.primary{background:var(--btn);color:white;}
+    .btn.secondary{background:#111827;color:var(--text);border:1px solid var(--border);}
+    .btn.danger{background:#7f1d1d;color:white;}
+    .btn:disabled{opacity:0.6;cursor:not-allowed;}
+    .msg{margin-top:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#0b1220;}
+    .msg.ok{border-color:rgba(16,185,129,0.4);}
+    .msg.bad{border-color:rgba(239,68,68,0.5);}
+    .sigWrap{border:1px dashed var(--border);border-radius:14px;background:#0b1220;overflow:hidden;}
+    canvas{width:100%;height:180px;display:block;touch-action:none;}
+    .metaBox{display:grid;grid-template-columns:1fr;gap:6px;margin-top:10px;}
+    .kv{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid rgba(34,48,74,0.55);padding:8px 0;}
+    .kv:last-child{border-bottom:none;}
+    .kv b{color:#f8fafc;}
+    @media (max-width: 560px){.row{grid-template-columns:1fr;}}
+    @media print {
+      body{background:white;color:#111827;}
+      .card{background:white;border:1px solid #e5e7eb;}
+      input,textarea,.btn,.sigWrap{display:none !important;}
+      .msg{border:1px solid #e5e7eb;background:white;}
+      .muted{color:#374151;}
+    }
+  </style>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <div class="brand">OCC</div>
+        <div class="muted" style="font-size:12px;">Confirmação de custódia do produto</div>
+      </div>
+      <button class="btn secondary" onclick="window.print()">Imprimir</button>
+    </div>
+
+    <div class="card" id="cardMain">
+      <div id="statusLine" class="muted">Carregando...</div>
+      <div id="meta" class="metaBox" style="display:none;"></div>
+
+      <div id="form" style="display:none; margin-top: 12px;">
+        <div class="row">
+          <div>
+            <label for="code">Código exibido na clínica *</label>
+            <input id="code" inputmode="numeric" placeholder="Ex.: 483920" />
+          </div>
+          <div>
+            <label for="doc">CPF/Documento</label>
+            <input id="doc" placeholder="Opcional" />
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <label for="name">Nome do recebedor *</label>
+          <input id="name" placeholder="Digite seu nome completo" />
+        </div>
+
+        <div style="margin-top:12px;">
+          <label>Assinatura (opcional, recomendado)</label>
+          <div class="sigWrap">
+            <canvas id="sig"></canvas>
+          </div>
+          <div style="display:flex; gap:10px; margin-top:10px;">
+            <button class="btn secondary" id="btnClear">Limpar assinatura</button>
+            <button class="btn primary" id="btnConfirm">Confirmar recebimento</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="msg" class="msg" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script>
+    const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
+    const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
+    const db = supabase.createClient(supabaseUrl, supabaseKey);
+
+    const qs = new URLSearchParams(location.search);
+    const token = String(qs.get('t') || '').trim();
+
+    const statusLine = document.getElementById('statusLine');
+    const meta = document.getElementById('meta');
+    const form = document.getElementById('form');
+    const msg = document.getElementById('msg');
+    const btnConfirm = document.getElementById('btnConfirm');
+    const btnClear = document.getElementById('btnClear');
+
+    const codeEl = document.getElementById('code');
+    const nameEl = document.getElementById('name');
+    const docEl = document.getElementById('doc');
+
+    function showMsg(text, ok) {
+      msg.style.display = '';
+      msg.className = 'msg ' + (ok ? 'ok' : 'bad');
+      msg.textContent = String(text || '');
+    }
+
+    function fmtDT(iso) {
+      if (!iso) return '—';
+      try { return new Date(iso).toLocaleString('pt-BR'); } catch { return String(iso); }
+    }
+
+    function setMeta(rows) {
+      meta.innerHTML = rows.map(([k, v]) => `<div class="kv"><span class="muted">${k}</span><b>${String(v || '—')}</b></div>`).join('');
+      meta.style.display = '';
+    }
+
+    const canvas = document.getElementById('sig');
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+    let last = null;
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      ctx.scale(dpr, dpr);
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.fillStyle = '#0b1220';
+      ctx.fillRect(0, 0, rect.width, rect.height);
+    }
+
+    function posFromEvent(ev) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (ev.touches && ev.touches[0] ? ev.touches[0].clientX : ev.clientX) - rect.left;
+      const y = (ev.touches && ev.touches[0] ? ev.touches[0].clientY : ev.clientY) - rect.top;
+      return { x, y };
+    }
+
+    function start(ev) {
+      drawing = true;
+      last = posFromEvent(ev);
+      ev.preventDefault();
+    }
+    function move(ev) {
+      if (!drawing) return;
+      const p = posFromEvent(ev);
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      last = p;
+      ev.preventDefault();
+    }
+    function end(ev) {
+      drawing = false;
+      last = null;
+      ev && ev.preventDefault && ev.preventDefault();
+    }
+
+    canvas.addEventListener('pointerdown', start);
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end, { passive: false });
+
+    btnClear.addEventListener('click', (e) => {
+      e.preventDefault();
+      resizeCanvas();
+    });
+
+    async function loadToken() {
+      if (!token) {
+        statusLine.textContent = 'Link inválido (token ausente).';
+        showMsg('Peça para a clínica gerar um novo QR Code.', false);
+        return;
+      }
+
+      try {
+        statusLine.textContent = 'Carregando detalhes...';
+        const { data, error } = await db.rpc('rpc_protese_custodia_get_token', { p_token: token });
+        if (error) throw error;
+        const row = (data && data[0]) ? data[0] : null;
+        if (!row) throw new Error('Token inválido');
+
+        setMeta([
+          ['OP', `#${row.ordem_seqid}`],
+          ['Paciente', row.paciente_nome],
+          ['Ação', row.acao],
+          ['De', row.de_local],
+          ['Para', row.para_local],
+          ['Válido até', fmtDT(row.expires_at)]
+        ]);
+        statusLine.textContent = 'Confirme o recebimento preenchendo os campos abaixo.';
+        form.style.display = '';
+        resizeCanvas();
+      } catch (err) {
+        statusLine.textContent = 'Não foi possível validar o link.';
+        showMsg((err && err.message) ? err.message : 'Token inválido.', false);
+      }
+    }
+
+    btnConfirm.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const code = String(codeEl.value || '').trim();
+      const name = String(nameEl.value || '').trim();
+      const doc = String(docEl.value || '').trim();
+      if (!code) { showMsg('Informe o código exibido na clínica.', false); return; }
+      if (!name) { showMsg('Informe seu nome.', false); return; }
+
+      btnConfirm.disabled = true;
+      try {
+        const sigBase64 = canvas.toDataURL('image/png');
+        const { data, error } = await db.rpc('rpc_protese_custodia_confirm', {
+          p_token: token,
+          p_code: code,
+          p_recebedor_nome: name,
+          p_recebedor_doc: doc,
+          p_assinatura_base64: sigBase64,
+          p_user_agent: navigator.userAgent || ''
+        });
+        if (error) throw error;
+        const row = (data && data[0]) ? data[0] : null;
+        if (!row || row.ok !== true) {
+          showMsg((row && row.mensagem) ? row.mensagem : 'Falha ao confirmar.', false);
+          btnConfirm.disabled = false;
+          return;
+        }
+        showMsg('Confirmado. Obrigado.', true);
+        statusLine.textContent = 'Recebimento confirmado.';
+        form.style.display = 'none';
+      } catch (err) {
+        showMsg((err && err.message) ? err.message : 'Erro ao confirmar.', false);
+        btnConfirm.disabled = false;
+      }
+    });
+
+    loadToken();
+  </script>
+</body>
+</html>
+

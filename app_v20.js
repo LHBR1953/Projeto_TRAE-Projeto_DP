@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260316-1635';
+const APP_BUILD = '20260317-0950';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -1040,6 +1040,12 @@ const btnProteseEventTryIn = document.getElementById('btnProteseEventTryIn');
 const btnProteseEventApprove = document.getElementById('btnProteseEventApprove');
 const btnProteseEventReprove = document.getElementById('btnProteseEventReprove');
 const btnProteseEventClose = document.getElementById('btnProteseEventClose');
+const btnProteseCustodia = document.getElementById('btnProteseCustodia');
+
+const proteseCustodiaModal = document.getElementById('proteseCustodiaModal');
+const proteseCustodiaBody = document.getElementById('proteseCustodiaBody');
+const btnCloseProteseCustodiaModal = document.getElementById('btnCloseProteseCustodiaModal');
+const btnCloseProteseCustodiaModal2 = document.getElementById('btnCloseProteseCustodiaModal2');
 
 const modalProteseLabs = document.getElementById('modalProteseLabs');
 const btnCloseModalProteseLabs = document.getElementById('btnCloseModalProteseLabs');
@@ -2191,6 +2197,298 @@ function showList(type = 'patients') {
 
 let currentProteseOrderId = null;
 
+function isProteseCustodiaEnabled() {
+    try {
+        const v = localStorage.getItem('dp_feature_protese_custodia');
+        if (v === '0') return false;
+        if (v === '1') return true;
+    } catch {
+    }
+    return true;
+}
+
+function updateProteseCustodiaButtonState() {
+    if (!btnProteseCustodia) return;
+    const enabled = isProteseCustodiaEnabled();
+    btnProteseCustodia.style.display = enabled ? '' : 'none';
+    if (!enabled) return;
+
+    const hasOrder = Boolean(currentProteseOrderId);
+    btnProteseCustodia.disabled = !hasOrder;
+    btnProteseCustodia.title = hasOrder ? 'Registrar custódia via QR' : 'Salve a OP para habilitar custódia';
+}
+
+function proteseCustodiaCloseModal() {
+    if (proteseCustodiaModal) proteseCustodiaModal.classList.add('hidden');
+    if (proteseCustodiaBody) proteseCustodiaBody.innerHTML = '';
+}
+
+async function sha256Hex(input) {
+    const data = new TextEncoder().encode(String(input || ''));
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomHex(bytesLen) {
+    const a = new Uint8Array(Math.max(8, Number(bytesLen) || 32));
+    crypto.getRandomValues(a);
+    return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomSixDigitCode() {
+    const a = new Uint32Array(1);
+    crypto.getRandomValues(a);
+    const n = a[0] % 1000000;
+    return String(n).padStart(6, '0');
+}
+
+function getAppBaseUrl() {
+    try {
+        if (location.origin && location.origin !== 'null') return location.origin;
+        const parts = String(location.href || '').split('?')[0].split('#')[0].split('/');
+        parts.pop();
+        return parts.join('/');
+    } catch {
+        return '';
+    }
+}
+
+async function getProteseCustodiaAtual(orderId) {
+    try {
+        const q = db.from('ordens_proteticas_custodia_eventos')
+            .select('para_local,created_at')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('ordem_id', orderId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+        const { data, error } = await withTimeout(q, 12000, 'ordens_proteticas_custodia_eventos:last');
+        if (error) throw error;
+        const row = (data && data[0]) ? data[0] : null;
+        if (row && row.para_local) return String(row.para_local);
+    } catch {
+    }
+    return 'CLINICA';
+}
+
+async function openProteseCustodiaModal() {
+    if (!isProteseCustodiaEnabled()) {
+        showToast('Custódia está desabilitada (dp_feature_protese_custodia=0).', true);
+        return;
+    }
+    if (!currentProteseOrderId) {
+        showToast('Salve/abra uma OP antes de registrar custódia.', true);
+        return;
+    }
+    if (!proteseCustodiaModal || !proteseCustodiaBody) return;
+
+    const orderId = String(currentProteseOrderId);
+    const localOrder = (proteseOrders || []).find(o => String(o.id) === orderId) || null;
+    const ordemSeq = localOrder && localOrder.seqid != null ? String(localOrder.seqid) : '—';
+    const pacienteNome = localOrder ? getPatientNameById(localOrder.paciente_id) : '—';
+
+    const deAtual = await getProteseCustodiaAtual(orderId);
+    const baseUrl = getAppBaseUrl();
+
+    proteseCustodiaBody.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap: 12px;">
+            <div class="card" style="padding: 12px;">
+                <div style="display:flex; gap: 10px; flex-wrap: wrap; align-items: baseline;">
+                    <div style="font-weight: 900;">OP #${escapeHtml(ordemSeq)}</div>
+                    <div style="color: var(--text-muted);">${escapeHtml(String(pacienteNome || ''))}</div>
+                    <div style="margin-left:auto; color: var(--text-muted);">Custódia atual: <b style="color: var(--text-color);">${escapeHtml(deAtual)}</b></div>
+                </div>
+            </div>
+
+            <div class="card" style="padding: 12px;">
+                <div style="display:flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;">
+                    <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
+                        <label>Ação</label>
+                        <select id="custodiaAcao" class="form-control">
+                            <option value="ENTREGA">Entrega</option>
+                            <option value="RECEBIMENTO">Recebimento</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="min-width: 240px; margin-bottom: 0;">
+                        <label>Para (posse)</label>
+                        <select id="custodiaPara" class="form-control">
+                            <option value="PACIENTE">Paciente</option>
+                            <option value="CLINICA">Clínica</option>
+                            <option value="LABORATORIO">Laboratório</option>
+                            <option value="PROTETICO">Protético</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" id="btnCustodiaGerar" style="height: 42px;">
+                        <i class="ri-qr-code-line"></i> Gerar QR
+                    </button>
+                </div>
+                <div style="margin-top: 10px; color: var(--text-muted); font-size: 12px;">
+                    O portador escaneia o QR no celular, digita o código exibido nesta tela e assina.
+                </div>
+            </div>
+
+            <div class="card hidden" id="custodiaOut" style="padding: 12px;">
+                <div style="display:grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: start;">
+                    <div style="display:flex; flex-direction:column; gap: 10px;">
+                        <div style="border:1px solid var(--border-color); border-radius: 12px; padding: 10px; background: var(--bg-hover); text-align:center;">
+                            <img id="custodiaQrImg" alt="QR" style="width: 220px; height: 220px; max-width: 100%;" />
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="color: var(--text-muted); font-size: 12px;">Código</div>
+                            <div id="custodiaCodigo" style="font-size: 22px; font-weight: 900; letter-spacing: 0.15em;">—</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap: 10px;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label>Link</label>
+                            <input id="custodiaLink" class="form-control" readonly />
+                        </div>
+                        <div style="display:flex; gap: 10px; flex-wrap: wrap;">
+                            <button class="btn btn-secondary" id="btnCustodiaCopy"><i class="ri-file-copy-line"></i> Copiar link</button>
+                            <button class="btn btn-secondary" id="btnCustodiaCheck"><i class="ri-refresh-line"></i> Verificar assinatura</button>
+                            <button class="btn btn-danger" id="btnCustodiaCancel"><i class="ri-close-circle-line"></i> Cancelar QR</button>
+                        </div>
+                        <div id="custodiaStatus" style="color: var(--text-muted); font-size: 12px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const custodiaAcao = document.getElementById('custodiaAcao');
+    const custodiaPara = document.getElementById('custodiaPara');
+    const btnCustodiaGerar = document.getElementById('btnCustodiaGerar');
+    const out = document.getElementById('custodiaOut');
+    const qrImg = document.getElementById('custodiaQrImg');
+    const codigoEl = document.getElementById('custodiaCodigo');
+    const linkEl = document.getElementById('custodiaLink');
+    const statusEl = document.getElementById('custodiaStatus');
+    const btnCopy = document.getElementById('btnCustodiaCopy');
+    const btnCheck = document.getElementById('btnCustodiaCheck');
+    const btnCancel = document.getElementById('btnCustodiaCancel');
+
+    let activeToken = null;
+
+    const buildLink = (tok) => `${baseUrl}/protese_custodia.html?t=${encodeURIComponent(tok)}`;
+
+    const renderOut = ({ token, code }) => {
+        if (!out) return;
+        out.classList.remove('hidden');
+        const link = buildLink(token);
+        if (linkEl) linkEl.value = link;
+        if (codigoEl) codigoEl.textContent = String(code || '—');
+        if (qrImg) {
+            const src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(link)}`;
+            qrImg.src = src;
+        }
+        if (statusEl) statusEl.textContent = 'Aguardando confirmação...';
+    };
+
+    const checkStatus = async () => {
+        if (!activeToken) return;
+        try {
+            const q = db.from('ordens_proteticas_custodia_tokens')
+                .select('status,confirmed_at')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ordem_id', orderId)
+                .eq('token', activeToken)
+                .limit(1);
+            const { data, error } = await withTimeout(q, 12000, 'ordens_proteticas_custodia_tokens:check');
+            if (error) throw error;
+            const row = (data && data[0]) ? data[0] : null;
+            const st = row ? String(row.status || '') : '';
+            if (statusEl) statusEl.textContent = st ? `Status: ${st}${row && row.confirmed_at ? ` (${formatDateTime(row.confirmed_at)})` : ''}` : 'Status: —';
+            if (st === 'CONFIRMADO') {
+                showToast('Custódia confirmada.');
+                await loadProteseTimeline(orderId);
+            }
+        } catch (err) {
+            const msg = err && err.message ? err.message : 'Falha ao verificar.';
+            showToast(msg, true);
+        }
+    };
+
+    const cancelToken = async () => {
+        if (!activeToken) return;
+        if (!confirm('Cancelar este QR?')) return;
+        try {
+            const q = db.from('ordens_proteticas_custodia_tokens')
+                .update({ status: 'CANCELADO' })
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ordem_id', orderId)
+                .eq('token', activeToken);
+            const { error } = await withTimeout(q, 12000, 'ordens_proteticas_custodia_tokens:cancel');
+            if (error) throw error;
+            if (statusEl) statusEl.textContent = 'Status: CANCELADO';
+            showToast('QR cancelado.');
+        } catch (err) {
+            const msg = err && err.message ? err.message : 'Falha ao cancelar.';
+            showToast(msg, true);
+        }
+    };
+
+    if (btnCopy) btnCopy.addEventListener('click', async () => {
+        const link = linkEl ? String(linkEl.value || '') : '';
+        if (!link) return;
+        try {
+            await navigator.clipboard.writeText(link);
+            showToast('Link copiado.');
+        } catch {
+            showToast('Não foi possível copiar automaticamente.', true);
+        }
+    });
+    if (btnCheck) btnCheck.addEventListener('click', async () => { await checkStatus(); });
+    if (btnCancel) btnCancel.addEventListener('click', async () => { await cancelToken(); });
+
+    if (btnCustodiaGerar) btnCustodiaGerar.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+            const acao = custodiaAcao ? String(custodiaAcao.value || 'ENTREGA') : 'ENTREGA';
+            const para = custodiaPara ? String(custodiaPara.value || 'PACIENTE') : 'PACIENTE';
+            const token = randomHex(32);
+            const code = randomSixDigitCode();
+            const challengeHash = await sha256Hex(code);
+            const payload = {
+                empresa_id: currentEmpresaId,
+                ordem_id: orderId,
+                token,
+                challenge_hash: challengeHash,
+                acao,
+                de_local: deAtual,
+                para_local: para,
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+                created_by: currentUser && currentUser.id ? currentUser.id : null
+            };
+            const q = db.from('ordens_proteticas_custodia_tokens').insert(payload);
+            const { error } = await withTimeout(q, 15000, 'ordens_proteticas_custodia_tokens:insert');
+            if (error) throw error;
+            activeToken = token;
+            renderOut({ token, code });
+        } catch (err) {
+            console.error('Erro ao gerar custódia:', err);
+            const msg = err && err.message ? err.message : 'Falha ao gerar QR.';
+            showToast(msg, true);
+        }
+    });
+
+    proteseCustodiaModal.classList.remove('hidden');
+}
+
+async function resolveBudgetIdFromSeqid(seqid) {
+    const n = Number(seqid);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const local = (budgets || []).find(b => Number(b.seqid) === n);
+    if (local && local.id) return String(local.id);
+    try {
+        const q = db.from('orcamentos').select('id').eq('empresa_id', currentEmpresaId).eq('seqid', n).limit(1);
+        const { data, error } = await withTimeout(q, 15000, 'orcamentos:seqid_to_id');
+        if (error) throw error;
+        const row = (data || [])[0];
+        return row && row.id ? String(row.id) : null;
+    } catch {
+        return null;
+    }
+}
+
 function getPatientNameById(id) {
     const p = (patients || []).find(x => String(x.id) === String(id));
     return p ? p.nome : (id || '-');
@@ -2624,18 +2922,35 @@ async function loadProteseTimeline(orderId) {
             .limit(500);
         const { data, error } = await withTimeout(q, 15000, 'ordens_proteticas_eventos');
         if (error) throw error;
-        const events = data || [];
-        if (!events.length) {
+        const events = (data || []).map(ev => ({ kind: 'op', ...ev }));
+        let custodia = [];
+        try {
+            const q2 = db.from('ordens_proteticas_custodia_eventos')
+                .select('*')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ordem_id', orderId)
+                .order('created_at', { ascending: false })
+                .limit(200);
+            const { data: d2, error: e2 } = await withTimeout(q2, 12000, 'ordens_proteticas_custodia_eventos');
+            if (!e2) custodia = (d2 || []).map(ev => ({ kind: 'custodia', ...ev }));
+        } catch {
+        }
+        const all = events.concat(custodia).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+        if (!all.length) {
             proteseTimeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Nenhum evento registrado.</div>';
             return;
         }
-        proteseTimeline.innerHTML = events.map(ev => {
+        proteseTimeline.innerHTML = all.map(ev => {
             const dt = ev.created_at ? formatDateTime(ev.created_at) : '-';
-            const tipo = escapeHtml(String(ev.tipo_evento || ''));
+            const isCust = ev.kind === 'custodia';
+            const tipo = isCust ? `CUSTÓDIA · ${escapeHtml(String(ev.acao || ''))}` : escapeHtml(String(ev.tipo_evento || ''));
             const fase = escapeHtml(String(ev.fase_resultante || ''));
             const de = escapeHtml(String(ev.de_local || ''));
             const para = escapeHtml(String(ev.para_local || ''));
-            const nota = escapeHtml(String(ev.nota || '')).replace(/\n/g, '<br>');
+            const notaRaw = isCust
+                ? `Recebido por: ${String(ev.recebedor_nome || '')}${ev.recebedor_doc ? ` (${String(ev.recebedor_doc || '')})` : ''}`
+                : String(ev.nota || '');
+            const nota = escapeHtml(notaRaw || '').replace(/\n/g, '<br>');
             const path = (de || para) ? `${de}${(de && para) ? ' → ' : ''}${para}` : '';
             return `
                 <div class="protese-timeline-item">
@@ -2797,7 +3112,7 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
         if (proteseTipoExecucao) proteseTipoExecucao.dataset.itemId = o.orcamento_item_id || '';
         if (proteseOrcamentoSeqid) {
             const seqLocal = getBudgetSeqIdById(o.orcamento_id);
-            proteseOrcamentoSeqid.value = (seqLocal != null) ? String(seqLocal) : '—';
+            proteseOrcamentoSeqid.value = (seqLocal != null) ? String(seqLocal) : '';
             if (seqLocal == null && o.orcamento_id) {
                 resolveBudgetSeqidFromDb(o.orcamento_id).then(seqDb => {
                     if (seqDb != null && currentProteseOrderId && String(currentProteseOrderId) === String(o.id)) {
@@ -2821,7 +3136,7 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
         if (proteseTipoExecucao) proteseTipoExecucao.dataset.itemId = itemId || '';
         if (proteseOrcamentoSeqid) {
             const seqLocal = getBudgetSeqIdById(orcamentoId);
-            proteseOrcamentoSeqid.value = (seqLocal != null) ? String(seqLocal) : '—';
+            proteseOrcamentoSeqid.value = (seqLocal != null) ? String(seqLocal) : '';
             if (seqLocal == null && orcamentoId) {
                 resolveBudgetSeqidFromDb(orcamentoId).then(seqDb => {
                     if (seqDb != null && !currentProteseOrderId) {
@@ -2839,6 +3154,41 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
     if (proteseTipoExecucao && !proteseTipoExecucao.dataset.bound) {
         proteseTipoExecucao.addEventListener('change', syncProteseExecutorFields);
         proteseTipoExecucao.dataset.bound = '1';
+    }
+
+    if (proteseOrcamentoSeqid && !proteseOrcamentoSeqid.dataset.bound) {
+        let t = null;
+        const applyTypedBudget = async () => {
+            const raw = String(proteseOrcamentoSeqid.value || '').trim();
+            if (!proteseTipoExecucao) return;
+            if (!raw) {
+                proteseTipoExecucao.dataset.orcamentoId = '';
+                return;
+            }
+            const n = Number(raw);
+            if (!Number.isFinite(n) || n <= 0) return;
+            const id = await resolveBudgetIdFromSeqid(n);
+            if (!id) return;
+            proteseTipoExecucao.dataset.orcamentoId = id;
+        };
+        proteseOrcamentoSeqid.addEventListener('input', () => {
+            if (t) clearTimeout(t);
+            t = setTimeout(() => { applyTypedBudget(); }, 280);
+        });
+        proteseOrcamentoSeqid.addEventListener('blur', async () => {
+            if (!proteseTipoExecucao) return;
+            const raw = String(proteseOrcamentoSeqid.value || '').trim();
+            if (!raw) return;
+            const n = Number(raw);
+            if (!Number.isFinite(n) || n <= 0) return;
+            const id = await resolveBudgetIdFromSeqid(n);
+            if (!id) {
+                showToast('Orçamento não encontrado.', true);
+                return;
+            }
+            proteseTipoExecucao.dataset.orcamentoId = id;
+        });
+        proteseOrcamentoSeqid.dataset.bound = '1';
     }
 
     if (btnProteseSave && !btnProteseSave.dataset.bound) {
@@ -2882,6 +3232,30 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
     bindEventBtn(btnProteseEventReprove, 'REPROVACAO', 'REPROVADA', 'PAUSADA');
     bindEventBtn(btnProteseEventClose, 'ENCERRAMENTO', 'ENCERRADA', 'CONCLUIDA');
 
+    if (btnProteseCustodia) {
+        updateProteseCustodiaButtonState();
+        if (!btnProteseCustodia.dataset.bound) {
+            btnProteseCustodia.addEventListener('click', async (e) => {
+                e.preventDefault();
+                await openProteseCustodiaModal();
+            });
+            btnProteseCustodia.dataset.bound = '1';
+        }
+    }
+
+    if (btnCloseProteseCustodiaModal && !btnCloseProteseCustodiaModal.dataset.bound) {
+        btnCloseProteseCustodiaModal.addEventListener('click', proteseCustodiaCloseModal);
+        btnCloseProteseCustodiaModal.dataset.bound = '1';
+    }
+    if (btnCloseProteseCustodiaModal2 && !btnCloseProteseCustodiaModal2.dataset.bound) {
+        btnCloseProteseCustodiaModal2.addEventListener('click', proteseCustodiaCloseModal);
+        btnCloseProteseCustodiaModal2.dataset.bound = '1';
+    }
+    if (proteseCustodiaModal && !proteseCustodiaModal.dataset.bound) {
+        proteseCustodiaModal.addEventListener('click', (e) => { if (e.target === proteseCustodiaModal) proteseCustodiaCloseModal(); });
+        proteseCustodiaModal.dataset.bound = '1';
+    }
+
     modalProtese.classList.remove('hidden');
 }
 
@@ -2924,12 +3298,24 @@ async function saveProteseOrderFromModal() {
         if (tipoExec === 'EXTERNA' && !labId) { showToast('Selecione o laboratório.', true); return; }
         if (tipoExec === 'INTERNA' && !protId) { showToast('Selecione o protético interno.', true); return; }
 
-        const orcamentoId = proteseTipoExecucao ? String(proteseTipoExecucao.dataset.orcamentoId || '') : '';
+        let orcamentoId = proteseTipoExecucao ? String(proteseTipoExecucao.dataset.orcamentoId || '') : '';
         const itemId = proteseTipoExecucao ? String(proteseTipoExecucao.dataset.itemId || '') : '';
+        const orcSeqTyped = proteseOrcamentoSeqid ? String(proteseOrcamentoSeqid.value || '').trim() : '';
+        if (!orcamentoId && orcSeqTyped) {
+            const n = Number(orcSeqTyped);
+            if (Number.isFinite(n) && n > 0) {
+                const resolved = await resolveBudgetIdFromSeqid(n);
+                if (!resolved) { showToast('Orçamento não encontrado.', true); return; }
+                orcamentoId = resolved;
+                if (proteseTipoExecucao) proteseTipoExecucao.dataset.orcamentoId = resolved;
+            }
+        }
 
         if (currentProteseOrderId) {
             const payload = {
                 paciente_id: pacienteId,
+                orcamento_id: orcamentoId || null,
+                orcamento_item_id: itemId || null,
                 tipo_execucao: tipoExec,
                 laboratorio_id: tipoExec === 'EXTERNA' ? (labId || null) : null,
                 protetico_id: tipoExec === 'INTERNA' ? (protId || null) : null,

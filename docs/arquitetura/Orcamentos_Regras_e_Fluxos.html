@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Orçamentos — Regras de Negócio e Fluxos</title>
+  <style>
+    :root { --text: #111827; --muted: #6b7280; --border: #e5e7eb; --bg: #ffffff; --code: #0f172a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Helvetica Neue", Helvetica; }
+    .page { max-width: 980px; margin: 0 auto; padding: 28px 22px; }
+    .topbar { display:flex; justify-content: space-between; gap: 12px; align-items: baseline; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 18px; }
+    .brand { font-weight: 900; color:#2563eb; font-size: 18px; letter-spacing: 0.02em; }
+    .meta { color: var(--muted); font-size: 12px; }
+    .actions { display:flex; gap: 8px; align-items:center; }
+    .btn { appearance: none; border: 1px solid var(--border); background: #f9fafb; color: var(--text); padding: 8px 10px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+    .btn:hover { background: #f3f4f6; }
+    h1,h2,h3 { margin: 0; line-height: 1.2; }
+    h1 { font-size: 26px; margin-top: 12px; }
+    h2 { font-size: 18px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+    h3 { font-size: 14px; margin-top: 14px; color: #111827; }
+    p { margin: 10px 0; line-height: 1.6; }
+    ul,ol { margin: 10px 0 10px 22px; line-height: 1.6; }
+    li { margin: 4px 0; }
+    a { color: #1d4ed8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    pre { margin: 12px 0; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: #0b1220; color: #e5e7eb; overflow: auto; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 0.95em; }
+    .note { padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #f9fafb; color: var(--text); margin: 12px 0; }
+    .note .k { font-weight: 900; }
+    .toc { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #f9fafb; }
+    .toc a { color: #111827; }
+    .toc a:hover { color: #1d4ed8; }
+    .toc ul { margin: 8px 0 0 18px; }
+    .muted { color: var(--muted); }
+    @media print {
+      .no-print { display: none !important; }
+      .page { padding: 14px 12px; }
+      a { color: #111827; text-decoration: none; }
+      pre { page-break-inside: avoid; }
+      h2,h3 { page-break-after: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar no-print">
+      <div>
+        <div class="brand">OCC — Documento</div>
+        <div class="meta">Orçamentos — Regras de Negócio e Fluxos</div>
+      </div>
+      <div class="actions">
+        <button class="btn" onclick="window.print()">Imprimir / Salvar em PDF</button>
+      </div>
+    </div>
+
+    <div class="note no-print">
+      <div class="k">Como gerar PDF</div>
+      <div style="margin-top:6px; line-height: 1.55;">
+        <div>1) Clique em “Imprimir / Salvar em PDF”</div>
+        <div>2) Destino: “Salvar como PDF”</div>
+      </div>
+    </div>
+
+    <div id="content"></div>
+
+    <script type="text/plain" id="md">
+# Orçamentos — Regras de Negócio e Fluxos (Fonte do Sistema)
+
+Este documento descreve o módulo **Orçamentos** do OCC (Odonto Connect Cloud) do ponto de vista do comportamento implementado no sistema (frontend JS + Supabase). O objetivo é servir como referência única para operação, homologação e evolução sem regressão.
+
+Base complementar:
+- Regras validadas (resumo): [Regras_de_Negocio.md](file:///c:/Projeto_TRAE/Projeto_DP/docs/arquitetura/Regras_de_Negocio.md)
+- Mapa do app (tabelas e vínculos críticos): [Mapa_do_App.md](file:///c:/Projeto_TRAE/Projeto_DP/docs/arquitetura/Mapa_do_App.md)
+- Manual do usuário (visão operacional): [manual_occ.html](file:///c:/Projeto_TRAE/Projeto_DP/docs/manual_occ.html#orcamentos)
+
+---
+
+## 1) Conceitos e entidades
+
+### 1.1 Orçamento
+- Cabeçalho administrativo do tratamento/cobrança.
+- Guarda paciente, status global, tipo e responsável administrativo.
+
+Tabela principal:
+- `orcamentos`
+
+Campos relevantes na UI:
+- Paciente (uuid): `pacienteid` / `paciente_id`
+- Paciente (exibição): `pacientenome`, `pacientecelular`
+- Status: `status`
+- Tipo: `tipo`
+- Sequencial (numérico): `seqid` (usado como “ID do orçamento” em várias integrações)
+
+### 1.2 Item de orçamento
+- Cada item representa um procedimento (serviço + subdivisão), com executor.
+- É o item que “anda” no fluxo clínico: Pendente → Liberado → Em Execução → Finalizado (ou Cancelado).
+
+Tabela:
+- `orcamento_itens`
+
+Vínculo crítico:
+- `orcamento_itens.orcamento_id` deve apontar para `orcamentos.id` para o embed `orcamento_itens(*)` funcionar corretamente.
+
+### 1.3 Pagamento do orçamento
+- Registro de pagamento feito no painel “Pagamentos & Liberação”.
+- Em geral aponta para o orçamento por `orcamento_id = orcamentos.seqid` (numérico).
+
+Tabela:
+- `orcamento_pagamentos`
+
+### 1.4 Financeiro (conta corrente)
+O módulo Orçamentos integra o Financeiro em dois pontos:
+- **Entrada** (pagamento do paciente): `financeiro_transacoes` com `tipo=CREDITO` e `categoria=PAGAMENTO` (quando forma ≠ “Saldo em Conta”).
+- **Consumo** (liberação do serviço): `financeiro_transacoes` com `tipo=DEBITO` e `categoria=CONSUMO` (em orçamento cobrável).
+
+Tabela:
+- `financeiro_transacoes`
+
+Chave de referência sensível:
+- O orçamento costuma ser associado por `referencia_id = orcamentos.seqid` (e em alguns ambientes também `orcamento_id`).
+
+### 1.5 Comissões
+- Comissão nasce no momento da **liberação do item** (quando aplicável), com status PENDENTE.
+- Pagamento de comissão é tratado em módulo próprio.
+
+Tabela:
+- `financeiro_comissoes`
+
+### 1.6 Auditoria de cancelamento
+- Todo cancelamento relevante deve deixar trilha de auditoria e gerar termo quando aplicável.
+
+Tabela:
+- `orcamento_cancelados`
+
+---
+
+## 2) Telas, formulários e “dependências internas” (UI)
+
+### 2.1 Lista de Orçamentos
+- View: `#budgetsListView`
+- Busca: `#searchBudgetInput`
+- Filtro de status: `#budgetStatusFilter`
+
+HTML:
+- [index.html](file:///c:/Projeto_TRAE/Projeto_DP/index.html#L1109-L1167)
+
+Render:
+- [renderTable (budgets)](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L1479-L1548)
+
+### 2.2 Formulário do Orçamento (master)
+- View: `#budgetFormView`
+- Form: `#budgetForm`
+- Campos:
+  - Paciente: `#budPacienteNome` + `#budPacienteId`
+  - Status: `#budStatus`
+  - Profissional responsável: `#budProfissionalId`
+  - Tipo: `#budTipo`
+  - Observações: `#budObservacoes`
+
+HTML:
+- [index.html](file:///c:/Projeto_TRAE/Projeto_DP/index.html#L1169-L1358)
+
+Dependências internas abertas dentro do form:
+- Painel “Adicionar Item”: `#addBudgetItemPanel` (toggle `#btnToggleAddItem`)
+- Grid de itens: `#budgetItemsTableBody`
+
+### 2.3 Modal operacional: “Gestão de Pagamentos e Liberação”
+É onde acontece o fluxo real de pagamento, liberação e finalização.
+
+HTML (modal):
+- [budgetDetailModal](file:///c:/Projeto_TRAE/Projeto_DP/index.html#L2632-L2648)
+
+Render e regras:
+- [viewBudgetPayments](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L12806-L13063)
+
+### 2.4 Modal de autorização superior (PIN)
+Usado quando a liberação excede o valor pago no orçamento (apenas orçamento cobrável).
+
+HTML:
+- [supervisorAuthModal](file:///c:/Projeto_TRAE/Projeto_DP/index.html#L2650-L2672)
+
+Regra/acionamento:
+- [releaseBudgetItem](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13339-L13499)
+
+### 2.5 Termo de cancelamento
+HTML:
+- [cancellationTermModal](file:///c:/Projeto_TRAE/Projeto_DP/index.html#L2701-L2719)
+
+Fluxo:
+- [validateCancellation/processBudgetCancel](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13649-L13810)
+
+---
+
+## 3) Tipos de Orçamento (regra-mãe)
+
+Fonte resumida: [Regras_de_Negocio.md](file:///c:/Projeto_TRAE/Projeto_DP/docs/arquitetura/Regras_de_Negocio.md#L7-L33)
+
+### 3.1 Normal
+- Tem cobrança.
+- Aceita pagamentos.
+- Liberação depende do saldo pago cobrir o item (ou autorização).
+- Pode gerar comissão e consumo no financeiro.
+
+### 3.2 Cortesia / Retrabalho
+- Sem cobrança.
+- Não aceita pagamentos.
+- Não gera comissão.
+- Não gera consumo no financeiro.
+- Liberação é direta.
+
+No código (exemplos):
+- Bloqueio de pagamento: [recordBudgetPayment](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13161-L13166)
+- Liberação automática: [releaseBudgetItem](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13455-L13458)
+
+---
+
+## 4) Status do orçamento e status do item
+
+### 4.1 Status do orçamento (`orcamentos.status`)
+Status em uso no UI:
+- Pendente
+- Aprovado
+- Executado
+- Finalizado
+- Cancelado
+
+Regras implementadas:
+- **Pendente → Aprovado**
+  - Ao registrar pagamento: [recordBudgetPayment](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13321-L13331)
+  - Ao liberar primeiro item: [releaseBudgetItem](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13384-L13392)
+- **Executado**
+  - Quando todos os itens estiverem Finalizados: [finalizeBudgetItem](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13618-L13633)
+- **Cancelado**
+  - Fluxo de cancelamento (auditoria + estornos + ajustes): [processBudgetCancel](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13723-L13777)
+
+### 4.2 Status do item (`orcamento_itens.status`)
+Fluxo clínico esperado:
+- Pendente → Liberado → Em Execução → Finalizado
+- Cancelado (saída administrativa)
+
+---
+
+## 5) Fluxo principal (end-to-end)
+
+```
+Novo Orçamento
+  → adicionar itens e executores
+  → salvar orçamento
+  → Pagamentos & Liberação
+      → (Cortesia/Retrabalho) libera direto
+      → (Normal) registrar pagamento
+          → pago cobre item? (sim) libera
+          → (não) PIN Supervisor/Admin
+      → ao liberar:
+          → pode gerar comissão
+          → gera CONSUMO no financeiro (DEBITO/CONSUMO)
+      → execução clínica
+      → finalizar item
+          → se todos finalizados: orçamento Executado
+```
+
+---
+
+## 6) Pagamentos: regras e efeitos colaterais
+
+### 6.1 Registrar pagamento (painel operacional)
+Fluxo implementado em:
+- [recordBudgetPayment](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13157-L13336)
+
+Regras:
+- Orçamento Cortesia/Retrabalho: não aceita pagamento.
+- Validação de “teto”: pagamento não pode exceder o saldo do orçamento (com tolerância pequena por arredondamento).
+- Forma “Saldo em Conta”:
+  - valida saldo do paciente em `view_saldo_paciente`;
+  - não cria crédito em `financeiro_transacoes` na hora do pagamento;
+  - o “consumo” ocorrerá na liberação do item.
+
+### 6.2 Espelho no Financeiro (quando aplicável)
+Quando forma ≠ “Saldo em Conta”, o pagamento gera:
+- `financeiro_transacoes`: `tipo=CREDITO`, `categoria=PAGAMENTO`, `referencia_id=budget.seqid`.
+
+Trecho:
+- [recordBudgetPayment (espelho financeiro)](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13292-L13319)
+
+### 6.3 Alocação (rateio) do pagamento por item
+Tag na observação:
+- `[AlocarItem:<itemId>]`
+
+Infra:
+- [buildAllocationsForBudget](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L10059-L10124)
+
+---
+
+## 7) Liberação do item: regra de ouro
+
+Fluxo implementado em:
+- [releaseBudgetItem](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13339-L13499)
+
+Regras:
+- Cortesia/Retrabalho: libera direto.
+- Normal: exige cobertura por pago, ou autorização.
+- Ao liberar:
+  - item.status = Liberado
+  - orçamento Pendente pode virar Aprovado
+  - comissão PENDENTE (se aplicável)
+  - consumo no financeiro (DEBITO/CONSUMO)
+
+---
+
+## 8) Comissão
+
+Geração:
+- [releaseBudgetItem](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13367-L13416)
+
+Garantia ao abrir painel:
+- [ensureBudgetCommissions](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13540-L13589)
+
+---
+
+## 9) Finalização do item e “Executado”
+
+Finalização pelo painel:
+- [finalizeBudgetItem](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13600-L13643)
+
+Regra:
+- Se todos itens Finalizados: orçamento vira Executado.
+
+---
+
+## 10) Cancelamento (auditoria e estornos)
+
+Ponto central:
+- [validateCancellation/processBudgetCancel](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L13649-L13810)
+
+---
+
+## 11) Relatórios que dependem do Orçamento
+
+- Movimentação diária: [printMovimentacaoDiaria](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L10153-L10339)
+- Fechamento diário completo:
+  - [fetchAgendaRowsForFechamento](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L4021-L4033)
+  - [buildAtendimentoRowsFromAgenda](file:///c:/Projeto_TRAE/Projeto_DP/app_v20.js#L4035-L4096)
+
+---
+
+## 12) Invariantes (“não pode quebrar”)
+
+- `orcamento_itens.orcamento_id` → `orcamentos.id`
+- `orcamento_pagamentos.orcamento_id` → `orcamentos.seqid`
+- Paciente precisa ter `id` (UUID) e `seqid` (numérico) coerentes
+    </script>
+
+    <script>
+      function escapeHtml(s) {
+        return String(s)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;');
+      }
+
+      function slugify(text) {
+        return String(text || '')
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+      }
+
+      function linkifyInline(text) {
+        const t = escapeHtml(text);
+        return t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, label, url) => {
+          const safeLabel = escapeHtml(label);
+          const safeUrl = escapeHtml(url);
+          return `<a href="${safeUrl}">${safeLabel}</a>`;
+        });
+      }
+
+      function render(md) {
+        const lines = String(md || '').replace(/\r\n/g, '\n').split('\n');
+        const out = [];
+        const toc = [];
+        let inCode = false;
+        let codeBuf = [];
+        let listType = null;
+        let listBuf = [];
+
+        const flushList = () => {
+          if (!listType || !listBuf.length) return;
+          const items = listBuf.map(x => `<li>${linkifyInline(x)}</li>`).join('');
+          out.push(`<${listType}>${items}</${listType}>`);
+          listType = null;
+          listBuf = [];
+        };
+
+        const flushCode = () => {
+          if (!inCode) return;
+          out.push(`<pre><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
+          inCode = false;
+          codeBuf = [];
+        };
+
+        for (let i = 0; i < lines.length; i++) {
+          const raw = lines[i];
+          const line = raw.trimEnd();
+
+          if (line.startsWith('```')) {
+            if (!inCode) {
+              flushList();
+              inCode = true;
+              codeBuf = [];
+            } else {
+              flushCode();
+            }
+            continue;
+          }
+
+          if (inCode) {
+            codeBuf.push(raw);
+            continue;
+          }
+
+          if (!line.trim()) {
+            flushList();
+            continue;
+          }
+
+          if (line === '---') {
+            flushList();
+            out.push('<hr style="border:none;border-top:1px solid var(--border);margin:14px 0;">');
+            continue;
+          }
+
+          const h1 = line.match(/^# (.+)$/);
+          const h2 = line.match(/^## (.+)$/);
+          const h3 = line.match(/^### (.+)$/);
+          if (h1 || h2 || h3) {
+            flushList();
+            const title = (h1 || h2 || h3)[1].trim();
+            const lvl = h1 ? 1 : (h2 ? 2 : 3);
+            const id = slugify(title);
+            if (lvl === 2) toc.push({ id, title });
+            out.push(`<h${lvl} id="${id}">${linkifyInline(title)}</h${lvl}>`);
+            continue;
+          }
+
+          const ul = raw.match(/^\s*-\s+(.*)$/);
+          const ol = raw.match(/^\s*\d+\)\s+(.*)$/);
+          if (ul) {
+            if (listType && listType !== 'ul') flushList();
+            listType = 'ul';
+            listBuf.push(ul[1]);
+            continue;
+          }
+          if (ol) {
+            if (listType && listType !== 'ol') flushList();
+            listType = 'ol';
+            listBuf.push(ol[1]);
+            continue;
+          }
+
+          flushList();
+          const para = linkifyInline(raw)
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>');
+          out.push(`<p>${para}</p>`);
+        }
+
+        flushList();
+        flushCode();
+
+        const tocHtml = toc.length
+          ? `<div class="toc"><div style="font-weight:900;">Sumário</div><ul>${toc.map(x => `<li><a href="#${x.id}">${escapeHtml(x.title)}</a></li>`).join('')}</ul></div>`
+          : '';
+
+        return `${tocHtml}${out.join('\n')}`;
+      }
+
+      const md = document.getElementById('md').textContent || '';
+      document.getElementById('content').innerHTML = render(md);
+    </script>
+  </div>
+</body>
+</html>
+

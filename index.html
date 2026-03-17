@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260316-1635">
+    <link rel="stylesheet" href="styles.css?v=20260317-0950">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260316-1635
+        build 20260317-0950
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -2180,7 +2180,7 @@
                             </div>
                             <div class="form-group" style="min-width: 110px; margin-bottom: 0;">
                                 <label for="proteseOrcamentoSeqid">Orçamento</label>
-                                <input id="proteseOrcamentoSeqid" type="text" class="form-control" readonly>
+                                <input id="proteseOrcamentoSeqid" type="number" class="form-control" placeholder="Ex.: 123">
                             </div>
                             <div class="form-group" style="min-width: 160px; margin-bottom: 0;">
                                 <label for="proteseTipoExecucao">Execução *</label>
@@ -2220,6 +2220,7 @@
                                 <button id="btnProteseEventApprove" class="btn btn-secondary"><i class="ri-check-line"></i> Aprovar</button>
                                 <button id="btnProteseEventReprove" class="btn btn-secondary"><i class="ri-close-line"></i> Reprovar</button>
                                 <button id="btnProteseEventClose" class="btn btn-secondary"><i class="ri-flag-line"></i> Encerrar</button>
+                                <button id="btnProteseCustodia" class="btn btn-primary"><i class="ri-qr-code-line"></i> Custódia (QR)</button>
                             </div>
                         </div>
 
@@ -2718,6 +2719,23 @@
         </div>
     </div>
 
+    <div id="proteseCustodiaModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 760px; width: 95%;">
+            <div class="modal-header">
+                <h3><i class="ri-qr-code-line"></i> Custódia do Produto</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseProteseCustodiaModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="proteseCustodiaBody" style="max-height: 75vh; overflow-y: auto;">
+                <!-- Conteúdo gerado via JS -->
+            </div>
+            <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
+                <button type="button" class="btn btn-secondary" id="btnCloseProteseCustodiaModal2">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <div id="atendimentoEvolucaoModal" class="modal-overlay hidden">
         <div class="modal-content modal-lg" style="max-width: 760px; width: 95%;">
             <div class="modal-header">
@@ -2780,7 +2798,7 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260316-1635"></script>
+    <script src="app_v20.js?v=20260317-0950"></script>
 </body>
 
 </html>
