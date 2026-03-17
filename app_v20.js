@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260317-1320';
+const APP_BUILD = '20260317-1525';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -1046,6 +1046,13 @@ const proteseCustodiaModal = document.getElementById('proteseCustodiaModal');
 const proteseCustodiaBody = document.getElementById('proteseCustodiaBody');
 const btnCloseProteseCustodiaModal = document.getElementById('btnCloseProteseCustodiaModal');
 const btnCloseProteseCustodiaModal2 = document.getElementById('btnCloseProteseCustodiaModal2');
+
+const btnProteseReports = document.getElementById('btnProteseReports');
+const proteseReportsModal = document.getElementById('proteseReportsModal');
+const proteseReportsBody = document.getElementById('proteseReportsBody');
+const btnCloseProteseReportsModal = document.getElementById('btnCloseProteseReportsModal');
+const btnCloseProteseReportsModal2 = document.getElementById('btnCloseProteseReportsModal2');
+const btnProteseReportsPrint = document.getElementById('btnProteseReportsPrint');
 
 const modalProteseLabs = document.getElementById('modalProteseLabs');
 const btnCloseModalProteseLabs = document.getElementById('btnCloseModalProteseLabs');
@@ -2229,6 +2236,272 @@ function proteseCustodiaCloseModal() {
     if (proteseCustodiaBody) proteseCustodiaBody.innerHTML = '';
 }
 
+function proteseReportsCloseModal() {
+    if (proteseReportsModal) proteseReportsModal.classList.add('hidden');
+    if (proteseReportsBody) proteseReportsBody.innerHTML = '';
+}
+
+function formatDays(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return '—';
+    const sign = v < 0 ? '-' : '';
+    return `${sign}${Math.abs(v).toFixed(0)}d`;
+}
+
+function formatPercent(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return '—';
+    return `${v.toFixed(0)}%`;
+}
+
+function groupCount(items, keyFn) {
+    const m = new Map();
+    (items || []).forEach(it => {
+        const k = String(keyFn(it) || '—');
+        m.set(k, (m.get(k) || 0) + 1);
+    });
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+}
+
+function calcOverdueDays(o) {
+    if (!o || !o.prazo_previsto) return null;
+    const status = String(o.status_geral || '');
+    if (status === 'CONCLUIDA' || status === 'CANCELADA') return null;
+    const today = new Date();
+    const d = new Date(`${String(o.prazo_previsto).slice(0, 10)}T00:00:00`);
+    d.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const diff = (today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
+    return Math.floor(diff);
+}
+
+async function fetchProteseCustodiaLatestMap() {
+    const map = new Map();
+    try {
+        const q = db.from('ordens_proteticas_custodia_eventos')
+            .select('ordem_id,de_local,para_local,acao,created_at,recebedor_nome,recebedor_doc')
+            .eq('empresa_id', currentEmpresaId)
+            .order('created_at', { ascending: false })
+            .limit(5000);
+        const { data, error } = await withTimeout(q, 20000, 'ordens_proteticas_custodia_eventos:report');
+        if (error) throw error;
+        (data || []).forEach(ev => {
+            const k = String(ev.ordem_id || '');
+            if (!k) return;
+            if (!map.has(k)) map.set(k, ev);
+        });
+        return map;
+    } catch (err) {
+        console.error('Erro ao carregar custódia (reports):', err);
+        return map;
+    }
+}
+
+function buildProteseReportsHtml({ orders, custodiaLatestMap }) {
+    const list = Array.isArray(orders) ? orders : [];
+    const open = list.filter(o => String(o.status_geral || '') !== 'CONCLUIDA' && String(o.status_geral || '') !== 'CANCELADA');
+    const overdue = open.filter(o => isProteseOverdue(o));
+    const dueSoon = open.filter(o => {
+        if (!o.prazo_previsto) return false;
+        const d = calcOverdueDays(o);
+        return d != null && d <= 0 && d >= -7;
+    });
+
+    const statusGroups = groupCount(list, o => o.status_geral || '—');
+    const execGroups = groupCount(list, o => o.tipo_execucao || '—');
+    const faseGroups = groupCount(open, o => o.fase_atual || '—').slice(0, 10);
+
+    const byPartner = (items) => groupCount(items, o => {
+        const exec = String(o.tipo_execucao || '');
+        if (exec === 'INTERNA') return `Protético: ${getProteticoNameById(o.protetico_id)}`;
+        if (exec === 'EXTERNA') return `Lab: ${getLaboratorioNameById(o.laboratorio_id)}`;
+        return '—';
+    }).slice(0, 10);
+
+    const overdueByPartner = byPartner(overdue);
+
+    const custodiaGroups = groupCount(open, o => {
+        const ev = custodiaLatestMap && custodiaLatestMap.get(String(o.id || ''));
+        const loc = ev && ev.para_local ? String(ev.para_local) : '';
+        if (loc) return loc;
+        const empresaLabel = getEmpresaName(currentEmpresaId);
+        return empresaLabel ? `CLÍNICA (${empresaLabel})` : 'CLÍNICA';
+    }).slice(0, 10);
+
+    const topOverdue = overdue
+        .slice()
+        .sort((a, b) => (calcOverdueDays(b) || 0) - (calcOverdueDays(a) || 0))
+        .slice(0, 12);
+
+    const renderPairs = (pairs, leftLabel, rightLabel) => `
+        <table style="width:100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="text-align:left; padding: 8px; border: 1px solid var(--border-color); background: #f3f4f6;">${escapeHtml(leftLabel)}</th>
+                    <th style="width: 110px; text-align:right; padding: 8px; border: 1px solid var(--border-color); background: #f3f4f6;">${escapeHtml(rightLabel)}</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${(pairs && pairs.length ? pairs : [['—', 0]]).map(([k, v]) => `
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid var(--border-color);">${escapeHtml(String(k))}</td>
+                        <td style="padding: 8px; border: 1px solid var(--border-color); text-align:right; font-weight: 800;">${escapeHtml(String(v))}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    const renderTopOverdue = () => `
+        <table style="width:100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="text-align:left; padding: 8px; border: 1px solid var(--border-color); background: #f3f4f6;">OP</th>
+                    <th style="text-align:left; padding: 8px; border: 1px solid var(--border-color); background: #f3f4f6;">Paciente</th>
+                    <th style="text-align:left; padding: 8px; border: 1px solid var(--border-color); background: #f3f4f6;">Executor</th>
+                    <th style="text-align:left; padding: 8px; border: 1px solid var(--border-color); background: #f3f4f6;">Fase</th>
+                    <th style="width: 120px; text-align:right; padding: 8px; border: 1px solid var(--border-color); background: #f3f4f6;">Atraso</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${topOverdue.length ? topOverdue.map(o => {
+                    const op = o.seqid != null ? `#${o.seqid}` : '—';
+                    const pac = getPatientNameById(o.paciente_id);
+                    const exec = String(o.tipo_execucao || '') === 'INTERNA'
+                        ? getProteticoNameById(o.protetico_id)
+                        : getLaboratorioNameById(o.laboratorio_id);
+                    const fase = String(o.fase_atual || '—');
+                    const days = calcOverdueDays(o);
+                    return `
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid var(--border-color);">${escapeHtml(op)}</td>
+                            <td style="padding: 8px; border: 1px solid var(--border-color);">${escapeHtml(String(pac || ''))}</td>
+                            <td style="padding: 8px; border: 1px solid var(--border-color);">${escapeHtml(String(exec || ''))}</td>
+                            <td style="padding: 8px; border: 1px solid var(--border-color);">${escapeHtml(fase)}</td>
+                            <td style="padding: 8px; border: 1px solid var(--border-color); text-align:right; font-weight: 900; color: ${days != null && days > 0 ? 'var(--danger-color)' : 'inherit'};">
+                                ${escapeHtml(formatDays(days))}
+                            </td>
+                        </tr>
+                    `;
+                }).join('') : `
+                    <tr><td colspan="5" style="padding: 12px; text-align:center; color: var(--text-muted); border: 1px solid var(--border-color);">Sem OPs atrasadas.</td></tr>
+                `}
+            </tbody>
+        </table>
+    `;
+
+    const pctOnTime = open.length ? ((open.length - overdue.length) / open.length) * 100 : 100;
+
+    return `
+        <div class="card" style="padding: 12px;">
+            <div style="display:flex; gap: 12px; flex-wrap: wrap; align-items: baseline;">
+                <div style="font-weight: 900; font-size: 16px;">Resumo — Produção Protética</div>
+                <div style="color: var(--text-muted); margin-left:auto;">Empresa: <b style="color: var(--text-main);">${escapeHtml(getEmpresaName(currentEmpresaId) || currentEmpresaId || '—')}</b></div>
+            </div>
+            <div style="margin-top: 10px; display:flex; gap: 0.75rem; flex-wrap: wrap; color: var(--text-muted);">
+                <div><b style="color: var(--text-main);">${escapeHtml(String(list.length))}</b> OPs</div>
+                <div><b style="color: var(--text-main);">${escapeHtml(String(open.length))}</b> abertas</div>
+                <div><b style="color: var(--danger-color);">${escapeHtml(String(overdue.length))}</b> atrasadas</div>
+                <div><b style="color: var(--text-main);">${escapeHtml(String(dueSoon.length))}</b> vencem em 7 dias</div>
+                <div><b style="color: var(--text-main);">${escapeHtml(formatPercent(pctOnTime))}</b> no prazo (abertas)</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 12px; padding: 12px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <div style="font-weight: 900; margin-bottom: 8px;">Por status</div>
+                    ${renderPairs(statusGroups, 'Status', 'Qtd')}
+                </div>
+                <div>
+                    <div style="font-weight: 900; margin-bottom: 8px;">Por execução</div>
+                    ${renderPairs(execGroups, 'Execução', 'Qtd')}
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 12px; padding: 12px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <div style="font-weight: 900; margin-bottom: 8px;">Top fases (abertas)</div>
+                    ${renderPairs(faseGroups, 'Fase', 'Qtd')}
+                </div>
+                <div>
+                    <div style="font-weight: 900; margin-bottom: 8px;">Custódia atual (abertas)</div>
+                    ${renderPairs(custodiaGroups, 'Em posse de', 'Qtd')}
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 12px; padding: 12px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <div style="font-weight: 900; margin-bottom: 8px;">Atraso por parceiro (top 10)</div>
+                    ${renderPairs(overdueByPartner, 'Parceiro', 'Atrasos')}
+                </div>
+                <div>
+                    <div style="font-weight: 900; margin-bottom: 8px;">Maiores atrasos (top 12)</div>
+                    ${renderTopOverdue()}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function openProteseReportsModal() {
+    if (!proteseReportsModal || !proteseReportsBody) return;
+    try {
+        proteseReportsBody.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Carregando...</div>';
+        proteseReportsModal.classList.remove('hidden');
+
+        if (!Array.isArray(proteseOrders) || proteseOrders.length === 0) {
+            await fetchProteseFromUI(true);
+        }
+
+        const custodiaLatestMap = await fetchProteseCustodiaLatestMap();
+        const html = buildProteseReportsHtml({ orders: proteseOrders || [], custodiaLatestMap });
+        proteseReportsBody.innerHTML = html;
+    } catch (err) {
+        console.error('Erro ao abrir relatórios de prótese:', err);
+        const msg = err && err.message ? err.message : 'Falha ao abrir relatórios.';
+        proteseReportsBody.innerHTML = `<div style="text-align:center; padding: 1rem; color: var(--danger-color);">${escapeHtml(msg)}</div>`;
+    }
+}
+
+function printProteseReports() {
+    if (!proteseReportsBody) return;
+    const htmlBody = String(proteseReportsBody.innerHTML || '');
+    const hoje = new Date().toLocaleString('pt-BR');
+    const win = window.open('', '_blank', 'width=1100,height=800');
+    if (!win) { showToast('Habilite pop-ups para imprimir.', true); return; }
+    win.document.write(`<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Relatórios OP</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111827; padding: 18px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background:#f3f4f6; padding: 7px 8px; text-align:left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color:#6b7280; border: 1px solid #e5e7eb; }
+    td { padding: 7px 8px; border: 1px solid #e5e7eb; vertical-align: top; }
+    b { font-weight: 800; }
+    @media print { body { padding: 10px; } }
+  </style>
+</head>
+<body>
+  <div style="display:flex; justify-content: space-between; gap: 12px; margin-bottom: 10px;">
+    <div style="font-weight: 900; font-size: 16px;">Relatórios Gerenciais — OP</div>
+    <div style="color:#6b7280;">Emitido em: ${escapeHtml(hoje)}</div>
+  </div>
+  ${htmlBody}
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 250);
+}
+
 async function sha256Hex(input) {
     const data = new TextEncoder().encode(String(input || ''));
     const hash = await crypto.subtle.digest('SHA-256', data);
@@ -2889,6 +3162,10 @@ function initProteseFilters() {
         btnProteseLabs.addEventListener('click', () => openProteseLabsModal());
         btnProteseLabs.dataset.bound = '1';
     }
+    if (btnProteseReports && !btnProteseReports.dataset.bound) {
+        btnProteseReports.addEventListener('click', async () => { await openProteseReportsModal(); });
+        btnProteseReports.dataset.bound = '1';
+    }
 }
 
 function resetProteseFilters() {
@@ -3009,6 +3286,36 @@ function syncProteseExecutorFields() {
     const t = proteseTipoExecucao ? String(proteseTipoExecucao.value || 'EXTERNA') : 'EXTERNA';
     if (proteseLabGroup) proteseLabGroup.style.display = (t === 'EXTERNA') ? '' : 'none';
     if (proteseProteticoGroup) proteseProteticoGroup.style.display = (t === 'INTERNA') ? '' : 'none';
+}
+
+function addDaysToISODate(days) {
+    const n = Number(days);
+    if (!Number.isFinite(n)) return null;
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + Math.max(0, Math.floor(n)));
+    return d.toISOString().slice(0, 10);
+}
+
+function applyProtesePrazoFromSelectedLabIfNeeded() {
+    if (!protesePrazo || !proteseLaboratorio || !proteseTipoExecucao) return;
+    const tipo = String(proteseTipoExecucao.value || 'EXTERNA');
+    if (tipo !== 'EXTERNA') return;
+    const labId = String(proteseLaboratorio.value || '');
+    if (!labId) return;
+
+    const lab = (proteseLabs || []).find(l => String(l.id) === labId) || null;
+    const dias = lab && lab.prazo_padrao_dias != null ? Number(lab.prazo_padrao_dias) : null;
+    if (!Number.isFinite(dias) || dias <= 0) return;
+
+    const cur = String(protesePrazo.value || '');
+    const wasAuto = protesePrazo.dataset.auto === '1';
+    if (cur && !wasAuto) return;
+
+    const next = addDaysToISODate(dias);
+    if (!next) return;
+    protesePrazo.value = next;
+    protesePrazo.dataset.auto = '1';
 }
 
 async function loadProteseTimeline(orderId) {
@@ -3265,9 +3572,22 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
     }
 
     if (proteseTipoExecucao && !proteseTipoExecucao.dataset.bound) {
-        proteseTipoExecucao.addEventListener('change', syncProteseExecutorFields);
+        proteseTipoExecucao.addEventListener('change', () => {
+            syncProteseExecutorFields();
+            applyProtesePrazoFromSelectedLabIfNeeded();
+        });
         proteseTipoExecucao.dataset.bound = '1';
     }
+
+    if (proteseLaboratorio && !proteseLaboratorio.dataset.boundPrazo) {
+        proteseLaboratorio.addEventListener('change', () => { applyProtesePrazoFromSelectedLabIfNeeded(); });
+        proteseLaboratorio.dataset.boundPrazo = '1';
+    }
+    if (protesePrazo && !protesePrazo.dataset.boundManual) {
+        protesePrazo.addEventListener('input', () => { protesePrazo.dataset.auto = '0'; });
+        protesePrazo.dataset.boundManual = '1';
+    }
+    applyProtesePrazoFromSelectedLabIfNeeded();
 
     if (proteseOrcamentoSeqid && !proteseOrcamentoSeqid.dataset.bound) {
         let t = null;
@@ -3412,6 +3732,23 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
 function closeProteseModal() {
     if (modalProtese) modalProtese.classList.add('hidden');
     currentProteseOrderId = null;
+}
+
+if (btnCloseProteseReportsModal && !btnCloseProteseReportsModal.dataset.bound) {
+    btnCloseProteseReportsModal.addEventListener('click', proteseReportsCloseModal);
+    btnCloseProteseReportsModal.dataset.bound = '1';
+}
+if (btnCloseProteseReportsModal2 && !btnCloseProteseReportsModal2.dataset.bound) {
+    btnCloseProteseReportsModal2.addEventListener('click', proteseReportsCloseModal);
+    btnCloseProteseReportsModal2.dataset.bound = '1';
+}
+if (proteseReportsModal && !proteseReportsModal.dataset.bound) {
+    proteseReportsModal.addEventListener('click', (e) => { if (e.target === proteseReportsModal) proteseReportsCloseModal(); });
+    proteseReportsModal.dataset.bound = '1';
+}
+if (btnProteseReportsPrint && !btnProteseReportsPrint.dataset.bound) {
+    btnProteseReportsPrint.addEventListener('click', (e) => { e.preventDefault(); printProteseReports(); });
+    btnProteseReportsPrint.dataset.bound = '1';
 }
 
 async function deleteProteseOrder(orderId) {
