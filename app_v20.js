@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260317-0950';
+const APP_BUILD = '20260317-1045';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -2207,6 +2207,8 @@ function isProteseCustodiaEnabled() {
     return true;
 }
 
+let proteseCustodiaPollTimer = null;
+
 function updateProteseCustodiaButtonState() {
     if (!btnProteseCustodia) return;
     const enabled = isProteseCustodiaEnabled();
@@ -2219,6 +2221,10 @@ function updateProteseCustodiaButtonState() {
 }
 
 function proteseCustodiaCloseModal() {
+    if (proteseCustodiaPollTimer) {
+        try { clearInterval(proteseCustodiaPollTimer); } catch { }
+        proteseCustodiaPollTimer = null;
+    }
     if (proteseCustodiaModal) proteseCustodiaModal.classList.add('hidden');
     if (proteseCustodiaBody) proteseCustodiaBody.innerHTML = '';
 }
@@ -2267,7 +2273,8 @@ async function getProteseCustodiaAtual(orderId) {
         if (row && row.para_local) return String(row.para_local);
     } catch {
     }
-    return 'CLINICA';
+    const empresaLabel = getEmpresaName(currentEmpresaId);
+    return empresaLabel ? `CLÍNICA (${empresaLabel})` : 'CLÍNICA';
 }
 
 async function openProteseCustodiaModal() {
@@ -2286,8 +2293,24 @@ async function openProteseCustodiaModal() {
     const ordemSeq = localOrder && localOrder.seqid != null ? String(localOrder.seqid) : '—';
     const pacienteNome = localOrder ? getPatientNameById(localOrder.paciente_id) : '—';
 
+    const empresaLabel = getEmpresaName(currentEmpresaId);
+    const clinicaLabel = empresaLabel ? `CLÍNICA (${empresaLabel})` : 'CLÍNICA';
+    const exec = localOrder ? String(localOrder.tipo_execucao || '') : '';
+    const parceiroLabel = exec === 'INTERNA'
+        ? (localOrder ? getProteticoNameById(localOrder.protetico_id) : '')
+        : (localOrder ? getLaboratorioNameById(localOrder.laboratorio_id) : '');
+    const pacienteLabel = pacienteNome ? `PACIENTE (${pacienteNome})` : 'PACIENTE';
+
     const deAtual = await getProteseCustodiaAtual(orderId);
     const baseUrl = getAppBaseUrl();
+
+    const locOptions = [
+        { key: 'CLINICA', label: clinicaLabel },
+        { key: 'PACIENTE', label: pacienteLabel }
+    ];
+    if (parceiroLabel) {
+        locOptions.push({ key: exec === 'INTERNA' ? 'PROTETICO' : 'LABORATORIO', label: parceiroLabel });
+    }
 
     proteseCustodiaBody.innerHTML = `
         <div style="display:flex; flex-direction:column; gap: 12px;">
@@ -2295,7 +2318,7 @@ async function openProteseCustodiaModal() {
                 <div style="display:flex; gap: 10px; flex-wrap: wrap; align-items: baseline;">
                     <div style="font-weight: 900;">OP #${escapeHtml(ordemSeq)}</div>
                     <div style="color: var(--text-muted);">${escapeHtml(String(pacienteNome || ''))}</div>
-                    <div style="margin-left:auto; color: var(--text-muted);">Custódia atual: <b style="color: var(--text-color);">${escapeHtml(deAtual)}</b></div>
+                    <div style="margin-left:auto; color: var(--text-muted);">Custódia atual: <b style="color: var(--text-color);">${escapeHtml(deAtual || clinicaLabel)}</b></div>
                 </div>
             </div>
 
@@ -2311,10 +2334,7 @@ async function openProteseCustodiaModal() {
                     <div class="form-group" style="min-width: 240px; margin-bottom: 0;">
                         <label>Para (posse)</label>
                         <select id="custodiaPara" class="form-control">
-                            <option value="PACIENTE">Paciente</option>
-                            <option value="CLINICA">Clínica</option>
-                            <option value="LABORATORIO">Laboratório</option>
-                            <option value="PROTETICO">Protético</option>
+                            ${locOptions.map(o => `<option value="${escapeHtml(o.key)}">${escapeHtml(o.label)}</option>`).join('')}
                         </select>
                     </div>
                     <button class="btn btn-primary" id="btnCustodiaGerar" style="height: 42px;">
@@ -2370,6 +2390,32 @@ async function openProteseCustodiaModal() {
 
     const buildLink = (tok) => `${baseUrl}/protese_custodia.html?t=${encodeURIComponent(tok)}`;
 
+    const resolveLocLabel = (key) => {
+        const k = String(key || '').toUpperCase();
+        if (k === 'CLINICA') return clinicaLabel;
+        if (k === 'PACIENTE') return pacienteLabel;
+        if (k === 'LABORATORIO') return parceiroLabel || 'LABORATÓRIO';
+        if (k === 'PROTETICO') return parceiroLabel || 'PROTÉTICO';
+        return String(key || '');
+    };
+
+    const syncParaByAcao = () => {
+        if (!custodiaAcao || !custodiaPara) return;
+        const acao = String(custodiaAcao.value || 'ENTREGA');
+        if (acao === 'RECEBIMENTO') {
+            custodiaPara.value = 'CLINICA';
+            custodiaPara.disabled = true;
+        } else {
+            custodiaPara.disabled = false;
+            if (parceiroLabel && (custodiaPara.value !== 'PACIENTE')) {
+                const prefer = exec === 'INTERNA' ? 'PROTETICO' : 'LABORATORIO';
+                custodiaPara.value = prefer;
+            }
+        }
+    };
+    if (custodiaAcao) custodiaAcao.addEventListener('change', syncParaByAcao);
+    syncParaByAcao();
+
     const renderOut = ({ token, code }) => {
         if (!out) return;
         out.classList.remove('hidden');
@@ -2400,6 +2446,14 @@ async function openProteseCustodiaModal() {
             if (st === 'CONFIRMADO') {
                 showToast('Custódia confirmada.');
                 await loadProteseTimeline(orderId);
+                proteseCustodiaCloseModal();
+                return;
+            }
+            if (st === 'CANCELADO' || st === 'EXPIRADO') {
+                if (proteseCustodiaPollTimer) {
+                    try { clearInterval(proteseCustodiaPollTimer); } catch { }
+                    proteseCustodiaPollTimer = null;
+                }
             }
         } catch (err) {
             const msg = err && err.message ? err.message : 'Falha ao verificar.';
@@ -2419,6 +2473,10 @@ async function openProteseCustodiaModal() {
             const { error } = await withTimeout(q, 12000, 'ordens_proteticas_custodia_tokens:cancel');
             if (error) throw error;
             if (statusEl) statusEl.textContent = 'Status: CANCELADO';
+            if (proteseCustodiaPollTimer) {
+                try { clearInterval(proteseCustodiaPollTimer); } catch { }
+                proteseCustodiaPollTimer = null;
+            }
             showToast('QR cancelado.');
         } catch (err) {
             const msg = err && err.message ? err.message : 'Falha ao cancelar.';
@@ -2443,18 +2501,20 @@ async function openProteseCustodiaModal() {
         e.preventDefault();
         try {
             const acao = custodiaAcao ? String(custodiaAcao.value || 'ENTREGA') : 'ENTREGA';
-            const para = custodiaPara ? String(custodiaPara.value || 'PACIENTE') : 'PACIENTE';
+            const paraKey = custodiaPara ? String(custodiaPara.value || 'PACIENTE') : 'PACIENTE';
             const token = randomHex(32);
             const code = randomSixDigitCode();
             const challengeHash = await sha256Hex(code);
+            const deLabel = String(deAtual || clinicaLabel);
+            const paraLabel = resolveLocLabel(paraKey);
             const payload = {
                 empresa_id: currentEmpresaId,
                 ordem_id: orderId,
                 token,
                 challenge_hash: challengeHash,
                 acao,
-                de_local: deAtual,
-                para_local: para,
+                de_local: deLabel,
+                para_local: paraLabel,
                 expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
                 created_by: currentUser && currentUser.id ? currentUser.id : null
             };
@@ -2463,6 +2523,12 @@ async function openProteseCustodiaModal() {
             if (error) throw error;
             activeToken = token;
             renderOut({ token, code });
+            if (proteseCustodiaPollTimer) {
+                try { clearInterval(proteseCustodiaPollTimer); } catch { }
+                proteseCustodiaPollTimer = null;
+            }
+            proteseCustodiaPollTimer = setInterval(() => { checkStatus(); }, 2000);
+            setTimeout(() => { checkStatus(); }, 900);
         } catch (err) {
             console.error('Erro ao gerar custódia:', err);
             const msg = err && err.message ? err.message : 'Falha ao gerar QR.';
@@ -2589,7 +2655,25 @@ async function printProteseOrder(orderId) {
             'ordens_proteticas_eventos:print'
         );
         if (evRes.error) throw evRes.error;
-        const events = evRes.data || [];
+        const events = (evRes.data || []).map(e => ({ kind: 'op', ...e }));
+
+        let custodia = [];
+        try {
+            const cRes = await withTimeout(
+                db.from('ordens_proteticas_custodia_eventos')
+                    .select('*')
+                    .eq('empresa_id', currentEmpresaId)
+                    .eq('ordem_id', id)
+                    .order('created_at', { ascending: true })
+                    .limit(1000),
+                25000,
+                'ordens_proteticas_custodia_eventos:print'
+            );
+            if (!cRes.error) custodia = (cRes.data || []).map(e => ({ kind: 'custodia', ...e }));
+        } catch {
+        }
+
+        const allEvents = events.concat(custodia).sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
 
         const anRes = await withTimeout(
             db.from('ordens_proteticas_anexos')
@@ -2604,14 +2688,18 @@ async function printProteseOrder(orderId) {
         if (anRes.error) throw anRes.error;
         const anexos = anRes.data || [];
 
-        const evRows = events.length
-            ? events.map((e, idx) => {
+        const evRows = allEvents.length
+            ? allEvents.map((e, idx) => {
                 const dt = e.created_at ? formatDateTime(e.created_at) : '';
-                const tipo = escapeHtml(String(e.tipo_evento || ''));
-                const faseRes = escapeHtml(String(e.fase_resultante || ''));
+                const isCust = e.kind === 'custodia';
+                const tipo = isCust ? escapeHtml(`CUSTÓDIA · ${String(e.acao || '')}`) : escapeHtml(String(e.tipo_evento || ''));
+                const faseRes = isCust ? '' : escapeHtml(String(e.fase_resultante || ''));
                 const de = escapeHtml(String(e.de_local || ''));
                 const para = escapeHtml(String(e.para_local || ''));
-                const nota = escapeHtml(String(e.nota || '')).replace(/\n/g, '<br>');
+                const notaRaw = isCust
+                    ? `Recebido por: ${String(e.recebedor_nome || '')}${e.recebedor_doc ? ` (${String(e.recebedor_doc || '')})` : ''}`
+                    : String(e.nota || '');
+                const nota = escapeHtml(notaRaw).replace(/\n/g, '<br>');
                 return `
                     <tr>
                         <td style="width:30px; text-align:right;">${idx + 1}</td>

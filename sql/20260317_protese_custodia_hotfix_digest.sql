@@ -1,114 +1,7 @@
 begin;
 
+create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
-
-create table if not exists public.ordens_proteticas_custodia_tokens (
-  id uuid primary key default gen_random_uuid(),
-  empresa_id text not null references public.empresas(id) on delete cascade,
-  ordem_id uuid not null references public.ordens_proteticas(id) on delete cascade,
-
-  token text not null,
-  challenge_hash text not null,
-
-  acao text not null check (acao in ('ENTREGA','RECEBIMENTO')),
-  de_local text not null,
-  para_local text not null,
-
-  status text not null default 'PENDENTE' check (status in ('PENDENTE','CONFIRMADO','CANCELADO','EXPIRADO')),
-  expires_at timestamptz not null,
-  confirmed_at timestamptz,
-
-  created_at timestamptz not null default timezone('utc'::text, now()),
-  created_by uuid references auth.users(id)
-);
-
-create unique index if not exists ordens_proteticas_custodia_tokens_token_uidx
-on public.ordens_proteticas_custodia_tokens (token);
-
-create index if not exists ordens_proteticas_custodia_tokens_ordem_idx
-on public.ordens_proteticas_custodia_tokens (ordem_id, created_at desc);
-
-create table if not exists public.ordens_proteticas_custodia_eventos (
-  id uuid primary key default gen_random_uuid(),
-  empresa_id text not null references public.empresas(id) on delete cascade,
-  ordem_id uuid not null references public.ordens_proteticas(id) on delete cascade,
-  token_id uuid references public.ordens_proteticas_custodia_tokens(id) on delete set null,
-
-  acao text not null check (acao in ('ENTREGA','RECEBIMENTO')),
-  de_local text not null,
-  para_local text not null,
-
-  recebedor_nome text not null,
-  recebedor_doc text,
-  assinatura_base64 text,
-  user_agent text,
-
-  confirmed_at timestamptz not null default timezone('utc'::text, now()),
-  created_at timestamptz not null default timezone('utc'::text, now())
-);
-
-create index if not exists ordens_proteticas_custodia_eventos_ordem_idx
-on public.ordens_proteticas_custodia_eventos (ordem_id, created_at desc);
-
-alter table public.ordens_proteticas_custodia_tokens enable row level security;
-alter table public.ordens_proteticas_custodia_eventos enable row level security;
-
-create policy "Users can view protese custodia tokens of their company"
-on public.ordens_proteticas_custodia_tokens for select
-using (
-  exists (
-    select 1 from public.usuario_empresas ue
-    where ue.usuario_id = auth.uid()
-      and ue.empresa_id = ordens_proteticas_custodia_tokens.empresa_id
-  )
-);
-
-create policy "Users can insert protese custodia tokens in their company"
-on public.ordens_proteticas_custodia_tokens for insert
-with check (
-  exists (
-    select 1 from public.usuario_empresas ue
-    where ue.usuario_id = auth.uid()
-      and ue.empresa_id = ordens_proteticas_custodia_tokens.empresa_id
-  )
-);
-
-create policy "Users can update protese custodia tokens in their company"
-on public.ordens_proteticas_custodia_tokens for update
-using (
-  exists (
-    select 1 from public.usuario_empresas ue
-    where ue.usuario_id = auth.uid()
-      and ue.empresa_id = ordens_proteticas_custodia_tokens.empresa_id
-  )
-)
-with check (
-  exists (
-    select 1 from public.usuario_empresas ue
-    where ue.usuario_id = auth.uid()
-      and ue.empresa_id = ordens_proteticas_custodia_tokens.empresa_id
-  )
-);
-
-create policy "Users can view protese custodia eventos of their company"
-on public.ordens_proteticas_custodia_eventos for select
-using (
-  exists (
-    select 1 from public.usuario_empresas ue
-    where ue.usuario_id = auth.uid()
-      and ue.empresa_id = ordens_proteticas_custodia_eventos.empresa_id
-  )
-);
-
-create policy "Users can insert protese custodia eventos in their company"
-on public.ordens_proteticas_custodia_eventos for insert
-with check (
-  exists (
-    select 1 from public.usuario_empresas ue
-    where ue.usuario_id = auth.uid()
-      and ue.empresa_id = ordens_proteticas_custodia_eventos.empresa_id
-  )
-);
 
 create or replace function public.rpc_protese_custodia_get_token(p_token text)
 returns table (
@@ -271,3 +164,4 @@ grant execute on function public.rpc_protese_custodia_get_token(text) to anon, a
 grant execute on function public.rpc_protese_custodia_confirm(text, text, text, text, text, text) to anon, authenticated;
 
 commit;
+
