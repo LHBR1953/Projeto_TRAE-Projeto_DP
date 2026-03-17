@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260317-1525';
+const APP_BUILD = '20260317-1720';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -1139,6 +1139,45 @@ let currentSpecialtySubdivisions = [];
 let editingSubSpecIndex = -1;
 let currentBudgetItems = [];
 let editingBudgetItemId = null;
+
+let orcamentoItensProteseExecutorSchemaOk = null;
+let orcamentoItensProteseExecutorSchemaWarned = false;
+
+function isBudgetProteseExecutorV2Enabled() {
+    try {
+        const v = localStorage.getItem('dp_feature_orcamento_executor_protese_v2');
+        if (v === '0') return false;
+        if (v === '1') return true;
+    } catch {
+    }
+    return true;
+}
+
+async function ensureOrcamentoItensProteseExecutorSchema() {
+    if (orcamentoItensProteseExecutorSchemaOk != null) return Boolean(orcamentoItensProteseExecutorSchemaOk);
+    if (!isBudgetProteseExecutorV2Enabled()) {
+        orcamentoItensProteseExecutorSchemaOk = false;
+        return false;
+    }
+    try {
+        const q = db.from('orcamento_itens')
+            .select('id, protese_tipo_execucao, protese_laboratorio_id', { head: true, count: 'exact' })
+            .eq('empresa_id', currentEmpresaId)
+            .limit(1);
+        const { error } = await withTimeout(q, 15000, 'orcamento_itens:schema_probe_protese_executor');
+        if (error) throw error;
+        orcamentoItensProteseExecutorSchemaOk = true;
+        return true;
+    } catch (err) {
+        console.warn('Schema de executor protético não disponível:', err);
+        orcamentoItensProteseExecutorSchemaOk = false;
+        if (!orcamentoItensProteseExecutorSchemaWarned) {
+            orcamentoItensProteseExecutorSchemaWarned = true;
+            showToast('Executor protético (interno/externo) indisponível: rode a migração 20260317_orcamento_item_executor_protese.sql ou desative dp_feature_orcamento_executor_protese_v2.', true);
+        }
+        return false;
+    }
+}
 let usersAdminList = []; // Cache for user management
 let commissionsList = [];
 let selectedCommissionIds = new Set();
@@ -3563,6 +3602,22 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
                         proteseOrcamentoSeqid.value = String(seqDb);
                     }
                 });
+            }
+        }
+        if (itemId) {
+            const bi = (currentBudgetItems || []).find(x => String(x.id) === String(itemId)) || null;
+            if (bi) {
+                const exec = String(bi.proteseExecucao || '');
+                const labId = String(bi.proteseLaboratorioId || '');
+                const protSeq = bi.proteticoId != null ? String(bi.proteticoId) : '';
+                if (exec === 'EXTERNA' || (labId && exec !== 'INTERNA')) {
+                    if (proteseTipoExecucao) proteseTipoExecucao.value = 'EXTERNA';
+                    if (proteseLaboratorio && labId) proteseLaboratorio.value = labId;
+                } else if (exec === 'INTERNA' || protSeq) {
+                    if (proteseTipoExecucao) proteseTipoExecucao.value = 'INTERNA';
+                    const prof = (professionals || []).find(p => String(p.seqid || '') === protSeq) || null;
+                    if (proteseProtetico && prof && prof.id) proteseProtetico.value = String(prof.id);
+                }
             }
         }
         syncProteseExecutorFields();
@@ -9520,7 +9575,7 @@ if (budPacienteNomeInput) {
 }
 
 function validateBudgetItemForm() {
-    const fields = ['budItemServicoId', 'budItemValor', 'budItemQtde', 'budItemExecutorId', 'budItemSubdivisao'];
+    const fields = ['budItemServicoId', 'budItemValor', 'budItemQtde', 'budItemExecutorId', 'budItemSubdivisao', 'budItemProteseExecucao', 'budItemProteseLaboratorioId', 'budItemProfissionalId'];
     fields.forEach(id => {
         const el = document.getElementById(id);
         if (el && el.value) el.classList.remove('input-error');
@@ -9567,6 +9622,42 @@ function populateBudgetProfDropdown() {
     }
 }
 
+function populateBudgetProteseLabDropdown() {
+    const labSelect = document.getElementById('budItemProteseLaboratorioId');
+    if (!labSelect) return;
+    labSelect.innerHTML = '<option value="">Selecione...</option>';
+    (proteseLabs || []).filter(l => l.ativo !== false).forEach(l => {
+        labSelect.innerHTML += `<option value="${l.id}">${escapeHtml(String(l.seqid || ''))} - ${escapeHtml(String(l.nome || ''))}</option>`;
+    });
+}
+
+async function syncBudgetItemProteseFieldsVisibility() {
+    const execEl = document.getElementById('budItemProteseExecucao');
+    const labGroup = document.getElementById('budItemProteseLabGroup');
+    const protGroup = document.getElementById('budItemProteseProteticoGroup');
+    if (!execEl || !labGroup || !protGroup) return;
+
+    const enabled = isBudgetProteseExecutorV2Enabled() && await ensureOrcamentoItensProteseExecutorSchema();
+    if (execEl.parentElement) execEl.parentElement.style.display = enabled ? '' : 'none';
+    if (!enabled) {
+        labGroup.style.display = 'none';
+        protGroup.style.display = '';
+        return;
+    }
+
+    const v = String(execEl.value || '');
+    if (v === 'EXTERNA') {
+        labGroup.style.display = '';
+        protGroup.style.display = 'none';
+    } else if (v === 'INTERNA') {
+        labGroup.style.display = 'none';
+        protGroup.style.display = '';
+    } else {
+        labGroup.style.display = 'none';
+        protGroup.style.display = '';
+    }
+}
+
 function populateBudgetItemSubdivisaoDropdown() {
     const subSelect = document.getElementById('budItemSubdivisao');
     if (!subSelect) return;
@@ -9591,7 +9682,7 @@ function populateBudgetItemSubdivisaoDropdown() {
 
 // Toggle Add Item Panel
 if (btnToggleAddItem) {
-    btnToggleAddItem.addEventListener('click', () => {
+    btnToggleAddItem.addEventListener('click', async () => {
         try {
             editingBudgetItemId = null;
             document.querySelector('#addBudgetItemPanel h4').innerText = 'Novo Serviço';
@@ -9600,6 +9691,8 @@ if (btnToggleAddItem) {
 
             populateBudgetServiceDropdown();
             populateBudgetProfDropdown();
+            await loadProteseLabs(false);
+            populateBudgetProteseLabDropdown();
 
             // Reset fields
             if (document.getElementById('budItemServicoId')) document.getElementById('budItemServicoId').value = '';
@@ -9615,6 +9708,8 @@ if (btnToggleAddItem) {
             document.getElementById('budItemQtde').value = '1';
             if (document.getElementById('budItemProfissionalId')) document.getElementById('budItemProfissionalId').value = '';
             document.getElementById('budItemValorProtetico').value = '';
+            if (document.getElementById('budItemProteseExecucao')) document.getElementById('budItemProteseExecucao').value = 'INTERNA';
+            if (document.getElementById('budItemProteseLaboratorioId')) document.getElementById('budItemProteseLaboratorioId').value = '';
 
             // Pre-fill Executor with Header Professional
             const headerProfId = document.getElementById('budProfissionalId')?.value || '';
@@ -9624,6 +9719,7 @@ if (btnToggleAddItem) {
             }
 
             validateBudgetItemForm();
+            await syncBudgetItemProteseFieldsVisibility();
         } catch (err) {
             alert("Erro ao abrir painel: " + err.message);
             console.error(err);
@@ -9727,20 +9823,33 @@ if (budItemSubdivisao) budItemSubdivisao.addEventListener('change', validateBudg
 const budItemExecutorId = document.getElementById('budItemExecutorId');
 if (budItemExecutorId) budItemExecutorId.addEventListener('change', validateBudgetItemForm);
 
+const budItemProteseExecucao = document.getElementById('budItemProteseExecucao');
+if (budItemProteseExecucao && !budItemProteseExecucao.dataset.bound) {
+    budItemProteseExecucao.addEventListener('change', async () => { await syncBudgetItemProteseFieldsVisibility(); });
+    budItemProteseExecucao.dataset.bound = '1';
+}
+
+const budItemProteseLaboratorioId = document.getElementById('budItemProteseLaboratorioId');
+if (budItemProteseLaboratorioId) budItemProteseLaboratorioId.addEventListener('change', validateBudgetItemForm);
+
 // Save Sub-Item
 if (btnSaveAddItem) {
-    btnSaveAddItem.addEventListener('click', () => {
+    btnSaveAddItem.addEventListener('click', async () => {
         try {
             const servEl = document.getElementById('budItemServicoId');
             const valorEl = document.getElementById('budItemValor');
             const qtdeEl = document.getElementById('budItemQtde');
             const profEl = document.getElementById('budItemProfissionalId');
+            const proteseExecEl = document.getElementById('budItemProteseExecucao');
+            const proteseLabEl = document.getElementById('budItemProteseLaboratorioId');
 
             const servId = servEl.value;
             const valorUnit = parseFloat(valorEl.value);
             const qtde = parseInt(qtdeEl.value) || 1;
-            const profId = profEl.value; // Protético
+            let profId = profEl.value; // Protético (interno)
             const executorId = document.getElementById('budItemExecutorId')?.value || null;
+            const proteseExecucao = proteseExecEl ? String(proteseExecEl.value || '') : '';
+            const proteseLaboratorioId = proteseLabEl ? String(proteseLabEl.value || '') : '';
 
             // Clear previous highlights
             [servEl, valorEl, qtdeEl, profEl].forEach(el => el.classList.remove('input-error'));
@@ -9764,6 +9873,15 @@ if (btnSaveAddItem) {
                 hasError = true;
             }
 
+            const v2 = isBudgetProteseExecutorV2Enabled() && await ensureOrcamentoItensProteseExecutorSchema();
+            if (v2 && proteseExecucao === 'EXTERNA') {
+                if (!proteseLaboratorioId) {
+                    proteseLabEl?.classList.add('input-error');
+                    hasError = true;
+                }
+                profId = '';
+            }
+
 
             if (hasError) {
                 showToast('Preencha todos os campos obrigat\u00f3rios do item (destacados em vermelho).', true);
@@ -9773,10 +9891,12 @@ if (btnSaveAddItem) {
             const servData = services.find(s => s.id === servId);
             const profData = professionals.find(p => p.seqid == profId || p.id === profId); // Protético
             const executorData = professionals.find(p => p.seqid == executorId || p.id === executorId);
+            const labData = proteseLaboratorioId ? (proteseLabs || []).find(l => String(l.id) === String(proteseLaboratorioId)) : null;
 
             // Use form field values as fallbacks in case servData lookup fails (e.g. type mismatch with DB IDs)
             const servicoDescricao = servData ? servData.descricao : (document.getElementById('budItemDescricao').value || servId);
             const subdivisao = document.getElementById('budItemSubdivisao').value || (servData ? servData.subdivisao : '') || '-';
+            const proteseNome = (v2 && proteseExecucao === 'EXTERNA') ? (labData ? labData.nome : '') : (profData ? profData.nome : '');
 
             if (editingBudgetItemId) {
                 const idx = currentBudgetItems.findIndex(i => i.id === editingBudgetItemId);
@@ -9789,11 +9909,13 @@ if (btnSaveAddItem) {
                         valor: valorUnit,
                         qtde: qtde,
                         proteticoId: profId,
-                        proteticoNome: profData ? profData.nome : '',
+                        proteticoNome: proteseNome,
                         valorProtetico: parseFloat(document.getElementById('budItemValorProtetico').value) || 0,
                         profissionalId: executorId,
                         executorNome: executorData ? executorData.nome : '',
-                        status: currentBudgetItems[idx].status || 'Pendente'
+                        status: currentBudgetItems[idx].status || 'Pendente',
+                        proteseExecucao: v2 ? proteseExecucao : (currentBudgetItems[idx].proteseExecucao || ''),
+                        proteseLaboratorioId: v2 ? proteseLaboratorioId : (currentBudgetItems[idx].proteseLaboratorioId || '')
                     };
                 }
             } else {
@@ -9805,11 +9927,13 @@ if (btnSaveAddItem) {
                     valor: valorUnit,
                     qtde: qtde,
                     proteticoId: profId,
-                    proteticoNome: profData ? profData.nome : '',
+                    proteticoNome: proteseNome,
                     valorProtetico: parseFloat(document.getElementById('budItemValorProtetico').value) || 0,
                     profissionalId: executorId,
                     executorNome: executorData ? executorData.nome : '',
-                    status: 'Pendente'
+                    status: 'Pendente',
+                    proteseExecucao: v2 ? proteseExecucao : '',
+                    proteseLaboratorioId: v2 ? proteseLaboratorioId : ''
                 };
                 currentBudgetItems.push(newItem);
             }
@@ -9860,6 +9984,9 @@ function renderBudgetItemsTable() {
         };
         const stColor = statusColors[item.status] || '#6b7280';
 
+        const protLabel = (String(item.proteseExecucao || '') === 'EXTERNA' && item.proteseLaboratorioId)
+            ? getLaboratorioNameById(item.proteseLaboratorioId)
+            : (item.proteticoNome || '');
         tr.innerHTML = `
                 <td>${index + 1}</td>
                 <td><strong>${item.servicoDescricao}</strong></td>
@@ -9868,7 +9995,7 @@ function renderBudgetItemsTable() {
                 <td>R$ ${(parseFloat(item.valor) || 0).toFixed(2)}</td>
                 <td><strong>R$ ${subtotal.toFixed(2)}</strong></td>
                 <td>${item.executorNome || '-'}</td>
-                <td>${item.proteticoNome || ''}</td>
+                <td>${escapeHtml(String(protLabel || ''))}</td>
                 <td><span style="font-size:10px; background:${stColor}22; color:${stColor}; padding:2px 8px; border-radius:10px; font-weight:600; border:1px solid ${stColor}44;">${item.status || 'Pendente'}</span></td>
                 <td class="actions-cell">
                     <button type="button" class="btn-icon edit-btn" data-id="${item.id}" title="Editar Item" style="background:#0066cc11; color:#0066cc; border:none; padding:5px; border-radius:4px;">
@@ -9931,7 +10058,7 @@ window.removeBudgetItem = function (itemId) {
     }
 };
 
-window.editBudgetItem = function (itemId) {
+window.editBudgetItem = async function (itemId) {
     const item = currentBudgetItems.find(i => i.id === itemId);
     if (!item) return;
 
@@ -9943,6 +10070,8 @@ window.editBudgetItem = function (itemId) {
     populateBudgetServiceDropdown();
     populateBudgetProfDropdown();
     populateBudgetItemSubdivisaoDropdown();
+    await loadProteseLabs(false);
+    populateBudgetProteseLabDropdown();
 
     const servId = item.servicoId || '';
     document.getElementById('budItemServicoId').value = servId;
@@ -9972,7 +10101,10 @@ window.editBudgetItem = function (itemId) {
     document.getElementById('budItemValor').value = item.valor !== undefined ? item.valor : document.getElementById('budItemValor').value || '';
     document.getElementById('budItemQtde').value = item.qtde || 1;
     document.getElementById('budItemExecutorId').value = item.profissionalId || '';
-    document.getElementById('budItemProfissionalId').value = item.proteticoId || '';
+    if (document.getElementById('budItemProteseExecucao')) document.getElementById('budItemProteseExecucao').value = item.proteseExecucao || '';
+    if (document.getElementById('budItemProteseLaboratorioId')) document.getElementById('budItemProteseLaboratorioId').value = item.proteseLaboratorioId || '';
+    await syncBudgetItemProteseFieldsVisibility();
+    document.getElementById('budItemProfissionalId').value = item.proteseExecucao === 'EXTERNA' ? '' : (item.proteticoId || '');
     document.getElementById('budItemValorProtetico').value = item.valorProtetico !== undefined ? item.valorProtetico : '';
 
     validateBudgetItemForm();
@@ -10282,13 +10414,15 @@ if (budgetForm) {
 
             let orcamentoId = id;
 
+            const v2ProteseExecutor = isBudgetProteseExecutorV2Enabled() && await ensureOrcamentoItensProteseExecutorSchema();
+
             // Prepare items properly formatted for PostgreSQL DB
             const itemsPayload = currentBudgetItems.map(item => {
                 // Resolve professional and prothetic to seqid (BIGINT)
                 const executorObj = professionals.find(p => p.id == item.profissionalId || p.seqid == item.profissionalId);
                 const proteticoObj = professionals.find(p => p.id == item.proteticoId || p.seqid == item.proteticoId);
 
-                return {
+                const base = {
                     id: item.id || generateId(),
                     orcamento_id: id || generateId(), // Placeholder if new, will be updated below
                     empresa_id: currentEmpresaId,
@@ -10301,6 +10435,11 @@ if (budgetForm) {
                     subdivisao: item.subdivisao || '',
                     status: item.status || 'Pendente'
                 };
+                if (v2ProteseExecutor) {
+                    base.protese_tipo_execucao = item.proteseExecucao || null;
+                    base.protese_laboratorio_id = item.proteseLaboratorioId || null;
+                }
+                return base;
             });
 
             if (id) {
@@ -10480,7 +10619,9 @@ window.editBudget = function (id) {
             valorProtetico: item.valor_protetico,
             profissionalId: item.profissional_id,
             executorNome: executorData ? executorData.nome : '',
-            status: item.status || 'Pendente'
+            status: item.status || 'Pendente',
+            proteseExecucao: item.protese_tipo_execucao || '',
+            proteseLaboratorioId: item.protese_laboratorio_id || ''
         };
     });
 
@@ -10699,7 +10840,7 @@ window.printDashboard = function () {
     }
 };
 
-window.printBudget = function (id) {
+window.printBudget = async function (id) {
     const b = budgets.find(x => x.id === id);
     if (!b) { showToast('Or\u00e7amento n\u00e3o encontrado.', true); return; }
 
@@ -10715,7 +10856,10 @@ window.printBudget = function (id) {
     // Get unique professionals (Responsible + Item Protothetics)
     const profIds = new Set();
     if (b.profissional_id) profIds.add(b.profissional_id);
-    items.forEach(i => { if (i.protetico_id) profIds.add(i.protetico_id); });
+    items.forEach(i => {
+        const exec = String(i.protese_tipo_execucao || '');
+        if (i.protetico_id && exec !== 'EXTERNA') profIds.add(i.protetico_id);
+    });
 
     const profNames = Array.from(profIds)
         .map(pid => professionals.find(p => p.seqid == pid || p.id === pid))
@@ -10723,13 +10867,19 @@ window.printBudget = function (id) {
         .map(p => p.nome)
         .join(', ');
 
+    try { await loadProteseLabs(false); } catch { }
+
     const rowsHtml = items.map((item, idx) => {
         // Look up names from arrays by ID
         const servData = services.find(s => s.id === item.servico_id);
+        const execProtese = String(item.protese_tipo_execucao || '');
         const profData = professionals.find(p => p.seqid == item.protetico_id || p.id === item.protetico_id);
         const executorData = professionals.find(p => p.seqid == item.profissional_id || p.id === item.profissional_id);
         const servicoNome = servData ? servData.descricao : (item.servicodescricao || item.descricao || '-');
-        const profNome = profData ? profData.nome : (item.proteticonome || '-');
+        const labNome = item.protese_laboratorio_id ? getLaboratorioNameById(item.protese_laboratorio_id) : '';
+        const profNome = execProtese === 'EXTERNA'
+            ? (labNome || item.proteticonome || '-')
+            : (profData ? profData.nome : (item.proteticonome || '-'));
         const executorNome = executorData ? executorData.nome : (item.executorNome || '-');
         const subtotal = (parseFloat(item.valor || 0) * parseInt(item.qtde || 1));
         return `
@@ -10822,7 +10972,7 @@ window.printBudget = function (id) {
                                         <th style="width:110px;text-align:right">Valor Unit.</th>
                                         <th style="width:120px;text-align:right">Subtotal</th>
                                         <th>Executor</th>
-                                        <th>Protético</th>
+                                        <th>Executor Protético</th>
                                     </tr>
                                 </thead>
                                 <tbody>

@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260317-1525">
+    <link rel="stylesheet" href="styles.css?v=20260317-1720">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260317-1525
+        build 20260317-1720
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -1290,8 +1290,21 @@
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label for="budItemProfissionalId">Protético</label>
+                                    <label for="budItemProteseExecucao">Execução protética</label>
+                                    <select id="budItemProteseExecucao">
+                                        <option value="INTERNA">Interna</option>
+                                        <option value="EXTERNA">Externa</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="budItemProteseProteticoGroup">
+                                    <label for="budItemProfissionalId">Protético (interno)</label>
                                     <select id="budItemProfissionalId">
+                                        <option value="">Selecione...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="budItemProteseLabGroup" style="display:none;">
+                                    <label for="budItemProteseLaboratorioId">Laboratório (externo)</label>
+                                    <select id="budItemProteseLaboratorioId">
                                         <option value="">Selecione...</option>
                                     </select>
                                 </div>
@@ -1323,7 +1336,7 @@
                                         <th>Valor Un.</th>
                                         <th>Subtotal</th>
                                         <th>Executor</th>
-                                        <th>Protético</th>
+                                        <th>Executor Protético</th>
                                         <th>Status</th>
                                         <th>Ações</th>
                                     </tr>
@@ -2821,7 +2834,7 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260317-1525"></script>
+    <script src="app_v20.js?v=20260317-1720"></script>
 </body>
 
 </html>
