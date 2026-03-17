@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260317-1140">
+    <link rel="stylesheet" href="styles.css?v=20260317-1210">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260317-1140
+        build 20260317-1210
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -2213,14 +2213,22 @@
                         </div>
 
                         <div style="margin-top: 1rem;">
-                            <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
-                                <button id="btnProteseEventSend" class="btn btn-secondary"><i class="ri-send-plane-line"></i> Registrar envio</button>
-                                <button id="btnProteseEventReceive" class="btn btn-secondary"><i class="ri-inbox-archive-line"></i> Registrar recebimento</button>
-                                <button id="btnProteseCustodia" class="btn btn-primary"><i class="ri-qr-code-line"></i> ENVIO/RECEBIMENTO com Custódia (QR)</button>
-                                <button id="btnProteseEventTryIn" class="btn btn-secondary"><i class="ri-user-smile-line"></i> Prova paciente</button>
-                                <button id="btnProteseEventApprove" class="btn btn-secondary"><i class="ri-check-line"></i> Aprovar</button>
-                                <button id="btnProteseEventReprove" class="btn btn-secondary"><i class="ri-close-line"></i> Reprovar</button>
-                                <button id="btnProteseEventClose" class="btn btn-secondary"><i class="ri-flag-line"></i> Encerrar</button>
+                            <div class="protese-actions">
+                                <div class="protese-actions-row protese-actions-row-primary">
+                                    <button id="btnProteseCustodia" class="btn btn-protese-action" style="width: 100%; justify-content: center;">
+                                        <i class="ri-qr-code-line"></i> ENVIO/RECEBIMENTO com Custódia (QR)
+                                    </button>
+                                </div>
+                                <div class="protese-actions-row protese-actions-row-primary">
+                                    <button id="btnProteseEventTryIn" class="btn btn-protese-action"><i class="ri-user-smile-line"></i> Prova paciente</button>
+                                    <button id="btnProteseEventApprove" class="btn btn-protese-action"><i class="ri-check-line"></i> Aprovar</button>
+                                    <button id="btnProteseEventReprove" class="btn btn-protese-action"><i class="ri-close-line"></i> Reprovar</button>
+                                    <button id="btnProteseEventClose" class="btn btn-protese-action"><i class="ri-flag-line"></i> Encerrar</button>
+                                </div>
+                                <div class="protese-actions-row">
+                                    <button id="btnProteseEventSend" class="btn btn-secondary"><i class="ri-send-plane-line"></i> Registrar envio</button>
+                                    <button id="btnProteseEventReceive" class="btn btn-secondary"><i class="ri-inbox-archive-line"></i> Registrar recebimento</button>
+                                </div>
                             </div>
                         </div>
 
@@ -2798,7 +2806,7 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260317-1140"></script>
+    <script src="app_v20.js?v=20260317-1210"></script>
 </body>
 
 </html>

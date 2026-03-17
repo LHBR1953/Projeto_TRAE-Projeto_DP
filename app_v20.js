@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260317-1140';
+const APP_BUILD = '20260317-1210';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 

@@ -423,6 +423,34 @@ h2 {
     background-color: #f9fafb;
 }
 
+.btn-protese-action {
+    background-color: #bfdbfe;
+    color: #1e3a8a;
+    border: 1px solid #93c5fd;
+}
+
+.btn-protese-action:hover {
+    background-color: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #ffffff;
+}
+
+.protese-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.protese-actions-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.protese-actions-row-primary .btn {
+    flex: 1 1 auto;
+}
+
 .btn-muted {
     background-color: #dcfce7;
     color: var(--text-main);
