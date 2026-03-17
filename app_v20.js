@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260317-1210';
+const APP_BUILD = '20260317-1320';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -2216,8 +2216,8 @@ function updateProteseCustodiaButtonState() {
     if (!enabled) return;
 
     const hasOrder = Boolean(currentProteseOrderId);
-    btnProteseCustodia.disabled = !hasOrder;
-    btnProteseCustodia.title = hasOrder ? 'Registrar custódia via QR' : 'Salve a OP para habilitar custódia';
+    btnProteseCustodia.disabled = false;
+    btnProteseCustodia.title = hasOrder ? 'Registrar custódia via QR' : 'Vai salvar a OP e iniciar a custódia';
 }
 
 function proteseCustodiaCloseModal() {
@@ -3305,7 +3305,7 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
     }
 
     if (btnProteseSave && !btnProteseSave.dataset.bound) {
-        btnProteseSave.addEventListener('click', saveProteseOrderFromModal);
+        btnProteseSave.addEventListener('click', () => saveProteseOrderFromModal({ closeAfter: true }));
         btnProteseSave.dataset.bound = '1';
     }
     if (btnProtesePrint && !btnProtesePrint.dataset.bound) {
@@ -3374,7 +3374,20 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
         if (!btnProteseCustodia.dataset.bound) {
             btnProteseCustodia.addEventListener('click', async (e) => {
                 e.preventDefault();
-                await openProteseCustodiaModal();
+                if (btnProteseCustodia) btnProteseCustodia.disabled = true;
+                try {
+                    if (!currentProteseOrderId) {
+                        showToast('Salvando a OP para iniciar a custódia...');
+                        await saveProteseOrderFromModal({ closeAfter: false });
+                    }
+                    if (!currentProteseOrderId) {
+                        showToast('Não foi possível salvar a OP para iniciar a custódia.', true);
+                        return;
+                    }
+                    await openProteseCustodiaModal();
+                } finally {
+                    if (btnProteseCustodia) btnProteseCustodia.disabled = false;
+                }
             });
             btnProteseCustodia.dataset.bound = '1';
         }
@@ -3422,8 +3435,9 @@ async function deleteProteseOrder(orderId) {
     }
 }
 
-async function saveProteseOrderFromModal() {
+async function saveProteseOrderFromModal(opts = {}) {
     try {
+        const closeAfter = opts && opts.closeAfter === false ? false : true;
         const pacienteId = protesePaciente ? String(protesePaciente.value || '') : '';
         const tipoExec = proteseTipoExecucao ? String(proteseTipoExecucao.value || 'EXTERNA') : 'EXTERNA';
         const labId = proteseLaboratorio ? String(proteseLaboratorio.value || '') : '';
@@ -3465,7 +3479,14 @@ async function saveProteseOrderFromModal() {
             if (error) throw error;
             await fetchProteseFromUI(true);
             showToast('OP atualizada.');
-            closeProteseModal();
+            if (closeAfter) {
+                closeProteseModal();
+            } else {
+                if (modalProteseTitle) modalProteseTitle.textContent = `Ordem Protética #${String((proteseOrders || []).find(o => String(o.id) === String(currentProteseOrderId))?.seqid || '')}`;
+                await loadProteseTimeline(currentProteseOrderId);
+                await loadProteseAnexos(currentProteseOrderId);
+                updateProteseCustodiaButtonState();
+            }
             return;
         }
 
@@ -3499,7 +3520,15 @@ async function saveProteseOrderFromModal() {
         if (currentProteseOrderId) {
             await addProteseEvent('CRIACAO', 'CRIADA', null, true);
         }
-        closeProteseModal();
+        if (closeAfter) {
+            closeProteseModal();
+        } else {
+            const createdLocal = (proteseOrders || []).find(o => String(o.id) === String(currentProteseOrderId)) || created || null;
+            if (modalProteseTitle) modalProteseTitle.textContent = `Ordem Protética #${createdLocal && createdLocal.seqid != null ? String(createdLocal.seqid) : ''}`;
+            await loadProteseTimeline(currentProteseOrderId);
+            await loadProteseAnexos(currentProteseOrderId);
+            updateProteseCustodiaButtonState();
+        }
     } catch (err) {
         console.error('Erro ao salvar OP:', err);
         const code = err && err.code ? err.code : '-';
