@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260317-1720';
+const APP_BUILD = '20260317-1805';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -3470,7 +3470,12 @@ async function loadProteseAnexos(orderId) {
             .limit(100);
         const { data, error } = await withTimeout(q, 20000, 'ordens_proteticas_anexos');
         if (error) throw error;
-        renderProteseAnexos(data || []);
+        const list = Array.isArray(data) ? data : [];
+        const filtered = list.filter(a => String(a.ordem_id || '') === String(orderId));
+        if (filtered.length !== list.length) {
+            showToast('Aviso: anexos fora da OP foram ignorados.', true);
+        }
+        renderProteseAnexos(filtered);
     } catch (err) {
         console.error('Erro ao carregar anexos:', err);
         proteseAnexosList.innerHTML = '<div style="text-align:center; padding: 0.75rem; color: var(--danger-color);">Falha ao carregar anexos.</div>';
@@ -3522,10 +3527,16 @@ async function uploadProteseAnexo() {
 
 async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId = null, itemId = null } = {}) {
     if (!modalProtese) return;
-    await loadProteseLabs(false);
-
     currentProteseOrderId = orderId ? String(orderId) : null;
     if (proteseNota) proteseNota.value = '';
+    if (modalProteseTitle) modalProteseTitle.textContent = 'Ordem Protética (carregando...)';
+    if (proteseTimeline) proteseTimeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Carregando...</div>';
+    if (proteseAnexosList) proteseAnexosList.innerHTML = '<div style="text-align:center; padding: 0.75rem; color: var(--text-muted);">Carregando anexos...</div>';
+    if (proteseAnexoFile) proteseAnexoFile.value = '';
+    modalProtese.classList.remove('hidden');
+
+    try {
+        await loadProteseLabs(false);
 
     if (protesePaciente) {
         const opts = ['<option value="">Selecione...</option>'];
@@ -3700,6 +3711,7 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
         btnProteseCancel.dataset.bound = '1';
     }
     if (modalProtese && !modalProtese.dataset.bound) {
+    if (modalProtese && !modalProtese.dataset.bound) {
         modalProtese.addEventListener('click', (e) => { if (e.target === modalProtese) closeProteseModal(); });
         modalProtese.dataset.bound = '1';
     }
@@ -3781,12 +3793,22 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
         proteseCustodiaModal.dataset.bound = '1';
     }
 
-    modalProtese.classList.remove('hidden');
+    }
+    } catch (err) {
+        console.error('Erro ao abrir OP:', err);
+        const msg = err && err.message ? err.message : 'Falha ao abrir OP.';
+        showToast(msg, true);
+        if (modalProteseTitle) modalProteseTitle.textContent = 'Ordem Protética (erro)';
+        if (proteseTimeline) proteseTimeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--danger-color);">Falha ao carregar OP.</div>';
+        if (proteseAnexosList) proteseAnexosList.innerHTML = '<div style="text-align:center; padding: 0.75rem; color: var(--danger-color);">Falha ao carregar anexos.</div>';
+    }
 }
 
 function closeProteseModal() {
     if (modalProtese) modalProtese.classList.add('hidden');
     currentProteseOrderId = null;
+    if (proteseTimeline) proteseTimeline.innerHTML = '';
+    if (proteseAnexosList) proteseAnexosList.innerHTML = '';
 }
 
 if (btnCloseProteseReportsModal && !btnCloseProteseReportsModal.dataset.bound) {
