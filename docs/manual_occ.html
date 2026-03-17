@@ -6,7 +6,7 @@
   <title>Manual do OCC - Odonto Connect Cloud</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 28px; line-height: 1.55; font-size: 12.5px; }
+    body { font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 28px; line-height: 1.58; font-size: 12.5px; }
     h1 { font-size: 22px; margin: 0 0 6px 0; color: #0b5ed7; }
     h2 { font-size: 14px; margin: 22px 0 8px 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; color: #374151; }
     h3 { font-size: 13px; margin: 14px 0 6px 0; color: #111827; }
@@ -22,6 +22,12 @@
     .toc a:hover { text-decoration: underline; }
     .note { color: #374151; background: #eff6ff; border: 1px solid #dbeafe; padding: 10px; border-radius: 10px; }
     .k { font-weight: 800; }
+    .muted { color: #6b7280; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; background: #f3f4f6; border: 1px solid #e5e7eb; padding: 8px; }
+    td { border: 1px solid #e5e7eb; padding: 8px; vertical-align: top; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 11px; font-weight: 800; }
+    .pill2 { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #ecfeff; color: #155e75; font-size: 11px; font-weight: 800; }
     @media print {
       body { padding: 14px; }
       a { color: inherit; text-decoration: none; }
@@ -53,6 +59,10 @@
     <div class="note">
       <div class="k">Fonte oficial de atendimento realizado</div>
       <div>Conta como realizado quando o profissional clica em <span class="k">Finalizar</span> no módulo <span class="k">Atendimento</span>. Isso marca o item do orçamento como <span class="k">Finalizado</span>.</div>
+    </div>
+    <div style="margin-top: 10px;" class="note">
+      <div class="k">Ajuda rápida (F1)</div>
+      <div>Em qualquer tela principal do sistema, pressione <span class="k">F1</span> para abrir a ajuda contextual daquela tela.</div>
     </div>
   </div>
 
@@ -129,31 +139,131 @@
   </ul>
 
   <h2 id="orcamentos">Orçamentos</h2>
-  <h3>O que a tela faz</h3>
-  <p>Criação de orçamentos e itens (serviços). Permite definir executores, acompanhar status do item e registrar pagamentos.</p>
-  <h3>Fluxo recomendado</h3>
+  <h3>O que é</h3>
+  <p>Orçamento é onde você registra os procedimentos (itens) do paciente, define executores, controla o pagamento e libera os itens para execução clínica.</p>
+
+  <h3>Componentes do módulo</h3>
+  <div class="box">
+    <p><span class="pill">Lista de Orçamentos</span> mostra: ID, paciente, quantidade de itens, valor total, total pago, status e ações.</p>
+    <p style="margin-top:6px;"><span class="pill2">Formulário do Orçamento</span> permite: selecionar paciente, definir status/tipo, adicionar itens e salvar.</p>
+    <p style="margin-top:6px;"><span class="pill">Pagamentos & Liberação</span> é o painel operacional do orçamento: registrar pagamentos, liberar itens e ver histórico.</p>
+  </div>
+
+  <h3>Lista de Orçamentos (colunas)</h3>
+  <ul>
+    <li><span class="k">ID</span>: número do orçamento.</li>
+    <li><span class="k">Paciente</span>: nome e celular.</li>
+    <li><span class="k">Qtd Itens</span>: quantidade de procedimentos.</li>
+    <li><span class="k">Valor Total</span>: soma de (valor × quantidade) dos itens.</li>
+    <li><span class="k">Total Pago</span>: soma de pagamentos do orçamento.</li>
+    <li><span class="k">Status</span>: Pendente, Aprovado, Executado, Finalizado, Cancelado.</li>
+  </ul>
+
+  <h3>Ações (ícones) na lista</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 180px;">Ação</th>
+        <th>O que faz</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="k">Pagamentos & Liberação</span> <span class="muted">(ícone: dinheiro)</span></td>
+        <td>Abre o painel com o histórico de pagamentos, o formulário de “Registrar Novo Pagamento” e a lista “Procedimentos e Liberações” para liberar ou finalizar itens.</td>
+      </tr>
+      <tr>
+        <td><span class="k">Imprimir Orçamento</span> <span class="muted">(ícone: impressora)</span></td>
+        <td>Gera impressão do orçamento.</td>
+      </tr>
+      <tr>
+        <td><span class="k">Editar</span> <span class="muted">(ícone: lápis)</span></td>
+        <td>Abre o formulário do orçamento para ajustes (conforme permissão).</td>
+      </tr>
+      <tr>
+        <td><span class="k">Excluir</span> <span class="muted">(ícone: lixeira)</span></td>
+        <td>Remove o orçamento (conforme permissão). Use com cuidado.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Formulário do Orçamento (campos)</h3>
+  <ul>
+    <li><span class="k">Buscar Paciente</span>: digite nome ou CPF e selecione o paciente.</li>
+    <li><span class="k">CPF / Celular / E-mail</span>: preenchidos automaticamente após selecionar o paciente.</li>
+    <li><span class="k">Status do Orçamento</span>:
+      <ul>
+        <li><span class="k">Pendente</span>: orçamento criado.</li>
+        <li><span class="k">Aprovado</span>: normalmente após liberar o primeiro item.</li>
+        <li><span class="k">Executado</span>: quando todos os itens do orçamento estiverem finalizados.</li>
+        <li><span class="k">Finalizado</span>: etapa final administrativa (quando usada).</li>
+        <li><span class="k">Cancelado</span>: cancelado com auditoria/termo (quando aplicável).</li>
+      </ul>
+    </li>
+    <li><span class="k">Profissional Responsável</span>: responsável administrativo pelo orçamento.</li>
+    <li><span class="k">Tipo</span>:
+      <ul>
+        <li><span class="k">Normal</span>: cobrança e comissões conforme regras.</li>
+        <li><span class="k">Retrabalho</span> / <span class="k">Cortesia</span>: orçamento sem cobrança e sem registro de pagamento.</li>
+      </ul>
+    </li>
+    <li><span class="k">Observações</span>: informações internas.</li>
+  </ul>
+
+  <h3>Itens do Orçamento (Adicionar Item)</h3>
+  <p>Cada item representa um procedimento. É o item que vai para o Atendimento do executor.</p>
+  <ul>
+    <li><span class="k">Serviço</span> e <span class="k">Subdivisão</span>: descrevem o procedimento.</li>
+    <li><span class="k">Valor Un.</span> e <span class="k">Qtde</span>: determinam o subtotal do item.</li>
+    <li><span class="k">Profissional Executor</span>: define qual profissional verá este item no <span class="k">Atendimento</span>.</li>
+    <li><span class="k">Protético</span> e <span class="k">Vlr Protético</span>: controle interno quando houver etapa protética.</li>
+  </ul>
+
+  <h3>Pagamentos & Liberação (painel operacional)</h3>
+  <div class="box">
+    <p><span class="k">Histórico de Pagamentos</span>: mostra pagamentos registrados no orçamento e, quando aplicável, pagamentos vindos do Financeiro (travados/“Financeiro”).</p>
+    <p><span class="k">Registrar Novo Pagamento</span>: preencha valor, forma e observação e confirme.</p>
+    <p><span class="k">Procedimentos e Liberações</span>: lista cada item com seu status e a ação disponível.</p>
+  </div>
+
+  <h3>Como registrar pagamento</h3>
   <ol>
-    <li>Selecionar paciente.</li>
-    <li>Criar orçamento.</li>
-    <li>Adicionar itens (serviços) e definir executor do item (profissional).</li>
-    <li>Registrar pagamentos e acompanhar saldo.</li>
-    <li>Executar no Atendimento e clicar <span class="k">Finalizar</span> para marcar item como finalizado.</li>
+    <li>Abra <span class="k">Pagamentos & Liberação</span>.</li>
+    <li>Em “Registrar Novo Pagamento”, informe <span class="k">Valor</span>, <span class="k">Forma</span> e <span class="k">Observação</span> (ex.: “1ª parcela”).</li>
+    <li>Clique em “Confirmar Pagamento”.</li>
+    <li>Confira se o <span class="k">Total Pago</span> e o <span class="k">Saldo Devedor</span> estão corretos.</li>
   </ol>
-  <h3>Como preencher itens</h3>
+
+  <h3>Liberação do item (para que o profissional execute)</h3>
+  <p>A liberação permite que o item siga o fluxo e gere registros operacionais (comissão/financeiro, quando aplicável).</p>
   <ul>
-    <li>Serviço, quantidade e valor.</li>
-    <li>Executor do item: define quem aparece no Atendimento e nos relatórios por profissional.</li>
-    <li>Status: acompanha o andamento (Pendente / Em Execução / Finalizado).</li>
+    <li>Se o orçamento for <span class="k">Cortesia</span> ou <span class="k">Retrabalho</span>, a liberação é automática (sem cobrança).</li>
+    <li>Em orçamento Normal, a liberação depende do <span class="k">total pago</span> cobrir o valor do item (considerando valores já liberados).</li>
+    <li>Se o pagamento não cobre, pode exigir <span class="k">autorização superior</span> (PIN do supervisor), exceto para usuários Admin/Supervisor.</li>
+    <li>Ao liberar, o sistema pode:
+      <ul>
+        <li>Gerar <span class="k">comissão</span> PENDENTE (quando configurada no profissional).</li>
+        <li>Registrar no Financeiro um <span class="k">débito</span> como consumo do serviço.</li>
+      </ul>
+    </li>
   </ul>
-  <h3>Pagamentos</h3>
-  <ul>
-    <li>Registre valor pago e forma de pagamento.</li>
-    <li>Confira o total pago e o saldo restante.</li>
-  </ul>
+
+  <h3>Finalização do item</h3>
+  <div class="note">
+    <div class="k">Importante</div>
+    <div>O “oficial” do realizado é quando o executor finaliza no módulo <span class="k">Atendimento</span> (botão Finalizar). O painel do orçamento também permite marcar como Finalizado, mas o fluxo recomendado é finalizar pelo Atendimento.</div>
+  </div>
+
+  <h3>Cancelamento: Estorno x Reembolso (regra de ouro)</h3>
+  <p>Quando há cancelamento com valor pago, o fluxo correto é:</p>
+  <ol>
+    <li><span class="k">Estorno</span>: gera crédito na conta corrente do paciente (saldo sobe).</li>
+    <li><span class="k">Reembolso</span>: somente quando a clínica devolve o dinheiro/PIX; registra débito na conta corrente (saldo desce).</li>
+  </ol>
 
   <h2 id="financeiro">Financeiro</h2>
   <h3>O que a tela faz</h3>
-  <p>Extrato e lançamentos financeiros, com consulta por paciente e relatórios diários.</p>
+  <p>Extrato e lançamentos financeiros da conta corrente do paciente, com controle de saldo e operações (pagamento, estorno, reembolso e transferência).</p>
   <h3>Principais recursos</h3>
   <ul>
     <li>Novo Lançamento: entradas/saídas (conforme permissão).</li>
@@ -165,36 +275,89 @@
     <li>Selecione paciente (quando aplicável), categoria, valor e forma de pagamento.</li>
     <li>Use observação para descrever o motivo (principalmente em reembolso/estorno).</li>
   </ul>
+  <h3>Categorias mais usadas</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 180px;">Categoria</th>
+        <th>Como usar</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="k">PAGAMENTO</span> (CREDITO)</td>
+        <td>Entrada de valor do paciente.</td>
+      </tr>
+      <tr>
+        <td><span class="k">ESTORNO</span> (CREDITO)</td>
+        <td>Crédito gerado por cancelamento/ajuste (saldo sobe).</td>
+      </tr>
+      <tr>
+        <td><span class="k">REEMBOLSO</span> (DEBITO)</td>
+        <td>Saída de caixa quando a clínica devolve dinheiro/PIX (saldo desce). Use observação obrigatória.</td>
+      </tr>
+      <tr>
+        <td><span class="k">TRANSFERENCIA</span></td>
+        <td>Move saldo entre pacientes (débito no doador e crédito no recebedor).</td>
+      </tr>
+    </tbody>
+  </table>
 
   <h2 id="comissoes">Comissões</h2>
   <h3>O que a tela faz</h3>
-  <p>Consulta e pagamento de comissões por período e profissional.</p>
-  <h3>Como usar</h3>
+  <p>Consulta, seleção e pagamento de comissões por período e profissional, com emissão de recibo e controle de transferências/estornos.</p>
+  <h3>Fluxo recomendado</h3>
+  <ol>
+    <li>Itens liberados geram comissões <span class="k">PENDENTE</span> (quando o profissional tem regra de comissão).</li>
+    <li>Ao pagar o profissional, filtre o período e selecione as comissões.</li>
+    <li>Clique em <span class="k">Marcar como Pago</span> e imprima o recibo para assinatura.</li>
+  </ol>
+  <h3>Status e conceitos</h3>
   <ul>
-    <li>Filtre por período e profissional.</li>
-    <li>Selecione comissões e confirme pagamento (quando autorizado).</li>
-    <li>Transferência de comissão: usar somente quando houver necessidade de correção, registrando justificativa.</li>
+    <li><span class="k">PENDENTE</span>/<span class="k">GERADA</span>: ainda não paga.</li>
+    <li><span class="k">PAGA</span>: já paga ao profissional.</li>
+    <li><span class="k">ESTORNADA</span>: débito (ex.: correção/transferência).</li>
+  </ul>
+  <h3>Ações e cuidados</h3>
+  <ul>
+    <li><span class="k">Selecionar todos</span>: seleciona apenas o que está visível no filtro atual.</li>
+    <li><span class="k">Transferir comissões</span>: use apenas quando realmente precisar corrigir o profissional; registre justificativa.</li>
   </ul>
 
   <h2 id="atendimento">Atendimento</h2>
   <h3>O que a tela faz</h3>
-  <p>Lista os itens que o profissional deve executar no dia, baseada na agenda e no executor do item do orçamento.</p>
-  <h3>Finalizar (fonte oficial)</h3>
-  <p>Quando o profissional clica em <span class="k">Finalizar</span>, o sistema marca o item do orçamento como <span class="k">Finalizado</span>. Isso é o que conta como atendimento realizado para relatórios.</p>
-  <h3>Registro de evolução</h3>
+  <p>Lista os itens do dia para execução clínica, baseada na agenda (paciente agendado) e no executor definido em cada item do orçamento.</p>
+  <h3>Como aparece um item para o profissional</h3>
   <ul>
-    <li>Use a ação de evolução para registrar informações clínicas relevantes.</li>
+    <li>O paciente precisa estar agendado no dia para o profissional.</li>
+    <li>O item do orçamento precisa ter o <span class="k">Profissional Executor</span> igual ao profissional.</li>
+    <li>Itens já <span class="k">Finalizados</span> não aparecem.</li>
+  </ul>
+  <h3>Finalizar (fonte oficial)</h3>
+  <p>Quando o profissional clica em <span class="k">Finalizar</span>, o sistema:</p>
+  <ul>
+    <li>marca o agendamento como <span class="k">CONCLUIDO</span>,</li>
+    <li>marca o item do orçamento como <span class="k">Finalizado</span>.</li>
+  </ul>
+  <h3>Evolução (prontuário)</h3>
+  <ul>
+    <li>Use para registrar informações clínicas relevantes do atendimento.</li>
     <li>Evite textos genéricos: descreva procedimento, intercorrências e orientações.</li>
   </ul>
 
   <h2 id="agenda">Agenda</h2>
   <h3>O que a tela faz</h3>
-  <p>Gerencia agendamentos por profissional, com impressão de dia/semana.</p>
+  <p>Gerencia agendamentos por profissional, com disponibilidade, status e impressão de dia/semana.</p>
   <h3>Como usar</h3>
   <ul>
     <li>Selecione data e profissional para visualizar horários.</li>
     <li>Crie/edite/cancele agendamentos conforme permissão.</li>
     <li>Mantenha status correto (marcado, concluído, cancelado) para relatórios consistentes.</li>
+  </ul>
+  <h3>Disponibilidade x agendamento</h3>
+  <ul>
+    <li>A grade é montada com base na disponibilidade cadastrada do profissional.</li>
+    <li>Se um agendamento for criado fora da disponibilidade, ele ainda aparece (destacado), para não “sumir” da agenda e dos relatórios.</li>
   </ul>
 
   <h2 id="producao_protetica">Produção Protética</h2>
@@ -208,6 +371,13 @@
     <li>Atualizar histórico e anexos conforme movimentação.</li>
     <li>Imprimir relatório para conferência/entrega.</li>
   </ol>
+  <h3>O que deve constar na OP</h3>
+  <ul>
+    <li>Paciente e vínculo com orçamento (quando existir).</li>
+    <li>Execução (interna/externa) e responsável (protético/laboratório).</li>
+    <li>Fase atual, prioridade, prazo e status.</li>
+    <li>Histórico e anexos para auditoria e rastreio.</li>
+  </ul>
 
   <h2 id="audit_cancelamentos">Audit Cancelamentos</h2>
   <h3>O que a tela faz</h3>
@@ -226,6 +396,13 @@
     <li>Crie usuários com e-mail correto e perfil adequado.</li>
     <li>Conceda apenas as permissões necessárias (principalmente em Financeiro, Comissões e Cancelamentos).</li>
   </ul>
+  <h3>Perfis comuns</h3>
+  <ul>
+    <li><span class="k">Administrador</span>: acesso total.</li>
+    <li><span class="k">Supervisor</span>: usado quando o sistema pede autorização superior (PIN) para liberar itens com saldo insuficiente.</li>
+    <li><span class="k">Dentista</span>: execução/atendimento e rotinas clínicas.</li>
+    <li><span class="k">Protético</span>: rotinas protéticas (quando aplicável).</li>
+  </ul>
 
   <h2 id="dashboard">Dashboard</h2>
   <h3>O que a tela faz</h3>
@@ -235,6 +412,8 @@
     <li>Selecione data/profissional para filtrar a visão.</li>
     <li>Use os indicadores para acompanhar agendamentos, recebido e eventos do dia.</li>
   </ul>
+  <h3>Dica</h3>
+  <p>Use o Dashboard como “check rápido” e aprofunde nos módulos (Agenda, Financeiro, Orçamentos e Comissões) quando precisar rastrear detalhes.</p>
 
   <script>
     (function () {
@@ -244,4 +423,3 @@
   </script>
 </body>
 </html>
-

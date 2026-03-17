@@ -4,7 +4,7 @@ const path = require('path');
 
 const root = __dirname;
 const port = Number(process.env.PORT || 8282);
-const host = process.env.HOST || '127.0.0.1';
+const host = process.env.HOST ? String(process.env.HOST) : null;
 
 const mimes = {
   '.html': 'text/html; charset=utf-8',
@@ -59,11 +59,15 @@ const server = http.createServer((req, res) => {
   }
 });
 
-server.listen(port, host, () => {
+const onListening = () => {
   console.log(`Serving ${root}`);
-  console.log(`Open http://${host}:${port}/`);
-  if (host !== 'localhost') {
-    console.log(`Open http://localhost:${port}/`);
-  }
+  console.log(`Open http://localhost:${port}/`);
+  console.log(`Open http://127.0.0.1:${port}/`);
   console.log('Keep this window open while using the system.');
-});
+};
+
+if (host) {
+  server.listen(port, host, onListening);
+} else {
+  server.listen(port, onListening);
+}

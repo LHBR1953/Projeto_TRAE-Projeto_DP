@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260316-0305';
+const APP_BUILD = '20260316-1635';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -133,6 +133,8 @@ let proteseOrders = [];
 let proteseLabs = [];
 let activeEmpresasList = []; // Store companies list for admins
 let transactions = []; // Global transactions state
+let financeAllTransactions = [];
+let financeSelectedPatientId = null;
 
 
 async function checkAuth() {
@@ -366,6 +368,116 @@ function normalizeKey(s) {
         .replace(/[\u0300-\u036f]/g, '')
         .trim()
         .toUpperCase();
+}
+
+function normalizeStatusKey(s) {
+    return normalizeKey(s).replace(/\s+/g, '');
+}
+
+function financeCategoryForReport(row) {
+    const tipoKey = normalizeKey(row && row.tipo);
+    const catKey = normalizeKey(row && row.categoria);
+    if (tipoKey === 'DEBITO' && catKey === 'PAGAMENTO') return 'CONSUMO';
+    return String(row && row.categoria || '—');
+}
+
+function getBudgetSeqFromFinanceRow(row) {
+    const v1 = Number(row && row.referencia_id);
+    if (Number.isFinite(v1) && v1 > 0) return v1;
+    const v2 = Number(row && row.orcamento_id);
+    if (Number.isFinite(v2) && v2 > 0) return v2;
+    const m = String(row && row.observacoes || '').match(/Orçamento\s*#\s*(\d{1,9})/i);
+    if (m && m[1]) {
+        const v3 = Number(m[1]);
+        if (Number.isFinite(v3) && v3 > 0) return v3;
+    }
+    return NaN;
+}
+
+async function fetchBudgetPaymentFormasForSeqids(seqids) {
+    const out = new Map();
+    if (!currentEmpresaId) return out;
+    const nums = (seqids || []).map(n => Number(n)).filter(n => Number.isFinite(n) && n > 0);
+    if (!nums.length) return out;
+
+    const formsBySeq = new Map();
+    const addForm = (seq, formaRaw) => {
+        const label = normalizeFormaPagamento(formaRaw);
+        if (normalizeKey(label) === 'NAO INFORMADO') return;
+        const k = String(seq);
+        if (!formsBySeq.has(k)) formsBySeq.set(k, new Set());
+        formsBySeq.get(k).add(label);
+    };
+
+    const chunks = [];
+    for (let i = 0; i < nums.length; i += 120) chunks.push(nums.slice(i, i + 120));
+
+    for (const chunk of chunks) {
+        const inList = `(${chunk.join(',')})`;
+        try {
+            const q = db.from('financeiro_transacoes')
+                .select('referencia_id,orcamento_id,forma_pagamento,data_transacao')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('tipo', 'CREDITO')
+                .eq('categoria', 'PAGAMENTO')
+                .or(`referencia_id.in.${inList},orcamento_id.in.${inList}`)
+                .order('data_transacao', { ascending: false })
+                .limit(10000);
+            const { data, error } = await withTimeout(q, 20000, 'financeiro_transacoes:formas_por_orc');
+            if (!error) {
+                (data || []).forEach(r => {
+                    const seq = Number(r && (r.referencia_id || r.orcamento_id));
+                    if (!Number.isFinite(seq) || seq <= 0) return;
+                    addForm(seq, r && r.forma_pagamento);
+                });
+            }
+        } catch { }
+
+        try {
+            const q2 = db.from('orcamento_pagamentos')
+                .select('orcamento_id,forma_pagamento,data_pagamento,criado_em,created_at,data,status_pagamento')
+                .eq('empresa_id', currentEmpresaId)
+                .in('orcamento_id', chunk)
+                .neq('status_pagamento', 'Cancelado')
+                .limit(10000);
+            const { data: d2, error: e2 } = await withTimeout(q2, 20000, 'orcamento_pagamentos:formas_por_orc');
+            if (!e2) {
+                (d2 || []).forEach(r => {
+                    const seq = Number(r && r.orcamento_id);
+                    if (!Number.isFinite(seq) || seq <= 0) return;
+                    addForm(seq, r && r.forma_pagamento);
+                });
+            }
+        } catch { }
+    }
+
+    for (const [k, set] of formsBySeq.entries()) {
+        const arr = Array.from(set);
+        if (!arr.length) continue;
+        out.set(k, arr.length === 1 ? arr[0] : 'Misto');
+    }
+    return out;
+}
+
+function computeBudgetProgressStatusKey(budget) {
+    const bStatusKey = normalizeStatusKey(String(budget && budget.status || 'PENDENTE'));
+    if (bStatusKey === 'CANCELADO') return 'CANCELADO';
+
+    const itens = (budget && (budget.orcamento_itens || budget.itens)) || [];
+    const qtdItens = Array.isArray(itens) ? itens.length : 0;
+    if (qtdItens === 0) return bStatusKey || 'PENDENTE';
+
+    const totalFinalizados = itens.filter(it => normalizeStatusKey(String(it && it.status || '')) === 'FINALIZADO').length;
+    const allFinalizados = totalFinalizados === qtdItens;
+    if (allFinalizados) return 'EXECUTADO';
+
+    const anyReleasedOrExec = itens.some(it => {
+        const k = normalizeStatusKey(String(it && it.status || ''));
+        return k === 'LIBERADO' || k === 'EMEXECUCAO' || k === 'FINALIZADO';
+    });
+    if (anyReleasedOrExec || totalFinalizados > 0) return 'LIBERADO';
+
+    return bStatusKey || 'PENDENTE';
 }
 
 function canDeleteFinanceTransactionRow(row) {
@@ -803,6 +915,7 @@ const btnCancelBudget = document.getElementById('btnCancelBudget');
 const budgetForm = document.getElementById('budgetForm');
 const budgetsTableBody = document.getElementById('budgetsTableBody');
 const searchBudgetInput = document.getElementById('searchBudgetInput');
+const budgetStatusFilter = document.getElementById('budgetStatusFilter');
 const btnToggleAddItem = document.getElementById('btnToggleAddItem');
 const addBudgetItemPanel = document.getElementById('addBudgetItemPanel');
 const btnCancelAddItem = document.getElementById('btnCancelAddItem');
@@ -1493,6 +1606,15 @@ function renderTable(data = [], type = 'patients') {
             const totalPago = getBudgetPaidAmount(b);
             const saldoDevedor = total - totalPago;
 
+            const totalFinalizados = itens.filter(it => normalizeStatusKey(String(it && it.status || '')) === 'FINALIZADO').length;
+            const totalLiberados = itens.filter(it => ['LIBERADO', 'EMEXECUCAO', 'FINALIZADO'].includes(normalizeStatusKey(String(it && it.status || '')))).length;
+            const allFinalizados = qtdItens > 0 && totalFinalizados === qtdItens;
+            const baseStatus = String(b.status || 'Pendente');
+            const statusTop = baseStatus;
+            const statusHint = allFinalizados
+                ? 'Concluído (itens finalizados)'
+                : (totalLiberados > 0 ? 'Em atendimento' : (saldoDevedor > 0 ? 'Aguardando pagamento/liberação' : 'Aguardando liberação'));
+
             tr.innerHTML = `
                 <td>${b.seqid}</td>
                 <td>
@@ -1503,9 +1625,14 @@ function renderTable(data = [], type = 'patients') {
                 <td><strong style="color: var(--primary-color)">R$ ${total.toFixed(2)}</strong></td>
                 <td><strong style="color: ${saldoDevedor > 0 ? '#dc3545' : 'var(--success-color)'}">R$ ${totalPago.toFixed(2)}</strong></td>
                 <td>
-                    <span style="background: var(--bg-hover); padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">
-                        ${b.status || 'Pendente'}
-                    </span>
+                    <div>
+                        <span style="background: ${normalizeKey(statusTop) === 'EXECUTADO' ? '#dcfce7' : 'var(--bg-hover)'}; color: ${normalizeKey(statusTop) === 'EXECUTADO' ? '#166534' : 'var(--text-color)'}; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: 800;">
+                            ${escapeHtml(statusTop)}
+                        </span>
+                        <div style="margin-top: 4px; font-size: 12px; color: var(--text-muted); font-weight: 700;">
+                            ${escapeHtml(`${totalFinalizados}/${qtdItens} itens finalizados • ${statusHint}`)}
+                        </div>
+                    </div>
                 </td>
                 <td class="actions-cell">
                     <button class="btn-icon" onclick="viewBudgetPayments('${b.id}')" title="Ver Pagamentos">
@@ -1932,7 +2059,8 @@ function showList(type = 'patients') {
         if (document.getElementById('budgetForm')) document.getElementById('budgetForm').reset();
         document.getElementById('editBudgetId').value = '';
         document.getElementById('addBudgetItemPanel').style.display = 'none';
-        renderTable(budgets, 'budgets');
+        if (typeof refreshBudgetsList === 'function') refreshBudgetsList();
+        else renderTable(budgets, 'budgets');
     } else if (type === 'usersAdmin') {
         if (userAdminFormView) userAdminFormView.classList.add('hidden');
         if (usersAdminView) usersAdminView.classList.remove('hidden');
@@ -3421,31 +3549,44 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
         });
 
         const itemsRows = [];
+        const agWithoutItems = [];
         byPaciente.forEach((list, pacienteSeqIdStr) => {
             const paciente = getPacienteDetailsBySeqId(pacienteSeqIdStr);
             const pacienteUuid = paciente?.id || null;
             if (!pacienteUuid) return;
 
             const patientBudgets = (budgets || []).filter(b => String(b.pacienteid || b.paciente_id || '') === String(pacienteUuid));
+            const firstAg = list[0];
+            const hora = firstAg && firstAg.inicio ? formatTimeHHMM(new Date(firstAg.inicio)) : '--:--';
+            const agId = firstAg && firstAg.id ? String(firstAg.id) : '';
+
+            const matched = [];
+            let hasMatchButNotEligible = false;
             patientBudgets.forEach(b => {
                 const itens = (b.orcamento_itens || b.itens || []);
+                const tipoKey = normalizeKey(String(b.tipo || 'Normal'));
+                const isFreeBudget = tipoKey === 'CORTESIA' || tipoKey === 'RETRABALHO';
                 itens.forEach(it => {
                     const executor = it.profissional_id ?? it.profissionalId ?? it.executor_id ?? it.executorId;
-                    if (String(executor || '') !== String(profSeqId)) return;
+                    const execProf = findProfessionalByAnyId(executor);
+                    const execSeqId = execProf && execProf.seqid != null ? String(execProf.seqid) : String(executor || '');
+                    if (execSeqId !== String(profSeqId)) return;
 
                     const st = String(it.status || it.item_status || '').trim();
-                    if (st && normalizeKey(st) === 'FINALIZADO') return;
-
-                    const firstAg = list[0];
-                    const hora = firstAg && firstAg.inicio ? formatTimeHHMM(new Date(firstAg.inicio)) : '--:--';
-                    const agId = firstAg && firstAg.id ? String(firstAg.id) : '';
+                    const stKey = normalizeStatusKey(st);
+                    if (stKey === 'FINALIZADO' || stKey === 'CANCELADO') return;
+                    const eligible = isFreeBudget || stKey === 'LIBERADO' || stKey === 'EMEXECUCAO';
+                    if (!eligible) {
+                        hasMatchButNotEligible = true;
+                        return;
+                    }
 
                     const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
                     const desc = serv ? serv.descricao : (it.servicoDescricao || it.descricao || `#${it.servico_id || it.servicoId || it.id || ''}`);
                     const sub = String(it.subdivisao || it.sub_divisao || '').trim();
                     const itemLabel = sub ? `${desc} — ${sub}` : desc;
 
-                    itemsRows.push({
+                    matched.push({
                         hora,
                         agendamentoId: agId,
                         paciente,
@@ -3456,12 +3597,38 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
                     });
                 });
             });
+
+            if (matched.length) {
+                matched.forEach(m => itemsRows.push(m));
+                return;
+            }
+
+            const budgetForOpen = patientBudgets.length ? patientBudgets[0] : null;
+            const msg = patientBudgets.length
+                ? (hasMatchButNotEligible ? 'Sem itens liberados para atendimento' : 'Sem itens para este profissional (verifique Executor)')
+                : 'Sem orçamento para este paciente';
+            itemsRows.push({
+                hora,
+                agendamentoId: agId,
+                paciente,
+                budget: budgetForOpen,
+                itemId: '',
+                itemLabel: msg,
+                itemStatus: '—',
+                isPlaceholder: true
+            });
+            agWithoutItems.push({ paciente, hora, msg });
         });
 
         itemsRows.sort((a, b) => a.hora.localeCompare(b.hora) || String(a.paciente?.nome || '').localeCompare(String(b.paciente?.nome || ''), 'pt-BR'));
 
         const profName = getProfessionalNameBySeqId(profSeqId);
-        if (atendimentoSummary) atendimentoSummary.textContent = `${profName} — ${dateStr.split('-').reverse().join('/')} • ${itemsRows.length} itens`;
+        if (atendimentoSummary) {
+            const placeholders = itemsRows.filter(r => r && r.isPlaceholder).length;
+            const real = itemsRows.length - placeholders;
+            const extra = placeholders ? ` • ${placeholders} agendamentos sem itens` : '';
+            atendimentoSummary.textContent = `${profName} — ${dateStr.split('-').reverse().join('/')} • ${real} itens${extra}`;
+        }
 
         if (!itemsRows.length) {
             if (atendimentoBody) atendimentoBody.innerHTML = '';
@@ -3473,6 +3640,7 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
         atendimentoBody.innerHTML = '';
         itemsRows.forEach(r => {
             const tr = document.createElement('tr');
+            if (r.isPlaceholder) tr.style.background = '#fff7ed';
             tr.innerHTML = `
                 <td style="font-weight:800;">${escapeHtml(r.hora)}</td>
                 <td style="font-weight:600;">${escapeHtml(r.paciente?.nome || '-')}</td>
@@ -3480,10 +3648,10 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
                 <td style="text-align:center; font-weight:800;">${escapeHtml(String(r.budget?.seqid || '-'))}</td>
                 <td>${escapeHtml(String(r.itemStatus || '-'))}</td>
                 <td>
-                    <button class="btn btn-secondary btn-sm" data-action="finish" data-agendamento="${escapeHtml(r.agendamentoId || '')}" data-item="${escapeHtml(r.itemId || '')}"><i class="ri-flag-line"></i> Finalizar</button>
+                    ${r.isPlaceholder ? '' : `<button class="btn btn-secondary btn-sm" data-action="finish" data-agendamento="${escapeHtml(r.agendamentoId || '')}" data-item="${escapeHtml(r.itemId || '')}"><i class="ri-flag-line"></i> Finalizar</button>`}
                     <button class="btn btn-secondary btn-sm" data-action="note" data-patient="${escapeHtml(r.paciente?.id || '')}" data-prof="${escapeHtml(String(profSeqId))}" data-date="${escapeHtml(dateStr)}" data-time="${escapeHtml(r.hora)}" data-budget="${escapeHtml(r.budget?.id || '')}" data-budgetseq="${escapeHtml(String(r.budget?.seqid || ''))}" data-item="${escapeHtml(r.itemId || '')}" data-itemlabel="${escapeHtml(r.itemLabel || '')}" data-agendamento="${escapeHtml(r.agendamentoId || '')}"><i class="ri-file-edit-line"></i> Evolução</button>
                     <button class="btn-icon" data-action="patient" data-patient="${escapeHtml(r.paciente?.id || '')}" title="Prontuário"><i class="ri-folder-user-line"></i></button>
-                    <button class="btn-icon" data-action="budgetView" data-budget="${escapeHtml(r.budget?.id || '')}" title="Orçamento"><i class="ri-file-list-3-line"></i></button>
+                    ${r.budget && r.budget.id ? `<button class="btn-icon" data-action="budgetView" data-budget="${escapeHtml(r.budget?.id || '')}" title="Orçamento"><i class="ri-file-list-3-line"></i></button>` : ''}
                 </td>
             `;
             atendimentoBody.appendChild(tr);
@@ -3758,7 +3926,36 @@ async function confirmAtendimentoItem({ agendamentoId, itemId, itemStatus }) {
         const { error: itErr } = await withTimeout(upIt, 15000, 'orcamento_itens:status');
         if (itErr) throw itErr;
 
-        showToast('Atendimento finalizado.');
+        let updatedBudget = null;
+        if (Array.isArray(budgets)) {
+            for (const b of budgets) {
+                const itens = b && (b.orcamento_itens || b.itens || []);
+                const it = Array.isArray(itens) ? itens.find(x => String(x && x.id) === String(itemId)) : null;
+                if (it) {
+                    it.status = 'Finalizado';
+                    updatedBudget = b;
+                    break;
+                }
+            }
+        }
+
+        if (updatedBudget) {
+            const itens = updatedBudget.orcamento_itens || updatedBudget.itens || [];
+            const qtd = Array.isArray(itens) ? itens.length : 0;
+            const finalizados = Array.isArray(itens) ? itens.filter(x => normalizeKey(String(x && x.status || '')) === 'FINALIZADO').length : 0;
+            const allFinal = qtd > 0 && finalizados === qtd;
+            if (allFinal && String(updatedBudget.status || '') !== 'Executado') {
+                const upB = db.from('orcamentos')
+                    .update({ status: 'Executado' })
+                    .eq('id', updatedBudget.id)
+                    .eq('empresa_id', currentEmpresaId);
+                const { error: bErr } = await withTimeout(upB, 15000, 'orcamentos:status_executado');
+                if (!bErr) updatedBudget.status = 'Executado';
+            }
+            renderTable(budgets, 'budgets');
+        }
+
+        showToast(updatedBudget && String(updatedBudget.status || '') === 'Executado' ? 'Atendimento finalizado. Orçamento concluído.' : 'Atendimento finalizado.');
         await fetchAtendimentoForUI();
     } catch (err) {
         console.error('Erro ao confirmar atendimento:', err);
@@ -3860,9 +4057,19 @@ function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId }) {
         const patientBudgets = (budgets || []).filter(b => String(b.pacienteid || b.paciente_id || '') === String(pacienteUuid));
         patientBudgets.forEach(b => {
             const itens = (b.orcamento_itens || b.itens || []);
+            const tipoKey = normalizeKey(String(b.tipo || 'Normal'));
+            const isFreeBudget = tipoKey === 'CORTESIA' || tipoKey === 'RETRABALHO';
             itens.forEach(it => {
                 const executor = it.profissional_id ?? it.profissionalId ?? it.executor_id ?? it.executorId;
-                if (String(executor || '') !== String(profSeqId)) return;
+                const execProf = findProfessionalByAnyId(executor);
+                const execSeqId = execProf && execProf.seqid != null ? String(execProf.seqid) : String(executor || '');
+                if (execSeqId !== String(profSeqId)) return;
+
+                const st = String(it.status || it.item_status || '').trim();
+                const stKey = normalizeStatusKey(st);
+                if (stKey === 'CANCELADO') return;
+                const eligible = isFreeBudget || stKey === 'LIBERADO' || stKey === 'EMEXECUCAO' || stKey === 'FINALIZADO';
+                if (!eligible) return;
 
                 const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
                 const desc = serv ? serv.descricao : (it.servicoDescricao || it.descricao || `#${it.servico_id || it.servicoId || it.id || ''}`);
@@ -3912,6 +4119,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
         const sections = [];
 
         const { rows: payRows, dateCol } = await fetchMovDiariaPayments({ dateStr });
+        const allocCache = new Map();
         const allMovLines = [];
 
         payRows.forEach(p => {
@@ -3928,12 +4136,19 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
             const bucket = movBucketFromForma(p.forma_pagamento);
             const valorPago = Number(p.valor_pago || 0);
 
-            const alloc = buildAllocationRows(valorPago, itens);
+            let allocMap = allocCache.get(budgetSeq);
+            if (!allocMap) {
+                allocMap = buildAllocationsForBudget({ budget: b, items: itens });
+                allocCache.set(budgetSeq, allocMap);
+            }
+            const alloc = allocMap.get(String(p.id || '')) || buildAllocationRows(valorPago, itens);
+            const explicit = Boolean(extractAllocationItemIdFromObs(p.observacoes));
+            const touches = Array.isArray(alloc) ? alloc.filter(v => Number(v || 0) > 0).length : 0;
             itens.forEach((it, idx) => {
                 const execId = it.profissional_id;
                 const execName = findProfessionalNameByAnyId(execId) || String(it.executorNome || '');
                 const servName = findServiceNameById(it.servico_id) || String(it.servicodescricao || it.descricao || '');
-                const itemName = `${servName}${it.subdivisao ? ` • ${it.subdivisao}` : ''}`;
+                const itemName = `${servName}${it.subdivisao ? ` • ${it.subdivisao}` : ''}${explicit ? '' : (touches > 1 ? ' (auto)' : '')}`;
                 const paid = Number(alloc[idx] || 0);
                 if (!(paid > 0)) return;
                 allMovLines.push({
@@ -3956,8 +4171,8 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
             const profName = getProfessionalNameBySeqId(k);
 
             const atendimentoRows = buildAtendimentoRowsFromAgenda({ agendaRows: ags, profSeqId: k });
-            const finalizados = atendimentoRows.filter(r => normalizeKey(r.itemStatus) === 'FINALIZADO');
-            const pendentes = atendimentoRows.filter(r => normalizeKey(r.itemStatus) !== 'FINALIZADO');
+            const finalizados = atendimentoRows.filter(r => normalizeStatusKey(r.itemStatus) === 'FINALIZADO');
+            const pendentes = atendimentoRows.filter(r => normalizeStatusKey(r.itemStatus) !== 'FINALIZADO');
             const produzido = finalizados.reduce((acc, r) => acc + Number(r.itemTotal || 0), 0);
 
             totalProduzido += produzido;
@@ -4275,14 +4490,23 @@ async function printFechamentoDiarioFull({ dateStr, profSeqId }) {
 
         const finByCat = new Map();
         finRows.forEach(r => {
-            const k = String(r.categoria || '—');
+            const k = financeCategoryForReport(r);
             finByCat.set(k, (finByCat.get(k) || 0) + Number(r.valor || 0) * (String(r.tipo || '') === 'DEBITO' ? -1 : 1));
         });
         const finByForma = new Map();
-        finRows.forEach(r => {
+        finCred.forEach(r => {
             const k = normalizeFormaPagamento(r.forma_pagamento);
             finByForma.set(k, (finByForma.get(k) || 0) + Number(r.valor || 0));
         });
+
+        const consumoSeqs = Array.from(new Set((finRows || [])
+            .filter(r => normalizeKey(financeCategoryForReport(r)) === 'CONSUMO')
+            .map(r => getBudgetSeqFromFinanceRow(r))
+            .filter(n => Number.isFinite(n) && n > 0)
+            .map(n => String(n))));
+        const formaByBudgetSeq = consumoSeqs.length
+            ? await fetchBudgetPaymentFormasForSeqids(consumoSeqs)
+            : new Map();
 
         const { rows: budRows, dateCol: budDateCol } = await fetchBudgetsForDay({ dateStr });
         const budCriados = budRows.length;
@@ -4326,8 +4550,8 @@ async function printFechamentoDiarioFull({ dateStr, profSeqId }) {
             const ags = byProf.get(String(k)) || [];
             const profName = getProfessionalNameBySeqId(k);
             const atendimentoRows = buildAtendimentoRowsFromAgenda({ agendaRows: ags, profSeqId: k });
-            const finalizados = atendimentoRows.filter(r => normalizeKey(r.itemStatus) === 'FINALIZADO');
-            const pendentes = atendimentoRows.filter(r => normalizeKey(r.itemStatus) !== 'FINALIZADO');
+            const finalizados = atendimentoRows.filter(r => normalizeStatusKey(r.itemStatus) === 'FINALIZADO');
+            const pendentes = atendimentoRows.filter(r => normalizeStatusKey(r.itemStatus) !== 'FINALIZADO');
             const produzido = finalizados.reduce((acc, r) => acc + Number(r.itemTotal || 0), 0);
             totalProduzido += produzido;
             totalFinalizados += finalizados.length;
@@ -4390,13 +4614,20 @@ async function printFechamentoDiarioFull({ dateStr, profSeqId }) {
 
         const finDetails = finRows.slice(0, 300).map((t, idx) => {
             const pacNome = t.paciente_id ? (getPacienteDetailsBySeqId(t.paciente_id)?.nome || `Paciente #${t.paciente_id}`) : '—';
+            const catDisp = String(financeCategoryForReport(t) || '—');
+            let formaDisp = normalizeFormaPagamento(t.forma_pagamento);
+            if (normalizeKey(catDisp) === 'CONSUMO' && normalizeKey(formaDisp) === 'NAO INFORMADO') {
+                const seq = getBudgetSeqFromFinanceRow(t);
+                const mapped = formaByBudgetSeq.get(String(seq));
+                formaDisp = mapped || '—';
+            }
             return `
                 <tr>
                     <td style="padding:7px; border:1px solid #e5e7eb; text-align:right;">${escapeHtml(String(t.seqid || idx + 1))}</td>
                     <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(formatDateTime(t.data_transacao) || ''))}</td>
                     <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(pacNome || '—'))}</td>
-                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(t.categoria || '—'))}</td>
-                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(normalizeFormaPagamento(t.forma_pagamento) || '—'))}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(catDisp)}</td>
+                    <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(formaDisp || '—'))}</td>
                     <td style="padding:7px; border:1px solid #e5e7eb; text-align:right; font-weight:900;">${escapeHtml(fmtMoney(t.valor || 0))}</td>
                     <td style="padding:7px; border:1px solid #e5e7eb; text-align:center;">${escapeHtml(String(t.tipo || '—'))}</td>
                     <td style="padding:7px; border:1px solid #e5e7eb;">${escapeHtml(String(t.observacoes || '—'))}</td>
@@ -4619,13 +4850,19 @@ async function enrichCommissionsItems(rows) {
         if (!itemIds.length) return;
 
         const itemToServico = new Map();
+        const itemToBudgetId = new Map();
         const chunkSize = 200;
         for (let i = 0; i < itemIds.length; i += chunkSize) {
             const chunk = itemIds.slice(i, i + chunkSize);
-            const q = db.from('orcamento_itens').select('id, servico_id').in('id', chunk);
+            const q = db.from('orcamento_itens').select('id, servico_id, orcamento_id').in('id', chunk);
             const { data, error } = await withTimeout(q, 15000, 'orcamento_itens');
             if (error) throw error;
-            (data || []).forEach(it => itemToServico.set(String(it.id), String(it.servico_id)));
+            (data || []).forEach(it => {
+                const itId = String(it && it.id || '');
+                if (!itId) return;
+                itemToServico.set(itId, String(it && it.servico_id || ''));
+                itemToBudgetId.set(itId, String(it && it.orcamento_id || ''));
+            });
         }
 
         (rows || []).forEach(r => {
@@ -4634,6 +4871,13 @@ async function enrichCommissionsItems(rows) {
             r._servicoId = sid;
             const serv = (services || []).find(s => String(s.id) === String(sid));
             r._itemDescricao = serv ? serv.descricao : `Serviço ${sid}`;
+
+            const budId = itemToBudgetId.get(String(r.item_id || '')) || '';
+            if (budId) {
+                r._orcamentoId = budId;
+                const bud = (budgets || []).find(b => String(b && b.id || '') === budId);
+                if (bud && bud.seqid != null) r._orcamentoSeqid = bud.seqid;
+            }
         });
     } catch (err) {
         console.error('Erro ao enriquecer itens de comissão:', err);
@@ -4725,6 +4969,7 @@ function renderCommissionsTable(rows, statusVal) {
         const id = String(r.id);
         const dt = r.data_geracao ? formatDateTime(r.data_geracao) : '-';
         const prof = getProfessionalNameBySeqId(r.profissional_id);
+        const orcSeq = (r && r._orcamentoSeqid != null) ? String(r._orcamentoSeqid) : '-';
         const item = getCommissionItemLabel(r);
         const status = String(r.status || '-');
         const isDebit = status === 'ESTORNADA';
@@ -4759,6 +5004,7 @@ function renderCommissionsTable(rows, statusVal) {
             </td>
             <td>${dt}</td>
             <td style="font-weight: 600; width: 320px; max-width: 320px; white-space: normal; word-break: break-word;">${escapeHtml(prof)}</td>
+            <td style="text-align:center; font-weight:800;">${escapeHtml(orcSeq)}</td>
             <td style="white-space: normal;">${escapeHtml(item)}${meta}</td>
             <td style="text-align:right; font-weight:700;">${val}</td>
             <td><span class="badge badge-info">${status}</span></td>
@@ -4807,6 +5053,27 @@ async function markSelectedCommissionsPaid() {
     if (!toPay.length) {
         showToast('Nenhuma comissão selecionada está pendente.', true);
         return;
+    }
+
+    const itemIds = Array.from(new Set(toPay.map(r => r && r.item_id).filter(Boolean).map(String)));
+    if (itemIds.length) {
+        try {
+            const { data: itemsData, error: itErr } = await withTimeout(
+                db.from('orcamento_itens').select('id,status').in('id', itemIds),
+                15000,
+                'orcamento_itens:status_for_comm_pay'
+            );
+            if (itErr) throw itErr;
+            const statusById = new Map((itemsData || []).map(it => [String(it.id), String(it.status || '')]));
+            const notFinal = itemIds.filter(id2 => normalizeKey(statusById.get(id2)) !== 'FINALIZADO');
+            if (notFinal.length) {
+                showToast(`Existem ${notFinal.length} itens não finalizados. Finalize no Atendimento antes de pagar a comissão.`, true);
+                return;
+            }
+        } catch (e) {
+            showToast('Não foi possível validar status dos itens para pagamento de comissão.', true);
+            return;
+        }
     }
 
     const total = toPay.reduce((acc, r) => acc + Number(r.valor_comissao || 0), 0);
@@ -4990,281 +5257,87 @@ function escapeHtml(v) {
 }
 
 const HELP_PAGES = {
-    dashboardView: {
-        title: 'Dashboard',
-        html: `
-            <h4>O que é</h4>
-            <p>Visão geral do dia, com indicadores rápidos e atalhos para acompanhamento.</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Selecione a data e o profissional (quando disponível) para atualizar os indicadores.</li>
-                <li>Use os KPIs para acompanhar: agendados, recebido, orçamentos e pacientes do dia.</li>
-                <li>Use o gráfico e a tabela de formas de pagamento para conferir o recebido por forma.</li>
-            </ul>
-        `
-    },
-    patientListView: {
-        title: 'Pacientes',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Cadastro, busca e gerenciamento de pacientes.</p>
-            <h4>Principais ações</h4>
-            <ul>
-                <li>Novo: cria um paciente e habilita os demais módulos (orçamentos, agenda, financeiro).</li>
-                <li>Buscar: digite nome/telefone/CPF para localizar rapidamente.</li>
-                <li>Abrir: acessa o prontuário do paciente (detalhes, evolução, documentos e financeiro).</li>
-            </ul>
-            <h4>Boas práticas</h4>
-            <ul>
-                <li>Preencha nome completo e ao menos um contato válido.</li>
-                <li>Cadastre CPF corretamente para evitar duplicidades e erros de emissão.</li>
-            </ul>
-        `
-    },
-    patientFormView: {
-        title: 'Pacientes (Cadastro)',
-        html: `
-            <h4>Como preencher</h4>
-            <ul>
-                <li>Dados pessoais: nome, data de nascimento e documento (se aplicável).</li>
-                <li>Contato: celular/telefone e e-mail.</li>
-                <li>Endereço: preencha se a clínica utiliza para cobranças/termos.</li>
-            </ul>
-            <h4>Salvar</h4>
-            <p>Após salvar, o paciente passa a ficar disponível para agenda, orçamentos e financeiro.</p>
-        `
-    },
-    patientDetailsView: {
-        title: 'Prontuário do Paciente',
-        html: `
-            <h4>O que contém</h4>
-            <ul>
-                <li>Resumo do paciente e histórico.</li>
-                <li>Evolução/atendimentos (registros do profissional).</li>
-                <li>Documentos e termos (TCLE) anexados.</li>
-                <li>Financeiro: extrato do paciente.</li>
-            </ul>
-            <h4>Dicas</h4>
-            <ul>
-                <li>Use as abas para navegar e manter o registro clínico organizado.</li>
-                <li>Registre evolução com clareza e data/hora corretas.</li>
-            </ul>
-        `
-    },
-    professionalListView: {
-        title: 'Profissionais',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Cadastro e gestão de profissionais (dentistas, auxiliares e demais executores).</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Cadastre nome, tipo e informações necessárias para agenda e comissões.</li>
-                <li>Mantenha e-mail correto para vinculação ao acesso do usuário (quando aplicável).</li>
-            </ul>
-        `
-    },
-    professionalFormView: {
-        title: 'Profissionais (Cadastro)',
-        html: `
-            <h4>Como preencher</h4>
-            <ul>
-                <li>Nome e tipo: definem a atuação e onde aparece no sistema.</li>
-                <li>Especialidade: ajuda em relatórios e organização interna.</li>
-                <li>Comissões: use quando a clínica paga por procedimento/percentual.</li>
-            </ul>
-        `
-    },
-    specialtiesListView: {
-        title: 'Especialidades',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Lista de especialidades usadas pelo sistema. Vem com uma configuração padrão, mas pode ser ajustada conforme a empresa.</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Inclua/remova especialidades conforme os serviços oferecidos.</li>
-                <li>Evite duplicidades para não confundir relatórios e cadastros.</li>
-            </ul>
-        `
-    },
-    specialtyFormView: {
-        title: 'Especialidades (Cadastro)',
-        html: `
-            <h4>Como preencher</h4>
-            <ul>
-                <li>Descrição clara e padronizada (ex.: Ortodontia, Endodontia).</li>
-            </ul>
-        `
-    },
-    servicesListView: {
-        title: 'Serviços',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Cadastro de procedimentos/serviços usados nos orçamentos e no atendimento.</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Cadastre descrição e valor base do serviço.</li>
-                <li>Use subdivisão quando precisar detalhar variações do mesmo serviço.</li>
-            </ul>
-        `
-    },
-    serviceFormView: {
-        title: 'Serviços (Cadastro)',
-        html: `
-            <h4>Como preencher</h4>
-            <ul>
-                <li>Descrição: nome do procedimento.</li>
-                <li>Valor: valor padrão (pode variar por orçamento conforme ajustes).</li>
-                <li>Tipo/IE: define se é serviço/estoque conforme regras da clínica.</li>
-            </ul>
-        `
-    },
-    budgetsListView: {
-        title: 'Orçamentos',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Criação e gestão de orçamentos e itens/procedimentos.</p>
-            <h4>Fluxo recomendado</h4>
-            <ol>
-                <li>Criar orçamento para o paciente.</li>
-                <li>Adicionar itens (serviços) com quantidade e valor.</li>
-                <li>Definir executor do item (profissional).</li>
-                <li>Registrar pagamentos e acompanhar saldo.</li>
-                <li>Finalizar itens via Atendimento (fonte oficial de execução).</li>
-            </ol>
-        `
-    },
-    budgetFormView: {
-        title: 'Orçamentos (Itens e Pagamentos)',
-        html: `
-            <h4>Itens</h4>
-            <ul>
-                <li>Selecione serviço, quantidade e valor.</li>
-                <li>Defina o executor (profissional responsável por executar).</li>
-                <li>Status do item acompanha o andamento (Pendente/Em execução/Finalizado).</li>
-            </ul>
-            <h4>Pagamentos</h4>
-            <ul>
-                <li>Registre valor pago e forma de pagamento.</li>
-                <li>Acompanhe total pago e saldo.</li>
-                <li>Se houver estorno/cancelamento, siga o fluxo do sistema para manter financeiro consistente.</li>
-            </ul>
-        `
-    },
-    financeiroView: {
-        title: 'Financeiro',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Extrato e lançamentos financeiros, incluindo pagamentos e movimentações.</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Novo Lançamento: registra entradas/saídas (conforme permissão).</li>
-                <li>Movimentação Diária: imprime relatório de pagamentos por item (alocado).</li>
-                <li>Fechamento Diário: imprime relatório completo do dia (produção, financeiro, pendências e conciliação).</li>
-            </ul>
-        `
-    },
-    commissionsView: {
-        title: 'Comissões',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Consulta e pagamento de comissões por período e profissional.</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Selecione período e profissional para buscar.</li>
-                <li>Pague comissões selecionadas quando autorizado.</li>
-                <li>Use transferência de profissional quando necessário, com justificativa.</li>
-            </ul>
-        `
-    },
-    atendimentoView: {
-        title: 'Atendimento',
-        html: `
-            <h4>Fonte oficial de execução</h4>
-            <p>Um atendimento conta como realizado quando o profissional clica em <strong>Finalizar</strong> no item.</p>
-            <h4>Como usar</h4>
-            <ol>
-                <li>Selecione data e profissional (executor).</li>
-                <li>Localize o item do dia.</li>
-                <li>Registre evolução (se necessário).</li>
-                <li>Clique em <strong>Finalizar</strong> para marcar o item como FINALIZADO.</li>
-            </ol>
-        `
-    },
-    agendaView: {
-        title: 'Agenda',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Gerenciar agendamentos por profissional e período.</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Selecione data e profissional para ver os horários.</li>
-                <li>Crie/edite/cancele agendamentos conforme necessidade.</li>
-                <li>Imprima agenda do dia/semana para controle interno.</li>
-            </ul>
-        `
-    },
-    proteseView: {
-        title: 'Produção Protética',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Controle de ordens protéticas internas e externas com linha do tempo.</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Crie uma OP vinculada ao paciente e, quando aplicável, ao orçamento.</li>
-                <li>Acompanhe fases e prazos (alerta de vencimento).</li>
-                <li>Registre eventos (idas e vindas) e anexos.</li>
-                <li>Use o botão de imprimir para gerar relatório com histórico e anexos.</li>
-            </ul>
-        `
-    },
-    cancelledBudgetsView: {
-        title: 'Audit Cancelamentos',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Auditoria de orçamentos cancelados, com rastreabilidade e conferência.</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Use filtros e confira os registros de cancelamento.</li>
-                <li>Verifique termos/justificativas quando disponíveis.</li>
-            </ul>
-        `
-    },
-    usersAdminView: {
-        title: 'Gerenciar Usuários',
-        html: `
-            <h4>Objetivo</h4>
-            <p>Cadastro de usuários do sistema e atribuição de permissões.</p>
-            <h4>Como usar</h4>
-            <ul>
-                <li>Crie usuários e defina perfis/roles.</li>
-                <li>Revise permissões para proteger dados e operações críticas.</li>
-            </ul>
-        `
-    },
-    userAdminFormView: {
-        title: 'Gerenciar Usuários (Cadastro)',
-        html: `
-            <h4>Como preencher</h4>
-            <ul>
-                <li>Nome, e-mail e perfil.</li>
-                <li>Permissões por módulo (ex.: financeiro, comissões, cancelamentos).</li>
-            </ul>
-        `
-    }
+    dashboardView: { title: 'Dashboard', manualAnchor: 'dashboard' },
+
+    patientListView: { title: 'Pacientes', manualAnchor: 'pacientes' },
+    patientFormView: { title: 'Pacientes', manualAnchor: 'pacientes' },
+    patientDetailsView: { title: 'Pacientes', manualAnchor: 'pacientes' },
+
+    professionalListView: { title: 'Profissionais', manualAnchor: 'profissionais' },
+    professionalFormView: { title: 'Profissionais', manualAnchor: 'profissionais' },
+
+    specialtiesListView: { title: 'Especialidades', manualAnchor: 'especialidades' },
+    specialtyFormView: { title: 'Especialidades', manualAnchor: 'especialidades' },
+
+    servicesListView: { title: 'Serviços', manualAnchor: 'servicos' },
+    serviceFormView: { title: 'Serviços', manualAnchor: 'servicos' },
+
+    budgetsListView: { title: 'Orçamentos', manualAnchor: 'orcamentos' },
+    budgetFormView: { title: 'Orçamentos', manualAnchor: 'orcamentos' },
+
+    financeiroView: { title: 'Financeiro', manualAnchor: 'financeiro' },
+    commissionsView: { title: 'Comissões', manualAnchor: 'comissoes' },
+    atendimentoView: { title: 'Atendimento', manualAnchor: 'atendimento' },
+    agendaView: { title: 'Agenda', manualAnchor: 'agenda' },
+    proteseView: { title: 'Produção Protética', manualAnchor: 'producao_protetica' },
+    cancelledBudgetsView: { title: 'Audit Cancelamentos', manualAnchor: 'audit_cancelamentos' },
+
+    usersAdminView: { title: 'Gerenciar Usuários', manualAnchor: 'usuarios' },
+    userAdminFormView: { title: 'Gerenciar Usuários', manualAnchor: 'usuarios' }
 };
 
 function getActiveSectionId() {
-    const el = document.querySelector('section.view-section:not(.hidden)');
-    return el ? String(el.id || '') : '';
+    const active = document.querySelector('section.view-section.active');
+    if (active && active.id) return String(active.id);
+
+    const visible = document.querySelector('section.view-section:not(.hidden)');
+    if (visible && visible.id) return String(visible.id);
+
+    const navActive = document.querySelector('.sidebar-nav .nav-item.active[id]');
+    if (navActive) {
+        const navId = String(navActive.id || '');
+        const map = {
+            navDashboard: 'dashboardView',
+            navPatients: 'patientListView',
+            navProfessionals: 'professionalListView',
+            navSpecialties: 'specialtiesListView',
+            navServices: 'servicesListView',
+            navBudgets: 'budgetsListView',
+            navFinanceiro: 'financeiroView',
+            navCommissions: 'commissionsView',
+            navAtendimento: 'atendimentoView',
+            navAgenda: 'agendaView',
+            navProtese: 'proteseView',
+            navUsersAdmin: 'usersAdminView',
+            navCancelledBudgets: 'cancelledBudgetsView',
+            navEmpresas: 'empresasListView'
+        };
+        return map[navId] || '';
+    }
+
+    return '';
 }
 
 function openHelpModalForSection(sectionId) {
     if (!helpModal || !helpModalTitle || !helpModalBody) return;
     const page = HELP_PAGES[sectionId] || null;
     const title = page ? page.title : 'Ajuda';
-    const html = page ? page.html : `
-        <p>Ajuda não disponível para esta tela.</p>
-        <p>Telas disponíveis: Pacientes, Profissionais, Especialidades, Serviços, Orçamentos, Financeiro, Comissões, Atendimento, Agenda, Produção Protética, Audit Cancelamentos, Usuários e Dashboard.</p>
+    const manualAnchor = page && page.manualAnchor ? String(page.manualAnchor) : '';
+    const manualUrl = manualAnchor ? `docs/manual_occ.html#${encodeURIComponent(manualAnchor)}` : 'docs/manual_occ.html';
+    const html = `
+        <div style="display:flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; margin-bottom: 10px;">
+            <div style="color:#6b7280; font-size: 12px;">
+                Conteúdo do Manual do Usuário
+            </div>
+            <div style="display:flex; gap: 10px; flex-wrap: wrap;">
+                <a href="${manualUrl}" target="_blank" rel="noopener noreferrer" style="color:#0066cc; text-decoration:none; font-weight:800;">Abrir em nova aba</a>
+                <a href="docs/Manual_OCC.pdf" target="_blank" rel="noopener noreferrer" style="color:#0066cc; text-decoration:none; font-weight:800;">Abrir PDF</a>
+            </div>
+        </div>
+        <iframe
+            src="${manualUrl}"
+            style="width: 100%; height: 72vh; border: 1px solid #e5e7eb; border-radius: 10px;"
+        ></iframe>
     `;
     helpModalTitle.textContent = title;
     helpModalBody.innerHTML = html;
@@ -5288,7 +5361,7 @@ function initHelpHotkey() {
         if (e.key === 'Escape') {
             if (helpModal && !helpModal.classList.contains('hidden')) closeHelpModal();
         }
-    });
+    }, true);
     if (btnCloseHelpModal) btnCloseHelpModal.addEventListener('click', closeHelpModal);
     if (btnCloseHelpModal2) btnCloseHelpModal2.addEventListener('click', closeHelpModal);
     if (helpModal) helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelpModal(); });
@@ -5939,6 +6012,7 @@ function renderAgendaSlots({ dateStr, profSeqId, disponibilidade, agendamentos }
     if (!agendaSlotsBody) return;
 
     const slots = [];
+    const slotStepByTime = new Map();
     disponibilidade.forEach(d => {
         const startM = parseTimeToMinutes(d.hora_inicio);
         const endM = parseTimeToMinutes(d.hora_fim);
@@ -5948,7 +6022,9 @@ function renderAgendaSlots({ dateStr, profSeqId, disponibilidade, agendamentos }
         for (let m = startM; m + step <= endM; m += step) {
             const hh = String(Math.floor(m / 60)).padStart(2, '0');
             const mm = String(m % 60).padStart(2, '0');
-            slots.push({ time: `${hh}:${mm}`, step });
+            const time = `${hh}:${mm}`;
+            slots.push({ time, step });
+            if (!slotStepByTime.has(time)) slotStepByTime.set(time, step);
         }
     });
 
@@ -5966,25 +6042,46 @@ function renderAgendaSlots({ dateStr, profSeqId, disponibilidade, agendamentos }
         if (!byStart.has(key)) byStart.set(key, a);
     });
 
+    const isWithinDisponibilidade = (time) => {
+        const m = parseTimeToMinutes(`${time}:00`);
+        if (m == null) return false;
+        return (disponibilidade || []).some(r => {
+            const s = parseTimeToMinutes(r.hora_inicio);
+            const e = parseTimeToMinutes(r.hora_fim);
+            if (s == null || e == null) return false;
+            return m >= s && m < e;
+        });
+    };
+
     const profName = getProfessionalNameBySeqId(profSeqId);
     if (agendaSummary) agendaSummary.textContent = `${profName} — ${dateStr.split('-').reverse().join('/')}`;
 
     agendaSlotsBody.innerHTML = '';
-    slots.sort((a, b) => a.time.localeCompare(b.time)).forEach(s => {
-        const a = byStart.get(s.time);
+    const timesSet = new Set(slots.map(s => s.time));
+    Array.from(byStart.keys()).forEach(t => timesSet.add(t));
+    const times = Array.from(timesSet).sort((a, b) => a.localeCompare(b));
+
+    times.forEach(time => {
+        const a = byStart.get(time);
+        const hasDisp = isWithinDisponibilidade(time);
+        if (!hasDisp && !a) return;
+
+        const step = slotStepByTime.get(time) || 30;
         const pacienteHtml = a
             ? (a.paciente_id ? getPacienteSummaryHtmlBySeqId(a.paciente_id) : `<span style="color: var(--text-muted);">${a.titulo || '(Sem paciente)'}</span>`)
             : '';
-        const status = a ? String(a.status || 'MARCADO') : 'LIVRE';
+        const statusRaw = a ? String(a.status || 'MARCADO') : 'LIVRE';
+        const status = a && !hasDisp ? `${statusRaw} (Fora da disponibilidade)` : statusRaw;
 
         const tr = document.createElement('tr');
+        if (a && !hasDisp) tr.style.background = '#fff7ed';
         tr.innerHTML = `
-            <td style="font-weight:700;">${s.time}</td>
+            <td style="font-weight:700;">${time}</td>
             <td>${a ? (pacienteHtml || '-') : '-'}</td>
             <td>${status}</td>
             <td>
                 ${a ? `<button class="btn btn-secondary btn-sm" data-action="edit" data-id="${a.id}"><i class="ri-edit-line"></i> Editar</button>` :
-            `<button class="btn btn-primary btn-sm" data-action="new" data-time="${s.time}" data-step="${s.step}"><i class="ri-add-line"></i> Agendar</button>`}
+            `<button class="btn btn-primary btn-sm" data-action="new" data-time="${time}" data-step="${step}"><i class="ri-add-line"></i> Agendar</button>`}
             </td>
         `;
         agendaSlotsBody.appendChild(tr);
@@ -6027,12 +6124,28 @@ function buildAgendaDayRowsForPrint({ dateStr, disponibilidade, agendamentos }) 
         if (!byStart.has(key)) byStart.set(key, a);
     });
 
-    return slots
-        .sort((a, b) => a.time.localeCompare(b.time))
-        .map(s => {
-            const a = byStart.get(s.time);
+    const isWithinDisponibilidade = (time) => {
+        const m = parseTimeToMinutes(`${time}:00`);
+        if (m == null) return false;
+        return (disponibilidade || []).some(r => {
+            const s = parseTimeToMinutes(r.hora_inicio);
+            const e = parseTimeToMinutes(r.hora_fim);
+            if (s == null || e == null) return false;
+            return m >= s && m < e;
+        });
+    };
+
+    const timesSet = new Set((slots || []).map(s => s.time));
+    Array.from(byStart.keys()).forEach(t => timesSet.add(t));
+
+    return Array.from(timesSet)
+        .sort((a, b) => a.localeCompare(b))
+        .map(time => {
+            const a = byStart.get(time);
+            const hasDisp = isWithinDisponibilidade(time);
+            if (!hasDisp && !a) return '';
             if (!a) {
-                return `<tr><td style="width: 90px; font-weight:700;">${s.time}</td><td style="color:#6b7280;">—</td><td style="width: 120px;">LIVRE</td></tr>`;
+                return `<tr><td style="width: 90px; font-weight:700;">${time}</td><td style="color:#6b7280;">—</td><td style="width: 120px;">LIVRE</td></tr>`;
             }
 
             const p = a.paciente_id ? getPacienteDetailsBySeqId(a.paciente_id) : null;
@@ -6041,11 +6154,13 @@ function buildAgendaDayRowsForPrint({ dateStr, disponibilidade, agendamentos }) 
             const cel = p && p.celular ? p.celular : '';
             const em = p && p.email ? p.email : '';
             const meta = [cpf && `CPF: ${cpf}`, cel && `Cel: ${cel}`, em && `Email: ${em}`].filter(Boolean).join(' • ');
-            const status = String(a.status || 'MARCADO');
+            const statusBase = String(a.status || 'MARCADO');
+            const status = !hasDisp ? `${statusBase} (Fora da disponibilidade)` : statusBase;
+            const trStyle = !hasDisp ? ' style="background:#fff7ed;"' : '';
 
             return `
-                <tr>
-                    <td style="width: 90px; font-weight:700;">${s.time}</td>
+                <tr${trStyle}>
+                    <td style="width: 90px; font-weight:700;">${time}</td>
                     <td>
                         <div style="font-weight:700;">${paciente}</div>
                         ${meta ? `<div style="font-size: 12px; color: #6b7280; margin-top: 2px;">${meta}</div>` : ''}
@@ -6054,6 +6169,7 @@ function buildAgendaDayRowsForPrint({ dateStr, disponibilidade, agendamentos }) 
                 </tr>
             `;
         })
+        .filter(Boolean)
         .join('');
 }
 
@@ -6201,6 +6317,11 @@ function buildWeekCompactGrid({ weekStart, disponibilidade, agendamentos }) {
             }
         });
     }
+    (agendamentos || []).forEach(a => {
+        if (!a || !a.inicio) return;
+        const t = formatTimeHHMM(new Date(a.inicio));
+        if (t) timesSet.add(t);
+    });
 
     const times = Array.from(timesSet).sort((a, b) => a.localeCompare(b));
 
@@ -6232,15 +6353,16 @@ function buildWeekCompactGrid({ weekStart, disponibilidade, agendamentos }) {
                 if (s == null || e == null || m == null) return false;
                 return m >= s && m < e;
             });
-            if (!hasDisp) {
+            const a = agByDateTime.get(`${d.dateStr}|${t}`);
+            if (!hasDisp && !a) {
                 return `<td style="height: 52px; background: #fff;"></td>`;
             }
-            const a = agByDateTime.get(`${d.dateStr}|${t}`);
             const pat = a && a.paciente_id ? getPacienteDetailsBySeqId(a.paciente_id) : null;
             const name = a ? (pat ? String(pat.nome || '') : String(a.titulo || '')) : '';
             const cel = pat ? String(pat.celular || '') : '';
+            const cellStyle = !hasDisp && a ? 'background:#fff7ed; border: 1px solid #fdba74;' : '';
             return `
-                <td style="height: 52px; padding: 6px; text-align:center;">
+                <td style="height: 52px; padding: 6px; text-align:center; ${cellStyle}">
                     <div style="font-weight:900; font-size: 12px; line-height: 1;">${t}</div>
                     <div style="margin-top: 2px; font-size: 10px; font-weight: 700; color: #111827; line-height: 1.05; max-height: 26px; overflow: hidden;">${name || '&nbsp;'}</div>
                     <div style="margin-top: 2px; font-size: 10px; color: #6b7280; line-height: 1; max-height: 12px; overflow: hidden;">${cel || '&nbsp;'}</div>
@@ -6509,6 +6631,41 @@ function closeAgendaModal() {
     if (modalAgenda) modalAgenda.classList.add('hidden');
 }
 
+function renderAgendaAgendamentosOnly({ agendamentos }) {
+    if (!agendaSlotsBody) return;
+    if (!agendamentos || !agendamentos.length) {
+        if (agendaSlotsBody) agendaSlotsBody.innerHTML = '';
+        if (agendaEmptyState) agendaEmptyState.classList.remove('hidden');
+        return;
+    }
+    if (agendaEmptyState) agendaEmptyState.classList.add('hidden');
+    agendaSlotsBody.innerHTML = '';
+    (agendamentos || [])
+        .slice()
+        .sort((a, b) => String(a.inicio || '').localeCompare(String(b.inicio || '')))
+        .forEach(a => {
+            const tr = document.createElement('tr');
+            const hora = a.inicio ? formatTimeHHMM(new Date(a.inicio)) : '--:--';
+            const pacienteHtml = a.paciente_id
+                ? getPacienteSummaryHtmlBySeqId(a.paciente_id)
+                : `<span style="color: var(--text-muted);">${escapeHtml(String(a.titulo || '(Sem paciente)'))}</span>`;
+            tr.innerHTML = `
+                <td style="font-weight:700;">${escapeHtml(hora)}</td>
+                <td>${pacienteHtml}</td>
+                <td>${escapeHtml(String(a.status || 'MARCADO'))}</td>
+                <td><button class="btn btn-secondary btn-sm" data-action="edit" data-id="${a.id}"><i class="ri-edit-line"></i> Editar</button></td>
+            `;
+            agendaSlotsBody.appendChild(tr);
+        });
+    agendaSlotsBody.querySelectorAll('button[data-action="edit"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const a = (window.__agendaLast && Array.isArray(window.__agendaLast.agendamentos)) ? window.__agendaLast.agendamentos.find(x => String(x.id) === String(id)) : null;
+            if (a) openAgendaModalEdit(a);
+        });
+    });
+}
+
 async function saveAgendaFromModal() {
     if (!agendaProfessional || !agendaDate) return;
     const profSeqId = agendaProfessional.value;
@@ -6553,6 +6710,7 @@ async function saveAgendaFromModal() {
                 .lt('inicio', fimIso)
                 .gt('fim', inicioIso);
             if (id) conflictQ = conflictQ.neq('id', id);
+            conflictQ = conflictQ.limit(1);
             const { data: conflicts, error: cErr } = await withTimeout(conflictQ, 15000, 'agenda_agendamentos:conflicts');
             if (cErr) throw cErr;
             if (conflicts && conflicts.length) {
@@ -6567,17 +6725,56 @@ async function saveAgendaFromModal() {
             console.warn('Aviso: Falha ao checar conflito de horário.', err);
         }
 
+        const selectCols = 'id,empresa_id,profissional_id,paciente_id,inicio,fim,status,titulo,observacoes';
+        let savedRow = null;
         if (id) {
-            const { error } = await withTimeout(db.from('agenda_agendamentos').update(payload).eq('id', id).eq('empresa_id', currentEmpresaId), 15000, 'agenda_agendamentos:update');
+            const { data, error } = await withTimeout(
+                db.from('agenda_agendamentos').update(payload).eq('id', id).eq('empresa_id', currentEmpresaId).select(selectCols).single(),
+                15000,
+                'agenda_agendamentos:update'
+            );
             if (error) throw error;
+            savedRow = data || null;
             showToast('Agendamento atualizado.');
         } else {
-            const { error } = await withTimeout(db.from('agenda_agendamentos').insert(payload), 15000, 'agenda_agendamentos:insert');
+            const { data, error } = await withTimeout(
+                db.from('agenda_agendamentos').insert(payload).select(selectCols).single(),
+                15000,
+                'agenda_agendamentos:insert'
+            );
             if (error) throw error;
+            savedRow = data || null;
             showToast('Agendamento criado.');
         }
         closeAgendaModal();
-        await fetchAgendaForUI();
+
+        const localDateStr = String(inicioVal || '').slice(0, 10);
+        const canPatchAgenda =
+            savedRow
+            && agendaDate
+            && agendaProfessional
+            && String(agendaDate.value || '') === localDateStr
+            && String(agendaProfessional.value || '') === String(profSeqId);
+        if (canPatchAgenda) {
+            window.__agendaLast = window.__agendaLast || { empresaId: null, profSeqId: null, dateStr: null, disponibilidade: [], agendamentos: [] };
+            window.__agendaLast.empresaId = currentEmpresaId;
+            window.__agendaLast.profSeqId = Number(profSeqId);
+            window.__agendaLast.dateStr = localDateStr;
+            const list = Array.isArray(window.__agendaLast.agendamentos) ? window.__agendaLast.agendamentos.slice() : [];
+            const idx = list.findIndex(x => String(x && x.id) === String(savedRow.id));
+            if (idx >= 0) list[idx] = savedRow;
+            else list.push(savedRow);
+            list.sort((a, b) => String(a.inicio || '').localeCompare(String(b.inicio || '')));
+            window.__agendaLast.agendamentos = list;
+
+            if (Array.isArray(window.__agendaLast.disponibilidade) && window.__agendaLast.disponibilidade.length) {
+                renderAgendaSlots({ dateStr: localDateStr, profSeqId, disponibilidade: window.__agendaLast.disponibilidade, agendamentos: list });
+            } else {
+                renderAgendaAgendamentosOnly({ agendamentos: list });
+            }
+        }
+
+        setTimeout(() => { try { fetchAgendaForUI(); } catch { } }, 80);
     } catch (err) {
         console.error('Erro ao salvar agendamento:', err);
         const code = err && err.code ? err.code : '-';
@@ -6679,30 +6876,86 @@ function buildAgendaPayload(empresaId, profSeqId) {
 async function saveAgendaDisponibilidade(profSeqId, empresaId) {
     const { rows, errors } = buildAgendaPayload(empresaId, profSeqId);
     if (errors.length) {
-        showToast(errors[0], true);
-        return false;
+        throw new Error(errors[0]);
     }
 
-    try {
-        const del = db.from('agenda_disponibilidade')
-            .delete()
-            .eq('empresa_id', empresaId)
-            .eq('profissional_id', Number(profSeqId));
-        const { error: delError } = await withTimeout(del, 15000, 'agenda_disponibilidade:delete');
-        if (delError) throw delError;
+    const profId = Number(profSeqId);
+    if (!empresaId || !profId) {
+        throw new Error('Empresa ou profissional inválido para salvar disponibilidade.');
+    }
 
-        if (rows.length) {
-            const { error: insError } = await withTimeout(db.from('agenda_disponibilidade').insert(rows), 15000, 'agenda_disponibilidade:insert');
-            if (insError) throw insError;
+    const baseQ = db.from('agenda_disponibilidade')
+        .select('id,dia_semana,hora_inicio,hora_fim,slot_minutos,ativo')
+        .eq('empresa_id', empresaId)
+        .eq('profissional_id', profId);
+
+    const { data: existing, error: exErr } = await withTimeout(baseQ, 15000, 'agenda_disponibilidade:select');
+    if (exErr) throw exErr;
+
+    const existingRows = existing || [];
+    const desiredByDay = new Map();
+    rows.forEach(r => desiredByDay.set(Number(r.dia_semana), r));
+
+    if (rows.length === 0) {
+        if (existingRows.length) {
+            const del = db.from('agenda_disponibilidade')
+                .delete()
+                .eq('empresa_id', empresaId)
+                .eq('profissional_id', profId);
+            const { error: delError } = await withTimeout(del, 15000, 'agenda_disponibilidade:delete_all');
+            if (delError) throw delError;
         }
-
         return true;
-    } catch (err) {
-        const msg = (err && err.message) ? err.message : String(err);
-        console.error('Erro ao salvar agenda:', msg);
-        showToast('Erro ao salvar agenda. Verifique se o SQL da agenda foi aplicado.', true);
-        return false;
     }
+
+    const rowsByDay = new Map();
+    existingRows.forEach(r => {
+        const d = Number(r.dia_semana);
+        if (!rowsByDay.has(d)) rowsByDay.set(d, []);
+        rowsByDay.get(d).push(r);
+    });
+
+    const toDeleteIds = [];
+    rowsByDay.forEach((arr, day) => {
+        arr.forEach((r, idx) => {
+            if (!desiredByDay.has(day)) toDeleteIds.push(r.id);
+            if (desiredByDay.has(day) && idx > 0) toDeleteIds.push(r.id);
+        });
+    });
+
+    if (toDeleteIds.length) {
+        const delDupe = db.from('agenda_disponibilidade')
+            .delete()
+            .in('id', toDeleteIds);
+        const { error: delDupeErr } = await withTimeout(delDupe, 15000, 'agenda_disponibilidade:delete_ids');
+        if (delDupeErr) throw delDupeErr;
+    }
+
+    for (const [day, desired] of desiredByDay.entries()) {
+        const list = rowsByDay.get(day) || [];
+        const keep = list.length ? list[0] : null;
+        if (keep && keep.id) {
+            const upd = db.from('agenda_disponibilidade')
+                .update({
+                    dia_semana: desired.dia_semana,
+                    hora_inicio: desired.hora_inicio,
+                    hora_fim: desired.hora_fim,
+                    slot_minutos: desired.slot_minutos,
+                    ativo: true,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', keep.id)
+                .eq('empresa_id', empresaId);
+            const { error: updErr } = await withTimeout(upd, 15000, `agenda_disponibilidade:update:${day}`);
+            if (updErr) throw updErr;
+        } else {
+            const ins = db.from('agenda_disponibilidade').insert(desired);
+            const { error: insErr } = await withTimeout(ins, 15000, `agenda_disponibilidade:insert:${day}`);
+            if (insErr) throw insErr;
+        }
+    }
+
+    return true;
 }
 
 // Check CPF duplicacy
@@ -7272,29 +7525,44 @@ professionalForm.addEventListener('submit', async e => {
     }
 
     try {
+        let saved = null;
         if (id) {
-            const { error } = await db.from('profissionais').update(profData).eq('id', id);
+            const q = db.from('profissionais').update(profData).eq('id', id);
+            const { error } = await withTimeout(q, 20000, 'profissionais:update');
             if (error) throw error;
 
             const index = professionals.findIndex(p => p.id === id);
             if (index !== -1) professionals[index] = { ...professionals[index], ...profData };
-            await saveAgendaDisponibilidade(profData.seqid, currentEmpresaId);
-            showToast('Profissional atualizado com sucesso!');
+            saved = profData;
         } else {
             profData.id = generateId();
             profData.seqid = getNextSeqId(professionals);
 
-            const { data, error } = await db.from('profissionais').insert(profData).select().single();
+            const q = db.from('profissionais').insert(profData).select().single();
+            const { data, error } = await withTimeout(q, 20000, 'profissionais:insert');
             if (error) throw error;
 
             if (data) professionals.push(data);
-            await saveAgendaDisponibilidade((data && data.seqid) ? data.seqid : profData.seqid, currentEmpresaId);
-            showToast('Profissional cadastrado com sucesso!');
+            saved = data || profData;
+            document.getElementById('editProfessionalId').value = String(saved.id || '');
+            document.getElementById('profIdDisplay').value = String(saved.seqid || '');
         }
+
+        try {
+            await saveAgendaDisponibilidade(saved.seqid, currentEmpresaId);
+        } catch (err2) {
+            const msg2 = (err2 && err2.message) ? err2.message : String(err2);
+            console.error('Erro ao salvar disponibilidade do profissional:', msg2);
+            showToast(`Profissional salvo, mas disponibilidade NÃO foi salva: ${msg2}`, true);
+            return;
+        }
+
+        showToast(id ? 'Profissional atualizado com sucesso!' : 'Profissional cadastrado com sucesso!');
         showList('professionals');
     } catch (error) {
         console.error("Error saving professional:", error);
-        showToast("Erro ao salvar profissional.", true);
+        const msg = (error && error.message) ? error.message : 'Erro ao salvar profissional.';
+        showToast(msg, true);
     }
 });
 
@@ -9009,7 +9277,7 @@ if (budgetForm) {
                             .select('valor, tipo, categoria, observacoes')
                             .eq('empresa_id', currentEmpresaId)
                             .eq('referencia_id', budgetSeq)
-                            .in('categoria', ['PAGAMENTO']),
+                            .in('categoria', ['PAGAMENTO', 'CONSUMO']),
                         15000,
                         'financeiro_transacoes:for_tipo_change'
                     );
@@ -9018,7 +9286,7 @@ if (budgetForm) {
                         .filter(r => String(r.tipo || '') === 'CREDITO' && String(r.categoria || '') === 'PAGAMENTO')
                         .reduce((acc, r) => acc + Number(r.valor || 0), 0);
                     consumoDebitosTotal = rows
-                        .filter(r => String(r.tipo || '') === 'DEBITO' && String(r.categoria || '') === 'PAGAMENTO' && String(r.observacoes || '').includes('[Consumo]'))
+                        .filter(r => String(r.tipo || '') === 'DEBITO' && (String(r.categoria || '') === 'CONSUMO' || (String(r.categoria || '') === 'PAGAMENTO' && String(r.observacoes || '').includes('[Consumo]'))))
                         .reduce((acc, r) => acc + Number(r.valor || 0), 0);
                 } catch {
                 }
@@ -9177,6 +9445,21 @@ if (budgetForm) {
 
                 const index = budgets.findIndex(b => b.id === id);
                 if (index !== -1) budgets[index] = { ...budgets[index], ...budgetData };
+
+                try {
+                    const { data: refreshedItems, error: refErr } = await withTimeout(
+                        db.from('orcamento_itens')
+                            .select('*')
+                            .eq('empresa_id', currentEmpresaId)
+                            .eq('orcamento_id', id)
+                            .order('created_at', { ascending: true }),
+                        15000,
+                        'orcamento_itens:refresh_after_save'
+                    );
+                    if (refErr) throw refErr;
+                    if (index !== -1) budgets[index].orcamento_itens = refreshedItems || [];
+                } catch (e2) {
+                }
                 showToast('Orçamento atualizado com sucesso!');
             } else {
                 const newId = generateId();
@@ -9755,6 +10038,93 @@ function buildAllocationRows(valorPago, items) {
     return out.map(v => (v < 0 ? 0 : v));
 }
 
+function extractAllocationItemIdFromObs(observacoes) {
+    const s = String(observacoes || '');
+    const m = s.match(/\[AlocarItem:([^\]]+)\]/i);
+    return m && m[1] ? String(m[1]).trim() : '';
+}
+
+function getOrcamentoPagamentoDateValue(p) {
+    return (p && (p.data_pagamento || p.criado_em || p.created_at || p.data)) || null;
+}
+
+function getFinancePagamentoDateValue(p) {
+    return (p && (p.data_transacao || p.created_at)) || null;
+}
+
+function getItemSubtotal(it) {
+    const qtde = Number((it && it.qtde) || 1);
+    const valor = Number((it && it.valor) || 0);
+    return (Number.isFinite(qtde) ? qtde : 1) * (Number.isFinite(valor) ? valor : 0);
+}
+
+function buildAllocationsForBudget({ budget, items }) {
+    const out = new Map();
+    const remaining = (items || []).map(getItemSubtotal);
+    const ledger = [];
+
+    const op = (budget && Array.isArray(budget.pagamentos)) ? budget.pagamentos : [];
+    op.forEach(p => {
+        ledger.push({
+            source: 'orcamento',
+            id: String(p && p.id || ''),
+            valor: Number(p && p.valor_pago || 0),
+            obs: String(p && p.observacoes || ''),
+            dt: getOrcamentoPagamentoDateValue(p)
+        });
+    });
+
+    const fp = (budget && Array.isArray(budget.pagamentos_financeiro_extra)) ? budget.pagamentos_financeiro_extra : [];
+    fp.forEach(p => {
+        ledger.push({
+            source: 'financeiro',
+            id: String(p && p.id || ''),
+            valor: Number(p && p.valor || 0),
+            obs: String(p && p.observacoes || ''),
+            dt: getFinancePagamentoDateValue(p)
+        });
+    });
+
+    ledger.sort((a, b) => String(a.dt || '').localeCompare(String(b.dt || '')));
+
+    ledger.forEach(entry => {
+        let amt = Number(entry.valor || 0);
+        if (!(amt > 0)) return;
+
+        const alloc = (items || []).map(() => 0);
+        const explicitItemId = extractAllocationItemIdFromObs(entry.obs);
+
+        if (explicitItemId) {
+            const idx = (items || []).findIndex(it => String(it && it.id || '') === explicitItemId);
+            if (idx >= 0) {
+                const take = Math.min(amt, Math.max(0, remaining[idx] || 0));
+                if (take > 0) {
+                    alloc[idx] += take;
+                    remaining[idx] = Math.max(0, (remaining[idx] || 0) - take);
+                    amt -= take;
+                }
+            }
+        }
+
+        if (amt > 0) {
+            for (let i = 0; i < remaining.length && amt > 0; i++) {
+                const rem = Math.max(0, remaining[i] || 0);
+                if (!(rem > 0)) continue;
+                const take = Math.min(amt, rem);
+                alloc[i] += take;
+                remaining[i] = rem - take;
+                amt -= take;
+            }
+        }
+
+        if (entry.source === 'orcamento' && entry.id) {
+            out.set(entry.id, alloc);
+        }
+    });
+
+    return out;
+}
+
 async function fetchMovDiariaPayments({ dateStr }) {
     const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
     const baseSelectCols = 'id,orcamento_id,valor_pago,forma_pagamento,observacoes,status_pagamento,empresa_id';
@@ -9790,6 +10160,7 @@ async function printMovimentacaoDiaria({ dateStr, profVal }) {
     if (btnGenerateMovDiaria) btnGenerateMovDiaria.disabled = true;
     try {
         const { rows: payRows, dateCol } = await fetchMovDiariaPayments({ dateStr });
+        const allocCache = new Map();
 
         const lines = [];
         payRows.forEach(p => {
@@ -9806,13 +10177,21 @@ async function printMovimentacaoDiaria({ dateStr, profVal }) {
             const bucket = movBucketFromForma(p.forma_pagamento);
             const valorPago = Number(p.valor_pago || 0);
 
-            const alloc = buildAllocationRows(valorPago, itens);
+            let allocMap = allocCache.get(budgetSeq);
+            if (!allocMap) {
+                allocMap = buildAllocationsForBudget({ budget: b, items: itens });
+                allocCache.set(budgetSeq, allocMap);
+            }
+            const alloc = allocMap.get(String(p.id || '')) || buildAllocationRows(valorPago, itens);
+            const explicit = Boolean(extractAllocationItemIdFromObs(p.observacoes));
+            const touches = Array.isArray(alloc) ? alloc.filter(v => Number(v || 0) > 0).length : 0;
             itens.forEach((it, idx) => {
                 const execId = it.profissional_id;
                 const execName = findProfessionalNameByAnyId(execId) || String(it.executorNome || '');
                 const servName = findServiceNameById(it.servico_id) || String(it.servicodescricao || it.descricao || '');
-                const itemName = `${servName}${it.subdivisao ? ` • ${it.subdivisao}` : ''}`;
+                const itemName = `${servName}${it.subdivisao ? ` • ${it.subdivisao}` : ''}${explicit ? '' : (touches > 1 ? ' (auto)' : '')}`;
                 const paid = Number(alloc[idx] || 0);
+                if (!(paid > 0)) return;
                 const execProf = findProfessionalByAnyId(execId);
                 if (selectedProf && execProf) {
                     const same = (String(execProf.id) && String(execProf.id) === String(selectedProf.id)) || (String(execProf.seqid) && String(execProf.seqid) === String(selectedProf.seqid));
@@ -9937,7 +10316,7 @@ async function printMovimentacaoDiaria({ dateStr, profVal }) {
       </tbody>
     </table>
     <div style="margin-top: 8px; font-size: 10px; color:#6b7280;">
-      Cálculo: pagamentos do dia distribuídos proporcionalmente pelos itens do orçamento.
+      Cálculo: pagamentos do dia alocados nos itens do orçamento (respeita alocação manual e saldo restante).
     </div>
   </div>
 
@@ -10459,16 +10838,36 @@ window.printUser = function (id) {
 };
 
 // Search Budget Input
-if (searchBudgetInput) {
-    searchBudgetInput.addEventListener('input', e => {
-        const term = e.target.value.toLowerCase();
-        const filtered = budgets.filter(b =>
-            (b.seqid && b.seqid.toString().includes(term)) ||
-            (b.pacientenome && b.pacientenome.toLowerCase().includes(term)) ||
-            (b.pacientecelular && b.pacientecelular.includes(term))
-        );
-        renderTable(filtered, 'budgets');
+function filterBudgetsForList({ term, statusFilter }) {
+    const t = String(term || '').toLowerCase().trim();
+    const statusKey = normalizeKey(String(statusFilter || 'TODOS'));
+
+    return (budgets || []).filter(b => {
+        if (t) {
+            const ok =
+                (b.seqid && String(b.seqid).includes(t)) ||
+                (b.pacientenome && String(b.pacientenome).toLowerCase().includes(t)) ||
+                (b.pacientecelular && String(b.pacientecelular).includes(t));
+            if (!ok) return false;
+        }
+
+        if (statusKey === 'TODOS') return true;
+        const bStatusKey = normalizeKey(String(b && b.status || 'PENDENTE'));
+        return bStatusKey === statusKey;
     });
+}
+
+function refreshBudgetsList() {
+    const term = searchBudgetInput ? searchBudgetInput.value : '';
+    const statusFilter = budgetStatusFilter ? budgetStatusFilter.value : 'TODOS';
+    renderTable(filterBudgetsForList({ term, statusFilter }), 'budgets');
+}
+
+if (searchBudgetInput) {
+    searchBudgetInput.addEventListener('input', () => refreshBudgetsList());
+}
+if (budgetStatusFilter) {
+    budgetStatusFilter.addEventListener('change', () => refreshBudgetsList());
 }
 
 // --- AUTH LOGIC (LOGIN / LOGOUT) ---
@@ -11337,6 +11736,7 @@ async function attachFinanceExtraPaymentsToBudgets(budgetsList, paymentsList) {
     if (!qObs.error) (qObs.data || []).forEach(r => financeRows.set(String(r.id), r));
 
     const extraSum = new Map();
+    const extrasBySeq = new Map();
     const rx = /#\s*(\d{1,9})/;
     for (const r of financeRows.values()) {
         let seq = Number(r && r.referencia_id);
@@ -11357,11 +11757,14 @@ async function attachFinanceExtraPaymentsToBudgets(budgetsList, paymentsList) {
 
         const curr = extraSum.get(kSeq) || 0;
         extraSum.set(kSeq, curr + (parseFloat(r.valor) || 0));
+        if (!extrasBySeq.has(kSeq)) extrasBySeq.set(kSeq, []);
+        extrasBySeq.get(kSeq).push(r);
     }
 
     budgetsList.forEach(b => {
         const k = String(Number(b && b.seqid));
         b.total_pago_financeiro_extra = extraSum.get(k) || 0;
+        b.pagamentos_financeiro_extra = extrasBySeq.get(k) || [];
     });
 }
 
@@ -11797,13 +12200,19 @@ async function fetchTransactions(patientId = null) {
 
         if (!data || data.length === 0) {
             transactions = [];
+            financeSelectedPatientId = patientId ? patientId : null;
             renderTable([], 'financeiro');
             if (window.__dpDebug) {
                 const body = document.getElementById('finTransacoesBody');
                 window.__dpDebug.lastRenderRows = body ? body.children.length : null;
                 window.__dpDebug.lastStep = 'financeiro: rendered empty';
             }
-            showToast(`Nenhum lançamento encontrado para a unidade [${currentEmpresaId || '-'}].`, true);
+            if (patientId) {
+                updateBalanceUI(patientId);
+                showToast('Nenhum lançamento encontrado para este paciente.', true);
+            } else {
+                showToast(`Nenhum lançamento encontrado para a unidade [${currentEmpresaId || '-'}].`, true);
+            }
             return;
         }
 
@@ -11815,6 +12224,8 @@ async function fetchTransactions(patientId = null) {
                 paciente_nome: pat ? pat.nome : '—'
             };
         });
+        if (!patientId) financeAllTransactions = transactions.slice();
+        financeSelectedPatientId = patientId ? patientId : null;
 
         renderTable(transactions, 'financeiro');
         if (window.__dpDebug) {
@@ -11985,25 +12396,65 @@ window.deleteTransaction = deleteTransaction;
 
 // Hook up Financeiro search and listeners
 (function () {
+    let finSearchTimer = null;
+    const getFinTerm = () => String(finPacienteSearch ? finPacienteSearch.value : '').toLowerCase().trim();
+    const findPatientsByTerm = (term) => {
+        const t = String(term || '').toLowerCase().trim();
+        if (!t) return [];
+        return (patients || []).filter(p => String(p && p.nome || '').toLowerCase().includes(t));
+    };
+    const applyFinLocalFilter = (rawTerm) => {
+        const term = String(rawTerm || '').toLowerCase().trim();
+        const base = Array.isArray(financeAllTransactions) && financeAllTransactions.length ? financeAllTransactions : (transactions || []);
+        const filtered = term ? base.filter(t => String(t && t.paciente_nome || '').toLowerCase().includes(term)) : base;
+        financeSelectedPatientId = null;
+        if (finPainelSaldo) finPainelSaldo.classList.add('hidden');
+        renderTable(filtered, 'financeiro');
+    };
+    const runFinanceSearch = async ({ showAmbiguousToast = false } = {}) => {
+        const term = getFinTerm();
+        if (!term) {
+            financeSelectedPatientId = null;
+            if (finPainelSaldo) finPainelSaldo.classList.add('hidden');
+            await fetchTransactions();
+            return;
+        }
+
+        const matches = findPatientsByTerm(term);
+        if (matches.length === 1) {
+            await fetchTransactions(matches[0].seqid);
+            return;
+        }
+
+        if ((!financeAllTransactions || financeAllTransactions.length === 0) && (!transactions || transactions.length === 0)) {
+            await fetchTransactions();
+        }
+        applyFinLocalFilter(term);
+        if (showAmbiguousToast && matches.length > 1) {
+            showToast(`Encontrados ${matches.length} pacientes. Digite mais para refinar.`, true);
+        }
+    };
+
     if (btnFinBuscar) {
         btnFinBuscar.addEventListener('click', () => {
-            const term = finPacienteSearch.value.toLowerCase();
-            if (!term) {
-                showToast("Digite o nome de um paciente para buscar.", true);
-                return;
-            }
-            const patient = patients.find(p => p.nome.toLowerCase().includes(term));
-            if (patient) {
-                fetchTransactions(patient.seqid);
-            } else {
-                showToast("Paciente não encontrado.", true);
-            }
+            runFinanceSearch({ showAmbiguousToast: true });
+        });
+    }
+
+    if (finPacienteSearch) {
+        finPacienteSearch.addEventListener('input', () => {
+            if (finSearchTimer) clearTimeout(finSearchTimer);
+            finSearchTimer = setTimeout(() => {
+                runFinanceSearch({ showAmbiguousToast: false });
+            }, 220);
         });
     }
 
     if (btnFinVerTodos) {
         btnFinVerTodos.addEventListener('click', () => {
             if (finPainelSaldo) finPainelSaldo.classList.add('hidden');
+            if (finPacienteSearch) finPacienteSearch.value = '';
+            financeSelectedPatientId = null;
             fetchTransactions();
         });
     }
@@ -12017,8 +12468,15 @@ window.deleteTransaction = deleteTransaction;
 
     if (btnTransferirSaldo) {
         btnTransferirSaldo.addEventListener('click', async () => {
-            const term = finPacienteSearch.value.toLowerCase();
-            const patient = patients.find(p => p.nome.toLowerCase().includes(term));
+            const term = getFinTerm();
+            let patient = null;
+            if (financeSelectedPatientId) {
+                patient = (patients || []).find(p => String(p && p.seqid) === String(financeSelectedPatientId) || String(p && p.id) === String(financeSelectedPatientId)) || null;
+            }
+            if (!patient) {
+                const matches = findPatientsByTerm(term);
+                if (matches.length === 1) patient = matches[0];
+            }
 
             if (!patient) {
                 showToast("Selecione/Busque um paciente primeiro para transferir o saldo dele.", true);
@@ -12405,6 +12863,10 @@ window.viewBudgetPayments = async function (budgetId) {
     const totalPago = isFreeBudget ? totalOrcado : totalPagoRaw;
     const saldo = isFreeBudget ? 0 : (totalOrcado - totalPagoRaw);
 
+    budget.pagamentos_financeiro_extra = financePaymentsFiltered || [];
+    budget.total_pago_financeiro_extra = totalPagoFin;
+    await ensureBudgetCommissions(budget);
+
     const body = document.getElementById('budgetDetailBody');
     if (!body) return;
 
@@ -12571,8 +13033,25 @@ window.viewBudgetPayments = async function (budgetId) {
                         </select>
                     </div>
                     <div class="form-group" style="grid-column: span 2;">
+                        <label>Alocar pagamento para (opcional)</label>
+                        <select id="payBudgetAllocItem" style="width: 100%;">
+                            <option value="">Rateio proporcional (padrão)</option>
+                            ${(itens || []).map(it => {
+                                const servName = findServiceNameById(it.servico_id) || String(it.servicodescricao || it.descricao || '');
+                                const sub = String(it.subdivisao || '').trim();
+                                const st = String(it.status || 'Pendente');
+                                const label = `${servName}${sub ? ` • ${sub}` : ''} — ${st}`;
+                                return `<option value="${escapeHtml(String(it.id || ''))}">${escapeHtml(label)}</option>`;
+                            }).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
                         <label>Observações</label>
                         <input type="text" id="payBudgetObs" placeholder="Ex: Pagamento 1a parcela" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="grid-column: span 2; display:flex; align-items:center; gap:10px;">
+                        <input id="payBudgetAutoRelease" type="checkbox" checked>
+                        <label for="payBudgetAutoRelease" style="margin:0; cursor:pointer;">Auto-liberar itens cobertos pelo pagamento</label>
                     </div>
                 </div>
                 <button class="btn btn-primary" onclick="recordBudgetPayment('${budget.id}')" style="margin-top: 1rem; width: 100%;">
@@ -12689,12 +13168,17 @@ window.recordBudgetPayment = async function (budgetId) {
     const valorInput = document.getElementById('payBudgetAmount');
     const formaInput = document.getElementById('payBudgetForma');
     const obsInput = document.getElementById('payBudgetObs');
+    const allocInput = document.getElementById('payBudgetAllocItem');
+    const autoReleaseInput = document.getElementById('payBudgetAutoRelease');
 
     // Para type="number", o .value já vem no formato decimal (ex: "40.00")
     // Se usarmos .replace(/\./g, ''), "40.00" vira "4000"! Por isso o erro.
     const valor = parseFloat(valorInput.value);
     const forma = formaInput.value;
     const obs = obsInput.value;
+    const allocItemId = allocInput ? String(allocInput.value || '').trim() : '';
+    const obsFinal = allocItemId ? `[AlocarItem:${allocItemId}] ${obs || ''}`.trim() : obs;
+    const autoRelease = autoReleaseInput ? Boolean(autoReleaseInput.checked) : true;
 
     if (isNaN(valor) || valor <= 0) {
         showToast("Insira um valor válido.", true);
@@ -12744,7 +13228,7 @@ window.recordBudgetPayment = async function (budgetId) {
             orcamento_id: budget.seqid,
             valor_pago: valor,
             forma_pagamento: forma,
-            observacoes: obs,
+            observacoes: obsFinal,
             empresa_id: currentEmpresaId
         };
 
@@ -12764,6 +13248,29 @@ window.recordBudgetPayment = async function (budgetId) {
         budget.total_pago = (budget.total_pago || 0) + valor;
 
         console.log("DEBUG V19: Estado local atualizado. Total pago:", budget.total_pago);
+
+        if (autoRelease) {
+            try {
+                if (allocItemId) {
+                    await releaseBudgetItem(budget.id, allocItemId);
+                } else {
+                    const itens2 = budget.orcamento_itens || budget.itens || [];
+                    for (const it of itens2) {
+                        const st = String(it && it.status || '');
+                        if (['Liberado', 'Em Execução', 'Finalizado', 'Cancelado'].includes(st)) continue;
+                        const valorLiberado2 = itens2
+                            .filter(x => ['Liberado', 'Em Execução', 'Finalizado'].includes(String(x && x.status || '')))
+                            .reduce((acc, curr) => acc + ((parseFloat(curr.valor) || 0) * (parseInt(curr.qtde) || 1)), 0);
+                        const valorIt2 = (parseFloat(it.valor) || 0) * (parseInt(it.qtde) || 1);
+                        const totalPago2 = budget.total_pago || 0;
+                        if (valorLiberado2 + valorIt2 <= (totalPago2 + 0.01)) {
+                            await releaseBudgetItem(budget.id, it.id);
+                        }
+                    }
+                }
+            } catch (_) {
+            }
+        }
 
         // Atualizar interface com pequeno delay para garantir sincronia
         setTimeout(() => {
@@ -12793,7 +13300,7 @@ window.recordBudgetPayment = async function (budgetId) {
                 categoria: 'PAGAMENTO',
                 valor: valor,
                 forma_pagamento: forma,
-                observacoes: `[Orçamento #${budget.seqid}] ${obs}`,
+                observacoes: `[Orçamento #${budget.seqid}] ${obsFinal}`,
                 referencia_id: budget.seqid,
                 empresa_id: currentEmpresaId,
                 criado_por: currentUser.id
@@ -12918,7 +13425,7 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
                     const debitoData = {
                         paciente_id: pacNumId,
                         tipo: 'DEBITO',
-                        categoria: 'PAGAMENTO', // Representa o consumo do serviço
+                        categoria: 'CONSUMO',
                         valor: valorDesteItem,
                         observacoes: `[Consumo] ${desc} (Orçamento #${budget.seqid})`,
                         referencia_id: budget.seqid,
@@ -13008,7 +13515,12 @@ function calculateCommission(prof, item, budget) {
     if (baseLiquida <= 0) return 0;
 
     // Verificar impostos com base na forma de pagamento
-    const pagamentos = budget.pagamentos || [];
+    const pagamentos = (budget.pagamentos || []).concat(
+        (budget.pagamentos_financeiro_extra || []).map(p => ({
+            forma_pagamento: p && p.forma_pagamento,
+            data_pagamento: p && p.data_transacao
+        }))
+    );
     // Se houver QUALQUER pagamento que NÃO seja dinheiro, aplica imposto
     const temPagamentoComTaxa = pagamentos.some(p => p.forma_pagamento !== 'Dinheiro');
 
@@ -13023,6 +13535,57 @@ function calculateCommission(prof, item, budget) {
     const comissaoFinal = (valorAposImposto * percComissao) / 100;
 
     return Math.max(0, comissaoFinal);
+}
+
+async function ensureBudgetCommissions(budget) {
+    if (!budget) return;
+    const tipoBudget = String(budget.tipo || 'Normal').trim();
+    const tipoKey = normalizeKey(tipoBudget);
+    const isFreeBudget = tipoKey === 'CORTESIA' || tipoKey === 'RETRABALHO';
+    if (isFreeBudget) return;
+
+    const itens = budget.orcamento_itens || budget.itens || [];
+    const eligible = (itens || []).filter(it => ['Liberado', 'Em Execução', 'Finalizado'].includes(String(it && it.status || '')));
+    if (!eligible.length) return;
+
+    const ids = eligible.map(it => String(it && it.id || '')).filter(Boolean);
+    if (!ids.length) return;
+
+    let existing = [];
+    try {
+        let q = db.from('financeiro_comissoes').select('item_id,status,profissional_id').in('item_id', ids);
+        if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+        const { data, error } = await withTimeout(q, 15000, 'financeiro_comissoes:exists_for_items');
+        if (error) throw error;
+        existing = Array.isArray(data) ? data : [];
+    } catch (err) {
+        return;
+    }
+
+    const hasAnyByItem = new Set(existing.map(r => String(r && r.item_id || '')).filter(Boolean));
+    const toCreate = eligible.filter(it => !hasAnyByItem.has(String(it && it.id || '')));
+    if (!toCreate.length) return;
+
+    for (const it of toCreate) {
+        const profId = it && it.profissional_id;
+        const profissional = professionals.find(p => String(p.seqid) === String(profId));
+        if (!profissional) continue;
+        const valorComissao = calculateCommission(profissional, it, budget);
+        if (!(valorComissao > 0)) continue;
+
+        const comissaoData = {
+            profissional_id: profId,
+            item_id: it.id,
+            valor_comissao: valorComissao,
+            status: 'PENDENTE',
+            empresa_id: currentEmpresaId
+        };
+        try {
+            const { error } = await withTimeout(db.from('financeiro_comissoes').insert(comissaoData), 15000, 'financeiro_comissoes:insert_missing');
+            if (error) throw error;
+        } catch (err2) {
+        }
+    }
 }
 
 // Modal Budget Detail Close Listeners
