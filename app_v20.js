@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260317-1805';
+const APP_BUILD = '20260317-2055';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -136,6 +136,8 @@ let transactions = []; // Global transactions state
 let financeAllTransactions = [];
 let financeSelectedPatientId = null;
 
+const budgetCreatedAtCache = new Map();
+
 
 async function checkAuth() {
     const { data: { session } } = await db.auth.getSession();
@@ -192,7 +194,8 @@ async function checkAuth() {
     } else {
         currentEmpresaId = (isSuperAdmin && savedEmpId && mappings && mappings.some(m => m.empresa_id === savedEmpId)) ? savedEmpId : mapping.empresa_id;
         currentUserRole = mapping.perfil;
-        currentUserPerms = (typeof mapping.permissoes === 'string') ? JSON.parse(mapping.permissoes) : (mapping.permissoes || {});
+        const rawPerms = (typeof mapping.permissoes === 'string') ? JSON.parse(mapping.permissoes) : (mapping.permissoes || {});
+        currentUserPerms = normalizePermsObject(rawPerms);
     }
 
     console.log("DEBUG Auth Info:", { currentEmpresaId, currentUserRole, currentUserPerms, isSuperAdmin });
@@ -308,15 +311,42 @@ function getModuleKey(type) {
     return map[type] || type;
 }
 
+function permValueToBool(v) {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    if (v === 1) return true;
+    if (v === 0) return false;
+    const s = String(v).trim().toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'sim') return true;
+    if (s === 't' || s === 'y' || s === 'on') return true;
+    if (s === 's') return true;
+    return false;
+}
+
+function normalizePermsObject(perms) {
+    const out = {};
+    const src = (perms && typeof perms === 'object') ? perms : {};
+    Object.keys(src).forEach(mod => {
+        const m = src[mod];
+        if (!m || typeof m !== 'object') return;
+        out[mod] = {
+            select: permValueToBool(m.select),
+            insert: permValueToBool(m.insert),
+            update: permValueToBool(m.update),
+            delete: permValueToBool(m.delete)
+        };
+    });
+    return out;
+}
+
 // Global permission check helper
 function can(mod, action) {
     // Admins have total access
     if (currentUserRole === 'admin') return true;
 
     // If it's a JSON object
-    if (currentUserPerms && currentUserPerms[mod] && currentUserPerms[mod][action]) {
-        return true;
-    }
+    const raw = currentUserPerms && currentUserPerms[mod] ? currentUserPerms[mod][action] : false;
+    if (permValueToBool(raw)) return true;
 
     // Default: for companies, ONLY SuperAdmin has any access
     if (mod === 'empresas') return isSuperAdmin;
@@ -1298,6 +1328,18 @@ function setActiveTab(tab) {
     console.log("setActiveTab called with:", tab);
     window.scrollTo(0, 0);
 
+    if (tab && tab !== 'usersAdmin' && tab !== 'empresas' && tab !== 'cancelledBudgets') {
+        if (!can(getModuleKey(tab), 'select')) {
+            const fallback = getDefaultHomeTab();
+            if (fallback && fallback !== tab) {
+                setActiveTab(fallback);
+                return;
+            }
+            showToast("Você não possui permissão para visualizar este módulo.", true);
+            return;
+        }
+    }
+
     // 1. Prepare Navigation Elements safely
     const navElements = [
         navDashboard, navPatients, navProfessionals, navSpecialties, navServices,
@@ -1667,12 +1709,18 @@ function renderTable(data = [], type = 'patients') {
                 ? 'Concluído (itens finalizados)'
                 : (totalLiberados > 0 ? 'Em atendimento' : (saldoDevedor > 0 ? 'Aguardando pagamento/liberação' : 'Aguardando liberação'));
 
+            const bId = String(b.id || '');
+            const createdCached = bId && budgetCreatedAtCache.has(bId) ? budgetCreatedAtCache.get(bId) : undefined;
+            const createdValue = createdCached !== undefined ? createdCached : (b.created_at || b.criado_em || b.data_criacao);
+            const criadoEm = formatDateTimeSafe(createdValue);
+
             tr.innerHTML = `
                 <td>${b.seqid}</td>
                 <td>
                     <strong>${b.pacientenome}</strong><br>
                     <small style="color:var(--text-muted)">${b.pacientecelular}</small>
                 </td>
+                <td data-budget-created-at="${escapeHtml(bId)}">${escapeHtml(String(criadoEm))}</td>
                 <td>${qtdItens} itens</td>
                 <td><strong style="color: var(--primary-color)">R$ ${total.toFixed(2)}</strong></td>
                 <td><strong style="color: ${saldoDevedor > 0 ? '#dc3545' : 'var(--success-color)'}">R$ ${totalPago.toFixed(2)}</strong></td>
@@ -1705,6 +1753,7 @@ function renderTable(data = [], type = 'patients') {
             `;
             budgetsTableBody.appendChild(tr);
         });
+        setTimeout(() => { hydrateBudgetCreatedAtForVisibleRows(); }, 0);
     } else if (type === 'protese') {
         if (!proteseTableBody) return;
         proteseTableBody.innerHTML = '';
@@ -4234,6 +4283,7 @@ function renderBarChart(containerEl, items, { valueKey = 'total', labelKey = 'la
 }
 
 async function fetchDashboardFromUI() {
+    if (!can('dashboard', 'select')) return;
     if (!dashDate) return;
     const dateStr = dashDate.value;
     const profSeqId = dashProfessional ? String(dashProfessional.value || '') : '';
@@ -4243,6 +4293,7 @@ async function fetchDashboardFromUI() {
 
 async function fetchDashboardData({ dateStr, profSeqId }) {
     try {
+        if (!can('dashboard', 'select')) return;
         if (!currentEmpresaId) return;
 
         const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
@@ -9201,11 +9252,18 @@ window.renderTable = function (data, type) {
         } else if (type === 'budgets') {
             const total = calculateBudgetTotal(item);
             const isCancelled = item.status === 'Cancelado';
+            const bId = String(item.id || '');
+            const createdCached = bId && budgetCreatedAtCache.has(bId) ? budgetCreatedAtCache.get(bId) : undefined;
+            const createdValue = createdCached !== undefined ? createdCached : (item.created_at || item.criado_em || item.data_criacao);
+            const criadoEm = formatDateTimeSafe(createdValue);
             
             tr.innerHTML = `
                 <td>${item.seqid}</td>
-                <td style="font-weight: 600;">${item.pacientenome}</td>
-                <td>${item.pacientecelular || '-'}</td>
+                <td>
+                    <strong>${item.pacientenome}</strong><br>
+                    <small style="color:var(--text-muted)">${item.pacientecelular || '-'}</small>
+                </td>
+                <td data-budget-created-at="${escapeHtml(bId)}">${escapeHtml(String(criadoEm))}</td>
                 <td>${(item.orcamento_itens || []).length} itens</td>
                 <td style="font-weight: 600;">R$ ${total.toFixed(2)}</td>
                 <td style="font-weight: 600; color: var(--success-color);">R$ ${getBudgetPaidAmount(item).toFixed(2)}</td>
@@ -9382,6 +9440,10 @@ window.renderTable = function (data, type) {
 
         tbody.appendChild(tr);
     });
+
+    if (type === 'budgets') {
+        setTimeout(() => { hydrateBudgetCreatedAtForVisibleRows(); }, 0);
+    }
 
     if (window.__dpDebug) {
         window.__dpDebug.lastRenderRows = tbody.children.length;
@@ -10870,6 +10932,11 @@ window.printBudget = async function (id) {
     const items = b.orcamento_itens || b.itens || [];
     const total = items.reduce((acc, i) => acc + ((parseFloat(i.valor) || 0) * (parseInt(i.qtde) || 1)), 0);
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    if (!b.created_at && !b.criado_em && !b.data_criacao && id) {
+        await hydrateBudgetCreatedAtForIds([String(id)]);
+    }
+    const createdCached = budgetCreatedAtCache.has(String(id)) ? budgetCreatedAtCache.get(String(id)) : undefined;
+    const criadoEm = formatDateTimeSafe(createdCached !== undefined ? createdCached : (b.created_at || b.criado_em || b.data_criacao));
 
     // Get patient CPF for signature
     const patData = patients.find(p => p.id === b.pacienteid);
@@ -10961,7 +11028,7 @@ window.printBudget = async function (id) {
                             <div>
                                 <div class="doc-title">OR\u00c7AMENTO</div>
                                 <div class="doc-num">#${b.seqid} &nbsp;|&nbsp; <span class="status-badge">${b.status || 'Pendente'}</span></div>
-                                <div style="color:#6b7280; margin-top:4px; font-size:11px;">Emitido em: ${hoje}</div>
+                                <div style="color:#6b7280; margin-top:4px; font-size:11px;">Criado em: ${escapeHtml(criadoEm || hoje)}</div>
                             </div>
                         </div>
 
@@ -12589,6 +12656,72 @@ function formatDateTime(isoString) {
     if (!isoString) return '-';
     const date = new Date(isoString);
     return date.toLocaleString('pt-BR');
+}
+
+function formatDateTimeSafe(value) {
+    if (!value) return '—';
+    if (value instanceof Date) return value.toLocaleString('pt-BR');
+    if (typeof value === 'number') {
+        const d = new Date(value);
+        return Number.isFinite(d.getTime()) ? d.toLocaleString('pt-BR') : '—';
+    }
+    const raw = String(value).trim();
+    if (!raw) return '—';
+    let s = raw;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        s = `${s}T00:00:00`;
+    } else if (s.includes(' ') && !s.includes('T')) {
+        s = s.replace(' ', 'T');
+    }
+    const d = new Date(s);
+    if (!Number.isFinite(d.getTime())) return raw;
+    return d.toLocaleString('pt-BR');
+}
+
+async function hydrateBudgetCreatedAtForIds(ids) {
+    try {
+        if (!currentEmpresaId) return;
+        const uniq = Array.from(new Set((ids || []).map(x => String(x || '')).filter(Boolean)));
+        if (!uniq.length) return;
+        const q = db.from('orcamentos')
+            .select('id, created_at')
+            .eq('empresa_id', currentEmpresaId)
+            .in('id', uniq);
+        const { data, error } = await withTimeout(q, 15000, 'orcamentos:created_at_hydrate');
+        if (error) throw error;
+        (data || []).forEach(r => {
+            const k = String(r.id || '');
+            if (!k) return;
+            budgetCreatedAtCache.set(k, r.created_at || null);
+            const b = (budgets || []).find(x => String(x.id || '') === k);
+            if (b && !b.created_at) b.created_at = r.created_at || null;
+        });
+    } catch (err) {
+        console.warn('Falha ao carregar created_at dos orçamentos:', err);
+    }
+}
+
+async function hydrateBudgetCreatedAtForVisibleRows() {
+    const tbody = document.getElementById('budgetsTableBody');
+    if (!tbody) return;
+    const cells = Array.from(tbody.querySelectorAll('td[data-budget-created-at]'));
+    const missingIds = [];
+    cells.forEach(td => {
+        const id = td.getAttribute('data-budget-created-at');
+        if (!id) return;
+        if (budgetCreatedAtCache.has(id)) return;
+        missingIds.push(id);
+        td.textContent = 'Carregando...';
+    });
+    if (!missingIds.length) return;
+    await hydrateBudgetCreatedAtForIds(missingIds);
+    cells.forEach(td => {
+        const id = td.getAttribute('data-budget-created-at');
+        if (!id) return;
+        const v = budgetCreatedAtCache.get(id);
+        if (v === undefined) return;
+        td.textContent = formatDateTimeSafe(v) || '—';
+    });
 }
 
 function formatDate(isoString) {
