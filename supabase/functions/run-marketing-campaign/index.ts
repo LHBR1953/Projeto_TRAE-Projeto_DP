@@ -15,6 +15,101 @@ function applyTemplate(raw: string, vars: Record<string, string>) {
   return out;
 }
 
+async function brevoSendTextEmail(params: {
+  apiKey: string;
+  fromEmail: string;
+  fromName: string;
+  toEmail: string;
+  toName?: string;
+  subject: string;
+  text: string;
+  html: string;
+}) {
+  const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "accept": "application/json",
+      "content-type": "application/json",
+      "api-key": params.apiKey,
+    },
+    body: JSON.stringify({
+      sender: { email: params.fromEmail, name: params.fromName },
+      replyTo: { email: params.fromEmail, name: params.fromName },
+      to: [{ email: params.toEmail, name: params.toName || undefined }],
+      subject: params.subject,
+      textContent: params.text,
+      htmlContent: params.html,
+    }),
+  });
+
+  let data: any = null;
+  try {
+    data = await resp.json();
+  } catch {
+    data = null;
+  }
+
+  if (!resp.ok) {
+    const msg = data?.message || data?.error || `Brevo API error (HTTP ${resp.status})`;
+    throw new Error(msg);
+  }
+
+  return { status: resp.status, data };
+}
+
+async function smtpSendEmail(params: {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  fromEmail: string;
+  fromName: string;
+  toEmail: string;
+  toName?: string;
+  subject: string;
+  text: string;
+  html: string;
+}) {
+  const transport = nodemailer.createTransport({
+    host: params.host,
+    port: params.port,
+    secure: params.port === 465,
+    auth: { user: params.username, pass: params.password },
+  });
+
+  const info: any = await transport.sendMail({
+    from: `${params.fromName} <${params.fromEmail}>`,
+    replyTo: params.fromEmail,
+    to: params.toName ? `${params.toName} <${params.toEmail}>` : params.toEmail,
+    subject: params.subject,
+    text: params.text,
+    html: params.html,
+  });
+
+  try {
+    await transport.close();
+  } catch {
+    // ignore
+  }
+
+  return info;
+}
+
+function escapeHtml(input: string) {
+  return String(input || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function textToHtml(text: string) {
+  const safe = escapeHtml(text);
+  const html = safe.replaceAll("\n", "<br/>");
+  return `<html><body>${html}</body></html>`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -115,17 +210,21 @@ Deno.serve(async (req) => {
       .eq("empresa_id", empresaId)
       .single();
     if (sErr) throw sErr;
-    if (!smtp || !smtp.enabled) throw new Error("SMTP not configured/enabled for this empresa.");
+    if (!smtp || !smtp.enabled) throw new Error("E-mail não configurado/habilitado para esta empresa.");
+    const smtpUsername = String((smtp as any).username || "").trim();
+    const smtpPassword = String((smtp as any).password || "").trim();
+    const brevoApiKey = String((smtp as any).brevo_api_key || "").trim();
 
     const { data: empresa, error: empErr } = await supabaseAdmin
       .from("empresas")
-      .select("id, nome, telefone, celular")
+      .select("id, nome, telefone, celular, email")
       .eq("id", empresaId)
       .single();
     if (empErr) throw empErr;
     const empresaNome = String((empresa as any)?.nome || empresaId);
     const empresaTelefone = String((empresa as any)?.telefone || "").trim();
     const empresaCelular = String((empresa as any)?.celular || "").trim();
+    const empresaEmail = String((empresa as any)?.email || "").trim();
 
     const minMeses = Number(campaign.target_min_meses ?? 0);
     const maxMeses = campaign.target_max_meses == null ? null : Number(campaign.target_max_meses);
@@ -204,20 +303,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    const transport = nodemailer.createTransport({
-      host: String(smtp.host),
-      port: Number(smtp.port),
-      secure: Number(smtp.port) === 465,
-      auth: smtp.username && smtp.password ? { user: String(smtp.username), pass: String(smtp.password) } : undefined,
-    });
-
-    const fromEmail = String(smtp.from_email || "").trim();
-    if (!fromEmail) throw new Error("EmailClinica (from_email) is required.");
+    const fromEmail = String((smtp as any).from_email || empresaEmail || "").trim();
+    if (!fromEmail) throw new Error("E-mail da clínica (From.Address) não configurado.");
     const fromName = String(smtp.from_name || "").trim() || empresaNome;
-    const from = `${fromName} <${fromEmail}>`;
 
     let sent = 0;
     let failed = 0;
+    let logFailed = 0;
     const failures: any[] = [];
 
     const selected = eligible.slice(0, planned);
@@ -235,17 +327,47 @@ Deno.serve(async (req) => {
         ? applyTemplate(String(campaign.rodape || ""), vars)
         : `Atenciosamente,\n${empresaNome}\n${empresaTelefone || empresaCelular ? `Atendimento: ${[empresaTelefone, empresaCelular].filter(Boolean).join(" / ")}\n` : ""}À Gerência.`;
       const bodyText = `Prezado Sr(a) ${vars.NOME_PACIENTE}\n\n${core}\n\n${footer}`;
+      const bodyHtml = textToHtml(bodyText);
 
       try {
-        await transport.sendMail({
-          from,
-          replyTo: fromEmail,
-          to: r.email,
-          subject,
-          text: bodyText,
-        });
+        const toEmail = String(r.email || "").trim();
+        if (!toEmail || !toEmail.includes("@")) throw new Error("E-mail do paciente inválido.");
+
+        const toName = String(r.nome || "").trim() || undefined;
+        let provider = "";
+        let providerInfo: any = null;
+        if (smtpUsername) {
+          if (!smtpPassword) throw new Error("SMTP.Password não configurada para envio via SMTP.");
+          provider = "SMTP";
+          providerInfo = await smtpSendEmail({
+            host: String((smtp as any).host || "").trim(),
+            port: Number((smtp as any).port || 587),
+            username: smtpUsername,
+            password: smtpPassword,
+            fromEmail,
+            fromName,
+            toEmail,
+            toName,
+            subject,
+            text: bodyText,
+            html: bodyHtml,
+          });
+        } else {
+          if (!brevoApiKey) throw new Error("Brevo API Key (xkeysib-) não configurada para envio via API.");
+          provider = "BREVO_API";
+          providerInfo = await brevoSendTextEmail({
+            apiKey: brevoApiKey,
+            fromEmail,
+            fromName,
+            toEmail,
+            toName,
+            subject,
+            text: bodyText,
+            html: bodyHtml,
+          });
+        }
         sent += 1;
-        await supabaseAdmin.from("marketing_envios").insert({
+        const baseRow: any = {
           empresa_id: empresaId,
           campanha_id: campaign.id,
           paciente_id: r.paciente_id,
@@ -254,21 +376,52 @@ Deno.serve(async (req) => {
           status: "SENT",
           erro: null,
           enviado_em: new Date().toISOString(),
-        });
+        };
+        const extraRow: any = {
+          ...baseRow,
+          smtp_message_id: provider === "BREVO_API"
+            ? (providerInfo?.data?.messageId ? String(providerInfo.data.messageId) : null)
+            : (providerInfo?.messageId ? String(providerInfo.messageId) : null),
+          smtp_response: provider === "BREVO_API"
+            ? `BREVO_API HTTP ${providerInfo?.status}`
+            : String(providerInfo?.response || "SMTP OK"),
+          smtp_accepted: null,
+          smtp_rejected: null,
+        };
+
+        try {
+          const ins1 = await supabaseAdmin.from("marketing_envios").insert(extraRow);
+          if (ins1.error) throw ins1.error;
+        } catch (logErr: any) {
+          logFailed += 1;
+          try {
+            const ins2 = await supabaseAdmin.from("marketing_envios").insert(baseRow);
+            if (ins2.error) throw ins2.error;
+          } catch (logErr2: any) {
+            console.error("marketing_envios insert failed:", logErr2?.message || logErr2 || logErr?.message || logErr);
+          }
+        }
       } catch (e: any) {
         failed += 1;
         const msg = String(e?.message || e);
+        const stack = e?.stack ? String(e.stack) : "";
         failures.push({ paciente_id: r.paciente_id, email: r.email, error: msg });
-        await supabaseAdmin.from("marketing_envios").insert({
+        const baseRow: any = {
           empresa_id: empresaId,
           campanha_id: campaign.id,
           paciente_id: r.paciente_id,
           paciente_nome: r.nome,
           paciente_email: r.email,
           status: "FAILED",
-          erro: msg.slice(0, 500),
+          erro: (stack ? `${msg}\n${stack}` : msg).slice(0, 500),
           enviado_em: new Date().toISOString(),
-        });
+        };
+        try {
+          const ins = await supabaseAdmin.from("marketing_envios").insert(baseRow);
+          if (ins.error) throw ins.error;
+        } catch (logErr: any) {
+          console.error("Failed to insert marketing_envios FAILED row:", logErr?.message || logErr);
+        }
       }
     }
 
@@ -282,6 +435,14 @@ Deno.serve(async (req) => {
         attempted: selected.length,
         sent,
         failed,
+        log_failed: logFailed,
+        smtp: {
+          provider: smtpUsername ? "SMTP" : "BREVO_API",
+          empresa_id: empresaId,
+          from_email: fromEmail,
+          username: smtpUsername || null,
+          has_api_key: Boolean(brevoApiKey),
+        },
         remaining_estimate: Math.max(0, eligible.length - selected.length),
         failures: failures.slice(0, 20),
       }),

@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260319-1245">
+    <link rel="stylesheet" href="styles.css?v=20260320-2010">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260319-1245
+        build 20260320-2010
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -1576,6 +1576,11 @@
                                 <input type="text" id="empresaCelular" placeholder="(00) 0 0000-0000" maxlength="16">
                             </div>
 
+                            <div class="form-group">
+                                <label for="empresaEmail">E-mail da empresa</label>
+                                <input type="email" id="empresaEmail" placeholder="contato@sua-clinica.com.br">
+                            </div>
+
                             <div class="form-group span-2">
                                 <label for="empresaLogo">Logotipo (Arquivo)</label>
                                 <div style="display: flex; align-items: center; gap: 15px;">
@@ -1900,8 +1905,8 @@
 
                 <div id="marketingTabFidelidade">
                     <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
-                        <div style="display:flex; gap: 1rem; align-items:flex-end; flex-wrap: wrap;">
-                            <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
+                        <div style="display:flex; gap: 1.5rem; align-items:flex-end; flex-wrap: nowrap; overflow-x: auto;">
+                            <div class="form-group" style="min-width: 220px; margin-bottom: 0; flex: 0 0 auto;">
                                 <label for="marketingBucket">Status (meses sem pagamento)</label>
                                 <select id="marketingBucket" class="form-control">
                                     <option value="0-6">Ativos (&lt; 7 meses)</option>
@@ -1911,9 +1916,12 @@
                                     <option value="18-999">Perdidos (&gt;= 18 meses)</option>
                                 </select>
                             </div>
-                            <div class="form-group" style="margin-bottom: 0; display:flex; gap: 0.5rem;">
+                            <div class="form-group" style="margin-bottom: 0; display:flex; flex-direction: row; align-items:center; gap: 1.5rem; flex: 0 0 auto; white-space: nowrap;">
                                 <button id="btnMarketingRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
-                                <button id="btnMarketingSend" class="btn btn-danger"><i class="ri-send-plane-2-line"></i> Disparar e-mails</button>
+                                <div style="display:flex; align-items:center; gap: 0.75rem;">
+                                    <button id="btnMarketingSend" class="btn btn-danger"><i class="ri-send-plane-2-line"></i> Disparar e-mails</button>
+                                    <button id="btnMarketingLastReturn" class="btn btn-secondary" style="display:none;"><i class="ri-file-list-3-line"></i> Ver retorno</button>
+                                </div>
                             </div>
                         </div>
                         <div style="margin-top: 10px; color: var(--text-muted); font-size: 0.9rem;">
@@ -1923,28 +1931,28 @@
                         <pre id="marketingSendResult" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 10px 0 0;"></pre>
                     </div>
 
-                    <div class="dashboard-grid" style="margin-bottom: 1rem;">
-                        <div class="kpi-card" style="border-left: 6px solid var(--success-color);">
+                    <div class="dashboard-grid marketing-kpi-grid" style="margin-bottom: 1rem;">
+                        <div class="kpi-card mk-kpi mk-kpi-ativos">
                             <div class="kpi-title">Ativos</div>
                             <div class="kpi-value" id="kpiMkAtivos">—</div>
                             <div class="kpi-sub" id="kpiMkAtivosSub">&lt; 7 meses</div>
                         </div>
-                        <div class="kpi-card" style="border-left: 6px solid #f0c000;">
+                        <div class="kpi-card mk-kpi mk-kpi-atencao">
                             <div class="kpi-title">ATENÇÃO</div>
                             <div class="kpi-value" id="kpiMk7a8">—</div>
                             <div class="kpi-sub" id="kpiMk7a8Sub">de 7 à 8 meses</div>
                         </div>
-                        <div class="kpi-card" style="border-left: 6px solid #f08c00;">
+                        <div class="kpi-card mk-kpi mk-kpi-reativacao">
                             <div class="kpi-title">Reativação</div>
                             <div class="kpi-value" id="kpiMk9a11">—</div>
                             <div class="kpi-sub" id="kpiMk9a11Sub">9 à 11 meses</div>
                         </div>
-                        <div class="kpi-card" style="border-left: 6px solid #dc3545;">
+                        <div class="kpi-card mk-kpi mk-kpi-alto-risco">
                             <div class="kpi-title">Alto Risco</div>
                             <div class="kpi-value" id="kpiMk12a17">—</div>
                             <div class="kpi-sub" id="kpiMk12a17Sub">12 à 17 meses</div>
                         </div>
-                        <div class="kpi-card" style="border-left: 6px solid #6c757d;">
+                        <div class="kpi-card mk-kpi mk-kpi-perdidos">
                             <div class="kpi-title">Perdidos</div>
                             <div class="kpi-value" id="kpiMk18">—</div>
                             <div class="kpi-sub" id="kpiMk18Sub">&gt;= 18 meses</div>
@@ -2098,6 +2106,10 @@
                             <div class="form-group" style="flex: 1; min-width: 280px;">
                                 <label for="mkFromEmail">E-mail da clínica (From.Address)</label>
                                 <input id="mkFromEmail" class="form-control" placeholder="ex.: contato@sua-clinica.com.br">
+                            </div>
+                            <div class="form-group" style="flex: 1; min-width: 280px;">
+                                <label for="mkBrevoApiKey">Brevo API Key (v3)</label>
+                                <input id="mkBrevoApiKey" type="password" class="form-control" placeholder="xkeysib-... (vazio = manter)">
                             </div>
                             <div style="color: var(--text-muted); font-size: 0.9rem; padding: 0.25rem;">
                                 O destinatário sempre será o e-mail do paciente.
@@ -3266,6 +3278,64 @@
         </div>
     </div>
 
+    <div id="serviceImportModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 920px; width: 95%;">
+            <div class="modal-header">
+                <h3><i class="ri-file-upload-line"></i> Importar Serviços (XLSX)</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseServiceImportModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+                <div class="card" style="padding: 0.75rem; margin-bottom: 12px;">
+                    <div style="color: var(--text-muted); font-size: 0.9rem;">
+                        Colunas do Excel: B=Descrição, C=Valor, D=Tipo (IE), E=Subdivisão
+                    </div>
+                </div>
+                <div style="display:flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+                    <div class="form-group" style="min-width: 260px; margin-bottom: 0;">
+                        <label for="serviceImportFile">Arquivo XLSX</label>
+                        <input id="serviceImportFile" type="file" accept=".xlsx" class="form-control">
+                    </div>
+                    <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
+                        <label for="serviceImportMode">Modo</label>
+                        <select id="serviceImportMode" class="form-control">
+                            <option value="skip_dupes" selected>Pular duplicados</option>
+                            <option value="update_dupes">Atualizar existentes</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="serviceImportSkipHeader" checked>
+                            Ignorar primeira linha
+                        </label>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0; display:flex; gap: 0.75rem;">
+                        <button type="button" id="btnServiceImportParse" class="btn btn-secondary"><i class="ri-file-search-line"></i> Ler arquivo</button>
+                    </div>
+                </div>
+                <pre id="serviceImportStatus" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 12px 0 0;"></pre>
+                <div id="serviceImportPreviewWrap" class="table-container hidden" style="margin-top: 12px;">
+                    <table class="main-table" id="serviceImportPreviewTable">
+                        <thead>
+                            <tr>
+                                <th>Descrição</th>
+                                <th style="width: 120px; text-align:right;">Valor</th>
+                                <th style="width: 110px;">Tipo (IE)</th>
+                                <th style="width: 240px;">Subdivisão</th>
+                            </tr>
+                        </thead>
+                        <tbody id="serviceImportPreviewBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
+                <button type="button" class="btn btn-secondary" id="btnCancelServiceImport">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmServiceImport" disabled><i class="ri-upload-cloud-2-line"></i> Importar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toastNotification" class="toast hidden">
         <div class="toast-content">
@@ -3279,8 +3349,10 @@
     <!-- Supabase JS Client -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
     <!-- App Script -->
-    <script src="app_v20.js?v=20260319-1245"></script>
+    <script src="app_v20.js?v=20260320-2010"></script>
 </body>
 
 </html>

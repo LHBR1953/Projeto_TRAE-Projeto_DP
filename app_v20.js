@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260319-1245';
+const APP_BUILD = '20260320-2010';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -145,7 +145,7 @@ async function checkAuth() {
     if (!session) return false;
 
     currentUser = session.user;
-    isSuperAdmin = (currentUser.email === SUPER_ADMIN_EMAIL);
+    isSuperAdmin = String(currentUser.email || '').trim().toLowerCase() === String(SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
 
     const { data: mappings, error } = await db.from('usuario_empresas')
         .select('*, empresas(nome)')
@@ -1189,6 +1189,17 @@ const btnCancelService = document.getElementById('btnCancelService');
 const serviceForm = document.getElementById('serviceForm');
 const servicesTableBody = document.getElementById('servicesTableBody');
 const searchServiceInput = document.getElementById('searchServiceInput');
+const serviceImportModal = document.getElementById('serviceImportModal');
+const btnCloseServiceImportModal = document.getElementById('btnCloseServiceImportModal');
+const btnCancelServiceImport = document.getElementById('btnCancelServiceImport');
+const serviceImportFile = document.getElementById('serviceImportFile');
+const serviceImportMode = document.getElementById('serviceImportMode');
+const serviceImportSkipHeader = document.getElementById('serviceImportSkipHeader');
+const btnServiceImportParse = document.getElementById('btnServiceImportParse');
+const btnConfirmServiceImport = document.getElementById('btnConfirmServiceImport');
+const serviceImportStatus = document.getElementById('serviceImportStatus');
+const serviceImportPreviewWrap = document.getElementById('serviceImportPreviewWrap');
+const serviceImportPreviewBody = document.getElementById('serviceImportPreviewBody');
 
 // Budgets DOM Elements
 const btnNewBudget = document.getElementById('btnNewBudget');
@@ -1425,6 +1436,7 @@ const marketingTabSmtp = document.getElementById('marketingTabSmtp');
 const marketingBucket = document.getElementById('marketingBucket');
 const btnMarketingRefresh = document.getElementById('btnMarketingRefresh');
 const btnMarketingSend = document.getElementById('btnMarketingSend');
+const btnMarketingLastReturn = document.getElementById('btnMarketingLastReturn');
 const marketingActiveCampaign = document.getElementById('marketingActiveCampaign');
 const marketingSendResult = document.getElementById('marketingSendResult');
 const kpiMkAtivos = document.getElementById('kpiMkAtivos');
@@ -1459,6 +1471,7 @@ const mkSmtpPort = document.getElementById('mkSmtpPort');
 const mkSmtpUser = document.getElementById('mkSmtpUser');
 const mkSmtpPass = document.getElementById('mkSmtpPass');
 const mkFromEmail = document.getElementById('mkFromEmail');
+const mkBrevoApiKey = document.getElementById('mkBrevoApiKey');
 const btnMkSaveSmtp = document.getElementById('btnMkSaveSmtp');
 const btnMkReloadSmtp = document.getElementById('btnMkReloadSmtp');
 const mkSmtpResult = document.getElementById('mkSmtpResult');
@@ -1617,6 +1630,12 @@ function initMarketingUI() {
     if (btnMarketingRefresh) btnMarketingRefresh.addEventListener('click', () => marketingRefreshFidelidade());
     if (marketingBucket) marketingBucket.addEventListener('change', () => marketingRefreshFidelidadeBucket());
     if (btnMarketingSend) btnMarketingSend.addEventListener('click', async (e) => { e.preventDefault(); await marketingSendFromFidelidade(); });
+    if (btnMarketingLastReturn) btnMarketingLastReturn.addEventListener('click', (e) => { e.preventDefault(); marketingToggleLastReturn(); });
+    if (btnMarketingLastReturn) {
+        btnMarketingLastReturn.disabled = true;
+        btnMarketingLastReturn.style.opacity = '0.6';
+        btnMarketingLastReturn.style.display = isSuperAdmin ? 'none' : 'none';
+    }
 
     if (btnMkNewCampaign) btnMkNewCampaign.addEventListener('click', () => marketingResetCampaignForm());
     if (btnMkSaveCampaign) btnMkSaveCampaign.addEventListener('click', async (e) => { e.preventDefault(); await marketingSaveCampaign(); });
@@ -1625,6 +1644,17 @@ function initMarketingUI() {
 
     if (btnMkReloadSmtp) btnMkReloadSmtp.addEventListener('click', async (e) => { e.preventDefault(); await marketingLoadSmtpConfig(); });
     if (btnMkSaveSmtp) btnMkSaveSmtp.addEventListener('click', async (e) => { e.preventDefault(); await marketingSaveSmtpConfig(); });
+}
+
+function marketingToggleLastReturn() {
+    if (!isSuperAdmin) return;
+    if (!marketingSendResult) return;
+    if (!marketingLastReturnCache) { showToast('Sem retorno para exibir.', true); return; }
+    if (marketingSendResult.textContent && marketingSendResult.textContent.trim() !== '') {
+        marketingSendResult.textContent = '';
+        return;
+    }
+    marketingSendResult.textContent = marketingLastReturnCache;
 }
 
 function marketingShowTab(tab) {
@@ -1704,6 +1734,9 @@ function marketingStatusToRange(status) {
 }
 
 let marketingActiveCampaignCache = null;
+let marketingLastReturnCache = null;
+
+let serviceImportRowsCache = [];
 
 async function marketingLoadKpis() {
     try {
@@ -2098,6 +2131,12 @@ async function marketingSendFromFidelidade() {
         return;
     }
 
+    if (btnMarketingLastReturn && isSuperAdmin) {
+        btnMarketingLastReturn.style.display = 'none';
+        btnMarketingLastReturn.disabled = true;
+        btnMarketingLastReturn.style.opacity = '0.6';
+    }
+    marketingLastReturnCache = null;
     if (marketingSendResult) marketingSendResult.textContent = 'Simulando...';
     showToast('Simulando público da campanha...');
     try {
@@ -2124,7 +2163,15 @@ async function marketingSendFromFidelidade() {
         const eligible = Number(dry.eligible || 0);
         const selected = Number(dry.selected_count || 0);
         const hasEmails = Number(dry.has_email || 0);
-        if (marketingSendResult) marketingSendResult.textContent = JSON.stringify(dry, null, 2);
+        if (marketingSendResult) {
+            marketingSendResult.textContent =
+                `Simulação concluída.\n` +
+                `Status: ${marketingStatusLabel(statusKey)}\n` +
+                `Campanha: ${marketingActiveCampaignCache.nome}\n` +
+                `Elegíveis: ${eligible}\n` +
+                `Com e-mail: ${hasEmails}\n` +
+                `A enviar agora: ${selected}\n`;
+        }
 
         if (selected <= 0) {
             const msg = `Nenhum paciente elegível para envio agora. (No filtro: ${eligible}; com e-mail: ${hasEmails}).`;
@@ -2158,6 +2205,12 @@ async function marketingSendFromFidelidade() {
             const msg = result.error || result.message || 'Erro desconhecido';
             throw new Error(msg);
         }
+        marketingLastReturnCache = JSON.stringify(result, null, 2);
+        if (btnMarketingLastReturn && isSuperAdmin) {
+            btnMarketingLastReturn.style.display = 'inline-flex';
+            btnMarketingLastReturn.disabled = false;
+            btnMarketingLastReturn.style.opacity = '1';
+        }
         if (marketingSendResult) marketingSendResult.textContent = '';
         showToast(`Disparo concluído. Enviados: ${Number(result.sent || 0)} | Falhas: ${Number(result.failed || 0)}`);
     } catch (err) {
@@ -2179,12 +2232,22 @@ async function marketingLoadSmtpConfig() {
         if (mkSmtpHost) mkSmtpHost.value = c.host || '';
         if (mkSmtpPort) mkSmtpPort.value = c.port != null ? String(c.port) : '587';
         if (mkSmtpUser) mkSmtpUser.value = c.username || '';
-        if (mkFromEmail) mkFromEmail.value = c.from_email || '';
+        const companyEmail = getEmpresaEmail(currentEmpresaId).trim();
+        const savedFrom = c.from_email ? String(c.from_email) : '';
+        if (mkFromEmail) mkFromEmail.value = savedFrom || companyEmail || '';
         if (mkSmtpPass) mkSmtpPass.value = '';
-        if (mkSmtpResult) mkSmtpResult.textContent = c.has_password ? 'Senha configurada.' : 'Senha não configurada.';
+        if (mkBrevoApiKey) mkBrevoApiKey.value = '';
+        const passTxt = (typeof c.has_password === 'boolean')
+            ? (c.has_password ? 'Senha (SMTP) configurada.' : 'Senha (SMTP) não configurada.')
+            : 'Senha (SMTP) (atualize SQL/RPC).';
+        const apiTxt = (typeof c.has_brevo_api_key === 'boolean')
+            ? (c.has_brevo_api_key ? 'Brevo API Key configurada.' : 'Brevo API Key não configurada.')
+            : 'Brevo API Key (atualize SQL/RPC).';
+        if (mkSmtpResult) mkSmtpResult.textContent = `${passTxt} ${apiTxt}`;
     } catch (err) {
         console.error('Erro ao carregar SMTP:', err);
-        if (mkSmtpResult) mkSmtpResult.textContent = 'Falha ao carregar.';
+        const msg = err && err.message ? String(err.message) : String(err);
+        if (mkSmtpResult) mkSmtpResult.textContent = `Falha ao carregar: ${msg}`;
     }
 }
 
@@ -2192,26 +2255,63 @@ async function marketingSaveSmtpConfig() {
     if (!currentEmpresaId) { showToast('Selecione uma unidade.', true); return; }
     if (mkSmtpResult) mkSmtpResult.textContent = 'Salvando...';
     try {
+        const brevoKeyCandidate = mkBrevoApiKey ? String(mkBrevoApiKey.value || '').trim() : '';
+        if (brevoKeyCandidate && !brevoKeyCandidate.toLowerCase().startsWith('xkeysib-')) {
+            const msg = 'Brevo API Key inválida. Use a API Key v3 (começa com xkeysib-), não a senha SMTP.';
+            if (mkSmtpResult) mkSmtpResult.textContent = msg;
+            showToast(msg, true);
+            return;
+        }
+        const companyEmail = getEmpresaEmail(currentEmpresaId).trim();
+        let fromEmailCandidate = mkFromEmail ? String(mkFromEmail.value || '').trim() : '';
+        if (!fromEmailCandidate && companyEmail) {
+            fromEmailCandidate = companyEmail;
+            if (mkFromEmail) mkFromEmail.value = companyEmail;
+        }
+        const smtpEnabled = mkSmtpEnabled ? Boolean(mkSmtpEnabled.checked) : true;
+        if (smtpEnabled && !fromEmailCandidate) {
+            const msg = 'E-mail da clínica (From.Address) é obrigatório.';
+            if (mkSmtpResult) mkSmtpResult.textContent = msg;
+            showToast(msg, true);
+            return;
+        }
+        const smtpUserCandidate = mkSmtpUser ? String(mkSmtpUser.value || '').trim() : '';
+        const smtpPassCandidate = mkSmtpPass ? String(mkSmtpPass.value || '').trim() : '';
+        if (smtpEnabled && smtpUserCandidate && !smtpPassCandidate) {
+            const msg = 'SMTP.Password é obrigatória para salvar quando SMTP.Username está preenchido.';
+            if (mkSmtpResult) mkSmtpResult.textContent = msg;
+            showToast(msg, true);
+            return;
+        }
         const payload = {
             p_empresa_id: currentEmpresaId,
-            p_enabled: mkSmtpEnabled ? Boolean(mkSmtpEnabled.checked) : true,
+            p_enabled: smtpEnabled,
             p_host: mkSmtpHost ? String(mkSmtpHost.value || '').trim() : '',
             p_port: mkSmtpPort ? Number(mkSmtpPort.value || 587) : 587,
-            p_username: mkSmtpUser ? String(mkSmtpUser.value || '').trim() : null,
-            p_password: mkSmtpPass ? String(mkSmtpPass.value || '').trim() : null,
-            p_from_email: mkFromEmail ? String(mkFromEmail.value || '').trim() : null,
-            p_from_name: null
+            p_username: smtpUserCandidate || null,
+            p_password: smtpPassCandidate || null,
+            p_from_email: fromEmailCandidate || null,
+            p_from_name: null,
+            p_brevo_api_key: mkBrevoApiKey ? String(mkBrevoApiKey.value || '').trim() : null
         };
         const { data, error } = await withTimeout(db.rpc('rpc_marketing_set_smtp_config', payload), 20000, 'rpc_marketing_set_smtp_config');
         if (error) throw error;
         if (mkSmtpPass) mkSmtpPass.value = '';
-        if (mkSmtpResult) mkSmtpResult.textContent = 'Salvo.';
-        if (data && data.has_password) if (mkSmtpResult) mkSmtpResult.textContent = 'Salvo. Senha configurada.';
+        if (mkBrevoApiKey) mkBrevoApiKey.value = '';
+        const c = data && typeof data === 'object' ? data : {};
+        const passTxt = (typeof c.has_password === 'boolean')
+            ? (c.has_password ? 'Senha (SMTP) configurada.' : 'Senha (SMTP) não configurada.')
+            : 'Senha (SMTP) (atualize SQL/RPC).';
+        const apiTxt = (typeof c.has_brevo_api_key === 'boolean')
+            ? (c.has_brevo_api_key ? 'Brevo API Key configurada.' : 'Brevo API Key não configurada.')
+            : 'Brevo API Key (atualize SQL/RPC).';
+        if (mkSmtpResult) mkSmtpResult.textContent = `Salvo. ${passTxt} ${apiTxt}`;
         showToast('SMTP salvo.');
     } catch (err) {
         console.error('Erro ao salvar SMTP:', err);
-        if (mkSmtpResult) mkSmtpResult.textContent = 'Falha ao salvar.';
-        showToast('Falha ao salvar SMTP.', true);
+        const msg = err && err.message ? String(err.message) : String(err);
+        if (mkSmtpResult) mkSmtpResult.textContent = `Falha ao salvar: ${msg}`;
+        showToast(`Falha ao salvar SMTP: ${msg}`, true);
     }
 }
 
@@ -3031,6 +3131,8 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             if (empTel) empTel.value = dataObj.telefone || '';
             const empCel = document.getElementById('empresaCelular');
             if (empCel) empCel.value = dataObj.celular || '';
+            const empEmail = document.getElementById('empresaEmail');
+            if (empEmail) empEmail.value = dataObj.email || '';
             base64Input.value = dataObj.logotipo || '';
             if (dataObj.logotipo) {
                 logoPreview.innerHTML = `< img src = "${dataObj.logotipo}" style = "width: 100%; height: 100%; object-fit: cover;" > `;
@@ -3044,6 +3146,8 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             if (empTel) empTel.value = '';
             const empCel = document.getElementById('empresaCelular');
             if (empCel) empCel.value = '';
+            const empEmail = document.getElementById('empresaEmail');
+            if (empEmail) empEmail.value = '';
             base64Input.value = '';
             logoPreview.innerHTML = `< i class="ri-image-line" style = "font-size: 1.5rem; color: var(--text-muted);" ></i > `;
         }
@@ -7385,6 +7489,8 @@ function initHelpHotkey() {
 }
 
 initHelpHotkey();
+initServiceImportModal();
+initServiceImportHotkey();
 
 function openCommissionTransferModal() {
     if (!can('comissoes', 'update')) {
@@ -7736,6 +7842,12 @@ function getEmpresaName(id) {
     if (!id || id === '—') return '—';
     const e = activeEmpresasList.find(emp => emp.id === id);
     return e ? e.nome : id;
+}
+
+function getEmpresaEmail(id) {
+    if (!id || id === '—') return '';
+    const e = activeEmpresasList.find(emp => emp.id === id);
+    return e && e.email ? String(e.email) : '';
 }
 
 function updateHeaderCompanyBox() {
@@ -10607,6 +10719,304 @@ window.deleteService = async function (id) {
     }
 };
 
+function closeServiceImportModal() {
+    if (!serviceImportModal) return;
+    serviceImportModal.classList.add('hidden');
+    if (serviceImportFile) serviceImportFile.value = '';
+    if (serviceImportStatus) serviceImportStatus.textContent = '';
+    if (serviceImportPreviewBody) serviceImportPreviewBody.innerHTML = '';
+    if (serviceImportPreviewWrap) serviceImportPreviewWrap.classList.add('hidden');
+    if (btnConfirmServiceImport) btnConfirmServiceImport.disabled = true;
+    serviceImportRowsCache = [];
+}
+
+function openServiceImportModal() {
+    if (!serviceImportModal) return;
+    serviceImportModal.classList.remove('hidden');
+    if (serviceImportStatus) {
+        serviceImportStatus.textContent = 'Selecione um XLSX e clique em "Ler arquivo".';
+    }
+    if (btnConfirmServiceImport) btnConfirmServiceImport.disabled = true;
+}
+
+function parseLocaleNumber(v) {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    const s = String(v == null ? '' : v).trim();
+    if (!s) return NaN;
+    const hasComma = s.includes(',');
+    const hasDot = s.includes('.');
+    let normalized = s;
+    if (hasComma && hasDot) {
+        normalized = s.replace(/\./g, '').replace(',', '.');
+    } else {
+        normalized = s.replace(',', '.');
+    }
+    normalized = normalized.replace(/[^0-9.-]/g, '');
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : NaN;
+}
+
+function normalizeIe(v) {
+    const s = String(v == null ? '' : v).trim().toUpperCase();
+    if (!s) return 'S';
+    if (s === 'S' || s.startsWith('SERV')) return 'S';
+    if (s === 'E' || s.startsWith('EST')) return 'E';
+    if (s.startsWith('S')) return 'S';
+    if (s.startsWith('E')) return 'E';
+    return '';
+}
+
+function normalizeServiceKeyText(v) {
+    return String(v == null ? '' : v)
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toUpperCase();
+}
+
+function serviceImportKeyFromParts(descricao, valor, ie, subdivisao) {
+    const d = normalizeServiceKeyText(descricao);
+    const s = normalizeServiceKeyText(subdivisao);
+    const t = normalizeIe(ie);
+    const n = Number(valor);
+    const v = Number.isFinite(n) ? n.toFixed(2) : '';
+    return `${d}||${t}||${s}||${v}`;
+}
+
+async function serviceImportParseFile() {
+    if (!serviceImportFile || !serviceImportStatus || !btnConfirmServiceImport) return;
+    if (!serviceImportFile.files || !serviceImportFile.files[0]) {
+        showToast('Selecione um arquivo XLSX.', true);
+        return;
+    }
+    if (!window.XLSX || !window.XLSX.read) {
+        showToast('Biblioteca XLSX não carregou. Recarregue a página (Ctrl+F5).', true);
+        return;
+    }
+
+    const file = serviceImportFile.files[0];
+    serviceImportStatus.textContent = 'Lendo arquivo...';
+    btnConfirmServiceImport.disabled = true;
+    serviceImportRowsCache = [];
+
+    try {
+        const ab = await file.arrayBuffer();
+        const wb = window.XLSX.read(ab, { type: 'array' });
+        const sheetName = wb.SheetNames && wb.SheetNames.length ? wb.SheetNames[0] : null;
+        if (!sheetName) throw new Error('Planilha não encontrada no XLSX.');
+        const ws = wb.Sheets[sheetName];
+        const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        const skipHeader = serviceImportSkipHeader ? Boolean(serviceImportSkipHeader.checked) : true;
+        const start = skipHeader ? 1 : 0;
+        const valid = [];
+        const invalid = [];
+
+        for (let i = start; i < rows.length; i += 1) {
+            const r = Array.isArray(rows[i]) ? rows[i] : [];
+            const descricao = String(r[1] || '').trim();
+            const valor = parseLocaleNumber(r[2]);
+            const ie = normalizeIe(r[3]);
+            const subdivisao = String(r[4] || '').trim();
+
+            const isEmpty = !descricao && !String(r[2] || '').trim() && !String(r[3] || '').trim() && !subdivisao;
+            if (isEmpty) continue;
+
+            const errs = [];
+            if (!descricao) errs.push('Descrição vazia (coluna B)');
+            if (!Number.isFinite(valor)) errs.push('Valor inválido (coluna C)');
+            if (!ie) errs.push('Tipo (IE) inválido (coluna D)');
+            if (!subdivisao) errs.push('Subdivisão vazia (coluna E)');
+
+            if (errs.length) {
+                invalid.push({ row: i + 1, errors: errs.join('; ') });
+                continue;
+            }
+
+            valid.push({ descricao, valor, ie, subdivisao });
+        }
+
+        serviceImportRowsCache = valid;
+        if (serviceImportPreviewBody) serviceImportPreviewBody.innerHTML = '';
+        if (serviceImportPreviewWrap) {
+            if (valid.length) serviceImportPreviewWrap.classList.remove('hidden');
+            else serviceImportPreviewWrap.classList.add('hidden');
+        }
+
+        const previewLimit = 500;
+        const preview = valid.slice(0, previewLimit);
+        if (serviceImportPreviewBody) {
+            preview.forEach(it => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${escapeHtml(String(it.descricao || ''))}</td>
+                    <td style="text-align:right;">R$ ${Number(it.valor || 0).toFixed(2)}</td>
+                    <td>${escapeHtml(String(it.ie || ''))}</td>
+                    <td>${escapeHtml(String(it.subdivisao || ''))}</td>
+                `;
+                serviceImportPreviewBody.appendChild(tr);
+            });
+        }
+
+        const msgLines = [
+            `Planilha: ${sheetName}`,
+            `Linhas lidas: ${rows.length}`,
+            `Válidas: ${valid.length}`,
+            `Inválidas: ${invalid.length}`,
+            `Preview: ${preview.length}/${valid.length}`
+        ];
+        if (invalid.length) {
+            msgLines.push('', 'Primeiros erros:');
+            invalid.slice(0, 10).forEach(e => msgLines.push(`Linha ${e.row}: ${e.errors}`));
+        }
+        serviceImportStatus.textContent = msgLines.join('\n');
+        btnConfirmServiceImport.disabled = valid.length === 0;
+    } catch (err) {
+        const msg = err && err.message ? String(err.message) : String(err);
+        serviceImportStatus.textContent = `Falha ao ler XLSX: ${msg}`;
+        showToast(`Falha ao ler XLSX: ${msg}`, true);
+    }
+}
+
+async function serviceImportConfirm() {
+    if (!currentEmpresaId) { showToast('Selecione uma unidade.', true); return; }
+    if (!can('servicos', 'insert')) { showToast('Você não tem permissão para importar serviços.', true); return; }
+    if (!serviceImportRowsCache || serviceImportRowsCache.length === 0) { showToast('Nenhum item válido para importar.', true); return; }
+    if (!btnConfirmServiceImport) return;
+
+    btnConfirmServiceImport.disabled = true;
+    if (serviceImportStatus) serviceImportStatus.textContent = 'Importando...';
+
+    try {
+        const mode = serviceImportMode ? String(serviceImportMode.value || 'skip_dupes') : 'skip_dupes';
+        if (mode === 'update_dupes' && !can('servicos', 'update')) {
+            showToast('Você não tem permissão para atualizar serviços (modo Atualizar existentes).', true);
+            btnConfirmServiceImport.disabled = false;
+            return;
+        }
+
+        const existingByKey = new Map();
+        (services || []).forEach(s => {
+            if (!s || String(s.empresa_id || '') !== String(currentEmpresaId || '')) return;
+            const k = serviceImportKeyFromParts(s.descricao, s.valor, s.ie, s.subdivisao);
+            if (!existingByKey.has(k)) existingByKey.set(k, s);
+        });
+
+        const byImportKey = new Map();
+        (serviceImportRowsCache || []).forEach(r => {
+            const k = serviceImportKeyFromParts(r.descricao, r.valor, r.ie, r.subdivisao);
+            byImportKey.set(k, r);
+        });
+        const uniqueRows = Array.from(byImportKey.entries()).map(([k, r]) => ({ key: k, ...r }));
+
+        let nextSeq = getNextSeqId(services);
+        let skipped = 0;
+        let updated = 0;
+        let inserted = 0;
+
+        const payload = [];
+        uniqueRows.forEach(r => {
+            const found = existingByKey.get(r.key);
+            if (found) {
+                if (mode === 'skip_dupes') {
+                    skipped += 1;
+                    return;
+                }
+                updated += 1;
+                payload.push({
+                    id: found.id,
+                    seqid: found.seqid,
+                    descricao: normalizeServiceKeyText(r.descricao),
+                    valor: Number(r.valor || 0),
+                    ie: normalizeIe(r.ie),
+                    subdivisao: String(r.subdivisao || '').trim(),
+                    empresa_id: currentEmpresaId
+                });
+                return;
+            }
+            inserted += 1;
+            payload.push({
+                id: generateId(),
+                seqid: nextSeq++,
+                descricao: normalizeServiceKeyText(r.descricao),
+                valor: Number(r.valor || 0),
+                ie: normalizeIe(r.ie),
+                subdivisao: String(r.subdivisao || '').trim(),
+                empresa_id: currentEmpresaId
+            });
+        });
+
+        if (payload.length === 0) {
+            if (serviceImportStatus) serviceImportStatus.textContent = `Nada para importar.\nPulos (duplicados): ${skipped}`;
+            showToast('Nada para importar.', true);
+            btnConfirmServiceImport.disabled = false;
+            return;
+        }
+
+        const chunkSize = 200;
+        for (let i = 0; i < payload.length; i += chunkSize) {
+            const chunk = payload.slice(i, i + chunkSize);
+            const { error } = (mode === 'update_dupes')
+                ? await db.from('servicos').upsert(chunk, { onConflict: 'id' })
+                : await db.from('servicos').insert(chunk);
+            if (error) throw error;
+        }
+
+        payload.forEach(p => {
+            const idx = (services || []).findIndex(s => s && String(s.id) === String(p.id));
+            if (idx >= 0) services[idx] = { ...services[idx], ...p };
+            else services.push(p);
+        });
+        services = (services || []).slice().sort((a, b) => Number(a.seqid || 0) - Number(b.seqid || 0));
+        if (servicesListView && !servicesListView.classList.contains('hidden')) {
+            renderTable(services, 'services');
+        }
+
+        if (serviceImportStatus) {
+            serviceImportStatus.textContent =
+                `Importação concluída.\n` +
+                `Modo: ${mode === 'update_dupes' ? 'Atualizar existentes' : 'Pular duplicados'}\n` +
+                `Inseridos: ${inserted}\n` +
+                `Atualizados: ${updated}\n` +
+                `Pulos (duplicados): ${skipped}\n`;
+        }
+        showToast(`Importação concluída: ${inserted} inseridos, ${updated} atualizados, ${skipped} pulados.`);
+        closeServiceImportModal();
+    } catch (err) {
+        const msg = err && err.message ? String(err.message) : String(err);
+        if (serviceImportStatus) serviceImportStatus.textContent = `Falha ao importar: ${msg}`;
+        showToast(`Falha ao importar: ${msg}`, true);
+        btnConfirmServiceImport.disabled = false;
+    }
+}
+
+function initServiceImportModal() {
+    if (window.__serviceImportBound) return;
+    window.__serviceImportBound = true;
+    if (btnCloseServiceImportModal) btnCloseServiceImportModal.addEventListener('click', closeServiceImportModal);
+    if (btnCancelServiceImport) btnCancelServiceImport.addEventListener('click', closeServiceImportModal);
+    if (serviceImportModal) serviceImportModal.addEventListener('click', (e) => { if (e.target === serviceImportModal) closeServiceImportModal(); });
+    if (btnServiceImportParse) btnServiceImportParse.addEventListener('click', (e) => { e.preventDefault(); serviceImportParseFile(); });
+    if (btnConfirmServiceImport) btnConfirmServiceImport.addEventListener('click', (e) => { e.preventDefault(); serviceImportConfirm(); });
+}
+
+function initServiceImportHotkey() {
+    if (window.__serviceImportHotkeyBound) return;
+    window.__serviceImportHotkeyBound = true;
+    document.addEventListener('keydown', (e) => {
+        if (!e.ctrlKey || !e.shiftKey || !e.altKey) return;
+        const k = String(e.key || '').toUpperCase();
+        if (k !== 'I') return;
+        const servicesActive =
+            (servicesListView && !servicesListView.classList.contains('hidden')) ||
+            (serviceFormView && !serviceFormView.classList.contains('hidden'));
+        if (!servicesActive) return;
+        e.preventDefault();
+        e.stopPropagation();
+        initServiceImportModal();
+        openServiceImportModal();
+    }, true);
+}
+
 // ==========================================
 // ORÇAMENTOS (BUDGETS) LOGIC
 // ==========================================
@@ -13321,7 +13731,8 @@ if (empresaForm) {
             const supervisorPin = document.getElementById('empresaSupervisorPin').value;
             const telefone = document.getElementById('empresaTelefone')?.value || '';
             const celular = document.getElementById('empresaCelular')?.value || '';
-            const empresaData = { id: newId, nome, telefone, celular, logotipo: logo, supervisor_pin: supervisorPin };
+            const email = document.getElementById('empresaEmail')?.value || '';
+            const empresaData = { id: newId, nome, telefone, celular, email, logotipo: logo, supervisor_pin: supervisorPin };
 
             if (oldId && oldId !== newId) {
                 // Changing ID is risky if there are foreign keys, but technically Empresas is the root

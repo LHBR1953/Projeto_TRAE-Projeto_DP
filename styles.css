@@ -532,6 +532,62 @@ h2 {
     margin-top: 0.25rem;
 }
 
+.dashboard-grid.marketing-kpi-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+.marketing-kpi-grid .kpi-card {
+    padding: 0.75rem;
+}
+
+.marketing-kpi-grid .kpi-title {
+    font-size: 0.75rem;
+}
+
+.marketing-kpi-grid .kpi-value {
+    font-size: 1.4rem;
+}
+
+.marketing-kpi-grid .kpi-sub {
+    font-size: 0.75rem;
+}
+
+.mk-kpi {
+    color: #111111;
+}
+
+.mk-kpi .kpi-title,
+.mk-kpi .kpi-value,
+.mk-kpi .kpi-sub {
+    color: #111111;
+}
+
+.mk-kpi-ativos {
+    background: #bbf7d0;
+    border-left: 6px solid var(--success-color);
+}
+
+.mk-kpi-atencao {
+    background: #fde68a;
+    border-left: 6px solid #f0c000;
+}
+
+.mk-kpi-reativacao {
+    background: #fed7aa;
+    border-left: 6px solid #f08c00;
+}
+
+.mk-kpi-alto-risco {
+    background: #fecaca;
+    border-left: 6px solid #dc3545;
+}
+
+.mk-kpi-perdidos {
+    background: #e5e7eb;
+    border-left: 6px solid #6c757d;
+}
+
 .dash-card {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
@@ -601,6 +657,9 @@ h2 {
     .dashboard-grid-2 {
         grid-template-columns: 1fr;
     }
+    .dashboard-grid.marketing-kpi-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 640px) {
@@ -608,6 +667,9 @@ h2 {
         grid-template-columns: 1fr;
     }
     .dash-mini-grid {
+        grid-template-columns: 1fr;
+    }
+    .dashboard-grid.marketing-kpi-grid {
         grid-template-columns: 1fr;
     }
 }
