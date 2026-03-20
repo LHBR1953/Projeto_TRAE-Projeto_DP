@@ -1,0 +1,126 @@
+-- 1) empresa
+insert into public.empresas (id, nome, supervisor_pin)
+values ('emp_nova', 'Empresa Nova', '123456')
+on conflict (id) do update set supervisor_pin = excluded.supervisor_pin;
+
+-- 2) vínculo do superadmin nessa empresa
+insert into public.usuario_empresas (usuario_id, empresa_id, perfil)
+select u.id, 'emp_nova', 'admin'
+from auth.users u
+where u.email = 'lhbr@lhbr.com.br'
+on conflict (usuario_id, empresa_id) do update set perfil = 'admin';
+
+
+Produção Protética
+
+Como o usuário vai usar (passo a passo, no dia a dia)
+
+1) Primeiro passo (uma única vez): cadastrar os laboratórios
+
+- Menu Produção Protética → botão Laboratórios .
+- Cadastre o laboratório (nome, contato e prazo em dias).
+- Isso serve para, quando a OP for externa , você conseguir selecionar o laboratório e rastrear tudo na timeline.
+2) Criar uma Ordem Protética (OP) Existem 2 jeitos (o usuário escolhe o que for mais natural):
+
+- Pelo menu :
+   Menu Produção Protética → Nova OP → selecionar Paciente → escolher Execução :
+  
+  - Externa : selecione o Laboratório
+  - Interna : selecione o Protético interno
+  - (opcional) preencha Prazo e Prioridade → Salvar
+- Direto no Orçamento (o fluxo mais prático):
+   Dentro do orçamento, nos itens, quando o item tiver protético definido , 
+   aparece o botão (ícone de ferramentas) “Acompanhar Produção Protética”.
+  
+  - Se já existir OP para aquele item, ele abre a OP.
+  - Se não existir, ele já abre a tela para criar uma OP vinculada ao item.
+3) Acompanhar o caso (o coração do controle) Ao abrir a OP, o usuário vai trabalhar assim:
+
+- Registrar eventos conforme o caso avança:
+  - Registrar envio (quando saiu da clínica para o lab ou para o protético interno)
+  - Registrar recebimento (quando voltou para a clínica)
+  - Prova paciente (quando houve prova)
+  - Aprovar / Reprovar (decisão clínica)
+  - Encerrar (quando finalizou/entregou)
+- Cada clique desses grava um evento na timeline com data/hora e atualiza a fase atual da OP.
+- Antes de clicar num evento, o usuário pode escrever uma Observação (ex.: “Prova em cera ficou alta no 26”, 
+  “Paciente aprovou cor A2”, “Retornar para ajuste de oclusão”). Isso fica registrado no histórico.
+4) Ter visão rápida para o CEO No menu Produção Protética , o usuário vê:
+
+- KPIs : total de OPs, quantas atrasadas, quantas internas/externas.
+- Filtros para responder rápido:
+  - “Somente atrasados”
+  - “Externa/Interna”
+  - busca por paciente, OP#, orçamento#
+- A tabela mostra, para cada OP: paciente, executor (lab/protético), fase, prazo e status .
+   Isso vira a “tela de pronta resposta”.
+5) Recomendação de uso prático (rotina)
+
+- Toda vez que “vai para o laboratório” → registrar envio .
+- Toda vez que “volta para a clínica” → registrar recebimento .
+- Toda prova/retorno importante → registrar prova paciente + observação.
+- Quando aprovado → aprovar ; se precisar retrabalho → reprovar (fica claro no histórico).
+- Quando terminar → encerrar .
+  Se você quiser, eu escrevo um “manual rápido” de 1 página (bem objetivo) para treinar recepção/gestão e outro para o 
+  dentista/protético, com exemplos reais de eventos e observações.
+
+
+
+CUSTÓDIA DAS PRÓTESES OU PRODUTOS
+
+O que foi adicionado (para funcionar na prática)
+
+- Botão Custódia (QR) dentro da OP de Prótese (modal).
+- Modal que gera:
+  - QR Code com link público
+  - código de 6 dígitos (desafio-resposta) exibido na tela da clínica
+  - botões: Copiar link , Verificar assinatura , Cancelar QR
+- Página pública para o portador assinar/confirmar no celular:
+  - protese_custodia.html
+Banco (obrigatório para rodar)
+
+- Apply (cria tabelas + RPCs + RLS): 20260317_protese_custodia_chain.sql
+- Rollback (remove tudo): 20260317_protese_custodia_chain_rollback.sql
+Como usar (fluxo real)
+
+- Abra uma OP → clique Custódia (QR)
+- Escolha Ação (Entrega/Recebimento) e Para (posse) → Gerar QR
+- O portador escaneia o QR, abre no celular, digita o código da tela e assina
+- Na clínica, clique Verificar assinatura (e o evento entra no histórico da OP)
+Ponto de recuperação (desligar em segundos, sem mexer no banco)
+
+- No navegador:
+  - localStorage.setItem('dp_feature_protese_custodia', '0') (desliga)
+  - localStorage.setItem('dp_feature_protese_custodia', '1') (liga)
+- Guia rápida: Protese_Custodia_Recuperacao.md
+Observação sobre seu alerta de FK (paciente/laboratório): a custódia referencia a OP (e a OP já referencia paciente/lab). 
+Hoje o seu schema de prótese permite apagar paciente (CASCADE) e laboratório (SET NULL); 
+se você quiser travar isso “na marra”, precisa alterar esses FKs para RESTRICT — posso preparar o SQL certinho quando você mandar o ok.
+
+
+
+Procedimento (Laboratório devolvendo para a Clínica ) usando o QR no OCC:
+
+- 1) Abra a OP
+  
+  - Vá em Próteses → abra a Ordem Protética que o laboratório está entregando.
+- 2) Abra a Custódia
+  
+  - Clique em Custódia (QR) .
+- 3) Configure para “volta para a clínica”
+  
+  - Ação: selecione Recebimento
+  - Para (posse): selecione Clínica
+  - Clique Gerar QR
+- 4) Confirmação pelo portador (quem está entregando)
+  
+  - O entregador/laboratório escaneia o QR no celular
+  - Na página do celular ele:
+    - digita o código exibido na tela da clínica
+    - coloca o nome (e documento, se quiser)
+    - assina e confirma
+- 5) Conferência
+  
+  - Na tela da clínica, clique Verificar assinatura .
+  - O evento entra no histórico da OP , registrando que a posse voltou para a clínica.
+Se quiser que a posse fique “duplamente amarrada”, o ideal é: quem entrega assina como entregador e a clínica assina como recebedor (dois eventos consecutivos). Hoje o fluxo registra o recebedor; dá para evoluir para capturar as duas assinaturas no mesmo recibo.

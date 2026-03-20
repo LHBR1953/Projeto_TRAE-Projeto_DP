@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260317-2055';
+const APP_BUILD = '20260319-1245';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -120,6 +120,7 @@ let currentEmpresaId = null;
 let currentUserRole = null; // Store user role globally
 let currentUserPerms = {}; // Granular permissions
 let isSuperAdmin = false; // System owner flag
+let superAdminHotkeyReady = false;
 
 // MASTER CONFIG: Change this email to transfer SuperAdmin ownership
 const SUPER_ADMIN_EMAIL = 'lhbr@lhbr.com.br';
@@ -255,7 +256,253 @@ async function checkAuth() {
     }
 
     updateSidebarVisibility();
+    setupSuperAdminHotkey();
     return true;
+}
+
+function setupSuperAdminHotkey() {
+    if (superAdminHotkeyReady) return;
+    superAdminHotkeyReady = true;
+    initSuperAdminModal();
+
+    let buf = '';
+    let lastTs = 0;
+    const seq = 'PURGE';
+    const maxGapMs = 1200;
+
+    document.addEventListener('keydown', (e) => {
+        try {
+            if (e.key === 'Escape') {
+                if (modalSuperAdmin && !modalSuperAdmin.classList.contains('hidden')) {
+                    e.preventDefault();
+                    closeSuperAdminModal();
+                    return;
+                }
+            }
+            if (!isSuperAdmin) return;
+            if (e.repeat) return;
+            const mods = Boolean(e.ctrlKey && e.altKey && e.shiftKey);
+            if (!mods) {
+                buf = '';
+                lastTs = 0;
+                return;
+            }
+
+            const k = String(e.key || '').toUpperCase();
+            if (k.length !== 1 || k < 'A' || k > 'Z') return;
+
+            const now = Date.now();
+            if (lastTs && (now - lastTs) > maxGapMs) buf = '';
+            lastTs = now;
+            buf = (buf + k).slice(-seq.length);
+            if (buf === seq) {
+                e.preventDefault();
+                e.stopPropagation();
+                openSuperAdminModal();
+                buf = '';
+                lastTs = 0;
+            }
+        } catch {
+        }
+    }, true);
+}
+
+function initSuperAdminModal() {
+    if (window.__superAdminModalBound) return;
+    window.__superAdminModalBound = true;
+    if (btnCloseModalSuperAdmin) btnCloseModalSuperAdmin.addEventListener('click', closeSuperAdminModal);
+    if (btnSuperAdminClose) btnSuperAdminClose.addEventListener('click', closeSuperAdminModal);
+    if (modalSuperAdmin) modalSuperAdmin.addEventListener('click', (e) => { if (e.target === modalSuperAdmin) closeSuperAdminModal(); });
+
+    if (saScope && !saScope.dataset.bound) {
+        saScope.addEventListener('change', () => {
+            syncSuperAdminFormVisibility();
+            updateSuperAdminPlanPreview();
+        });
+        saScope.dataset.bound = '1';
+    }
+    if (saTable && !saTable.dataset.bound) {
+        saTable.addEventListener('change', () => updateSuperAdminPlanPreview());
+        saTable.dataset.bound = '1';
+    }
+    if (saEmpresa && !saEmpresa.dataset.bound) {
+        saEmpresa.addEventListener('change', () => updateSuperAdminPlanPreview());
+        saEmpresa.dataset.bound = '1';
+    }
+    if (btnSaDryRun && !btnSaDryRun.dataset.bound) {
+        btnSaDryRun.addEventListener('click', async (e) => { e.preventDefault(); await runSuperAdminPurge(true); });
+        btnSaDryRun.dataset.bound = '1';
+    }
+    if (btnSaExecute && !btnSaExecute.dataset.bound) {
+        btnSaExecute.addEventListener('click', async (e) => { e.preventDefault(); await runSuperAdminPurge(false); });
+        btnSaExecute.dataset.bound = '1';
+    }
+}
+
+function openSuperAdminModal() {
+    if (!isSuperAdmin) return;
+    if (!modalSuperAdmin) return;
+    hydrateSuperAdminCombos();
+    syncSuperAdminFormVisibility();
+    updateSuperAdminPlanPreview();
+    modalSuperAdmin.classList.remove('hidden');
+}
+
+function closeSuperAdminModal() {
+    if (!modalSuperAdmin) return;
+    modalSuperAdmin.classList.add('hidden');
+}
+
+const SUPERADMIN_PURGE_TABLES = [
+    'orcamento_itens',
+    'orcamento_pagamentos',
+    'orcamento_cancelados',
+    'financeiro_comissoes',
+    'financeiro_transacoes',
+    'agenda_agendamentos',
+    'agenda_disponibilidade',
+    'paciente_documentos',
+    'paciente_evolucao',
+    'ordens_proteticas_anexos',
+    'ordens_proteticas_eventos',
+    'ordens_proteticas',
+    'laboratorios_proteticos',
+    'orcamentos',
+    'pacientes',
+    'profissionais',
+    'especialidade_subdivisoes',
+    'especialidades',
+    'servicos',
+    'usuario_empresas'
+];
+
+function getSuperAdminPurgePlan(scope, tableName) {
+    const t = String(tableName || '');
+    const s = String(scope || '');
+    if (s === 'AUDIT') return ['occ_audit_log'];
+    if (s === 'ALL') return SUPERADMIN_PURGE_TABLES.slice();
+    if (s === 'BUDGETS') return ['orcamento_itens', 'orcamento_pagamentos', 'orcamento_cancelados', 'orcamentos'];
+    if (s === 'FINANCE') return ['financeiro_comissoes', 'financeiro_transacoes'];
+    if (s === 'AGENDA') return ['agenda_agendamentos', 'agenda_disponibilidade'];
+    if (s === 'PROTESE') return ['ordens_proteticas_anexos', 'ordens_proteticas_eventos', 'ordens_proteticas', 'laboratorios_proteticos'];
+    if (s === 'PATIENTS') return ['paciente_documentos', 'paciente_evolucao', 'pacientes'];
+    if (s === 'CATALOG') return ['especialidade_subdivisoes', 'especialidades', 'servicos'];
+    if (s === 'TABLE') return t ? [t] : [];
+    return [];
+}
+
+async function hydrateSuperAdminCombos() {
+    if (!isSuperAdmin) return;
+    if (!saEmpresa || !saScope || !saTable) return;
+
+    if (!saEmpresa.dataset.loaded) {
+        try {
+            const { data: allEmpresas, error } = await withTimeout(db.from('empresas').select('id, nome').order('nome'), 20000, 'empresas');
+            if (error) throw error;
+            const opts = (allEmpresas || []).map(e => `<option value="${escapeHtml(String(e.id))}">${escapeHtml(String(e.nome || e.id))}</option>`);
+            saEmpresa.innerHTML = opts.join('') || `<option value="${escapeHtml(String(currentEmpresaId || ''))}">${escapeHtml(String(currentEmpresaId || ''))}</option>`;
+            saEmpresa.value = String(currentEmpresaId || saEmpresa.value || '');
+            saEmpresa.dataset.loaded = '1';
+        } catch (err) {
+            console.warn('Falha ao carregar empresas (superadmin):', err);
+            saEmpresa.innerHTML = `<option value="${escapeHtml(String(currentEmpresaId || ''))}">${escapeHtml(String(currentEmpresaId || ''))}</option>`;
+            saEmpresa.value = String(currentEmpresaId || '');
+            saEmpresa.dataset.loaded = '1';
+        }
+    } else {
+        if (currentEmpresaId && !saEmpresa.value) saEmpresa.value = String(currentEmpresaId);
+    }
+
+    if (!saTable.dataset.loaded) {
+        const opts = SUPERADMIN_PURGE_TABLES
+            .slice()
+            .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+            .map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`);
+        saTable.innerHTML = `<option value="">Selecione...</option>` + opts.join('');
+        saTable.dataset.loaded = '1';
+    }
+}
+
+function syncSuperAdminFormVisibility() {
+    if (!saScope || !saTableWrap) return;
+    const scope = String(saScope.value || 'TABLE');
+    saTableWrap.style.display = scope === 'TABLE' ? '' : 'none';
+    if (saClearAudit) {
+        if (scope === 'AUDIT') {
+            saClearAudit.checked = true;
+            saClearAudit.disabled = true;
+        } else {
+            saClearAudit.disabled = false;
+        }
+    }
+}
+
+function updateSuperAdminPlanPreview() {
+    if (!saPlan) return;
+    const scope = saScope ? String(saScope.value || 'TABLE') : 'TABLE';
+    const tableName = saTable ? String(saTable.value || '') : '';
+    const plan = getSuperAdminPurgePlan(scope, tableName);
+    if (!plan.length) {
+        saPlan.textContent = 'Selecione uma opção.';
+        return;
+    }
+    saPlan.textContent = plan.map((t, i) => `${String(i + 1).padStart(2, '0')} - ${t}`).join('\n');
+}
+
+async function runSuperAdminPurge(dryRun) {
+    if (!isSuperAdmin) return;
+    if (!saEmpresa || !saScope || !saConfirm || !saResult) return;
+
+    const empresaId = String(saEmpresa.value || '');
+    const scope = String(saScope.value || 'TABLE');
+    const tableName = saTable ? String(saTable.value || '') : '';
+    const confirmTxt = String(saConfirm.value || '').trim();
+    const expected = `DELETE ${empresaId}`;
+
+    if (!empresaId) {
+        showToast('Selecione uma empresa.', true);
+        return;
+    }
+
+    if (!dryRun && confirmTxt !== expected) {
+        showToast(`Confirmação inválida. Digite exatamente: ${expected}`, true);
+        return;
+    }
+
+    const plan = getSuperAdminPurgePlan(scope, tableName);
+    if (scope === 'TABLE' && !tableName) {
+        showToast('Selecione uma tabela.', true);
+        return;
+    }
+    if (!plan.length) {
+        showToast('Selecione o que zerar.', true);
+        return;
+    }
+
+    saResult.textContent = 'Processando...';
+
+    try {
+        const payload = {
+            p_empresa_id: empresaId,
+            p_scope: scope,
+            p_table: tableName || null,
+            p_confirm: confirmTxt || null,
+            p_dry_run: Boolean(dryRun),
+            p_clear_audit: Boolean(saClearAudit && saClearAudit.checked)
+        };
+        const { data, error } = await withTimeout(db.rpc('rpc_occ_purge_empresa', payload), 60000, 'rpc_occ_purge_empresa');
+        if (error) throw error;
+        saResult.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        if (!dryRun) {
+            showToast('Limpeza concluída.');
+        }
+    } catch (err) {
+        console.error('Erro purge superadmin:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        saResult.textContent = `Erro (${code}): ${msg}`;
+        showToast(`Erro na limpeza (${code}): ${msg}`, true);
+    }
 }
 
 // Global Context Switcher
@@ -302,6 +549,7 @@ function getModuleKey(type) {
         'services': 'servicos',
         'budgets': 'orcamentos',
         'financeiro': 'financeiro',
+        'marketing': 'marketing',
         'commissions': 'comissoes',
         'agenda': 'agenda',
         'atendimento': 'atendimento',
@@ -725,14 +973,13 @@ async function initializeApp(isContextSwitch = false) {
         }
         if (specialties.length === 0 && currentEmpresaId && !window.__seededDefaultSpecialties[currentEmpresaId]) {
             const defaultSpecialties = [
-                { nome: "CLINICO GERAL", subs: ["Avaliação/Consulta", "Profilaxia (Limpeza)", "Restauração", "Extração Simples"] },
-                { nome: "ORTODONTIA", subs: ["Manutenção de Aparelho", "Instalação de Aparelho", "Contenção"] },
-                { nome: "IMPLANTODONTIA", subs: ["Implante Unitário", "Enxerto Ósseo", "Prótese sobre Implante"] },
-                { nome: "ENDODONTIA", subs: ["Tratamento de Canal (Incisivo/Canino)", "Tratamento de Canal (Molar)"] },
-                { nome: "PERIODONTIA", subs: ["Raspagem (Limpeza Profunda)", "Cirurgia Gengival"] },
-                { nome: "ODONTOPEDIATRIA", subs: ["Aplicação de Flúor", "Selante", "Extração de Dente de Leite"] },
-                { nome: "CIRURGIA BUCOMAXILOFACIAL", subs: ["Extração de Siso", "Biópsia"] },
-                { nome: "PRÓTESE DENTÁRIA", subs: ["Coroa", "Ponte", "Prótese Total (Dentadura)"] }
+                { nome: "ENDODONTIA", subs: ["ENDODONTIA"] },
+                { nome: "ORTODONTIA", subs: ["ORTODONTIA"] },
+                { nome: "CLÍNICOS", subs: ["CLÍNICOS"] },
+                { nome: "PRÓTESES DENTÁRIAS", subs: ["PRÓTESES FIXAS", "PRÓTESES REMOVÍVEIS"] },
+                { nome: "HARMONIZAÇÃO OROFACIAL", subs: ["BOTOX", "PREENCHIMENTO", "COLÁGENO", "FIOS DPO", "ULTRASSOM E LASERS", "LIPO DE PAPADA", "BICHECTOMIA"] },
+                { nome: "CIRÚRGICOS ESPECIALIZADOS", subs: ["CIRÚRGICOS ESPECIALIZADOS"] },
+                { nome: "PEDIATRIA", subs: ["PEDIATRIA"] }
             ];
 
             for (let def of defaultSpecialties) {
@@ -803,12 +1050,14 @@ const navSpecialties = document.getElementById('navSpecialties');
 const navServices = document.getElementById('navServices');
 const navBudgets = document.getElementById('navBudgets');
 const navFinanceiro = document.getElementById('navFinanceiro');
+const navMarketing = document.getElementById('navMarketing');
 const navCommissions = document.getElementById('navCommissions');
 const navAtendimento = document.getElementById('navAtendimento');
 const navAgenda = document.getElementById('navAgenda');
 const navProtese = document.getElementById('navProtese');
 const navEmpresas = document.getElementById('navEmpresas');
 const navUsersAdminBtn = document.getElementById('navUsersAdmin');
+const navAuditLog = document.getElementById('navAuditLog');
 
 // View Elements
 const patientListView = document.getElementById('patientListView');
@@ -826,11 +1075,13 @@ const userAdminFormView = document.getElementById('userAdminFormView');
 const empresasListView = document.getElementById('empresasListView');
 const empresaFormView = document.getElementById('empresaFormView');
 const financeiroView = document.getElementById('financeiroView');
+const marketingView = document.getElementById('marketingView');
 const commissionsView = document.getElementById('commissionsView');
 const dashboardView = document.getElementById('dashboardView');
 const atendimentoView = document.getElementById('atendimentoView');
 const agendaView = document.getElementById('agendaView');
 const proteseView = document.getElementById('proteseView');
+const auditLogView = document.getElementById('auditLogView');
 const btnAddNewEmpresa = document.getElementById('btnAddNewEmpresa');
 const btnBackEmpresa = document.getElementById('btnBackEmpresa');
 const btnCancelEmpresa = document.getElementById('btnCancelEmpresa');
@@ -847,6 +1098,7 @@ const systemModules = [
     { id: 'servicos', label: 'Serviços/Estoque' },
     { id: 'orcamentos', label: 'Orçamentos' },
     { id: 'financeiro', label: 'Financeiro' },
+    { id: 'marketing', label: 'Marketing' },
     { id: 'comissoes', label: 'Comissões' },
     { id: 'atendimento', label: 'Atendimento' },
     { id: 'agenda', label: 'Agenda' },
@@ -1057,6 +1309,7 @@ const proteseProteticoGroup = document.getElementById('proteseProteticoGroup');
 const proteseProtetico = document.getElementById('proteseProtetico');
 const protesePrazo = document.getElementById('protesePrazo');
 const protesePrioridade = document.getElementById('protesePrioridade');
+const proteseObservacoes = document.getElementById('proteseObservacoes');
 const proteseNota = document.getElementById('proteseNota');
 const proteseTimeline = document.getElementById('proteseTimeline');
 const proteseOrcamentoSeqid = document.getElementById('proteseOrcamentoSeqid');
@@ -1149,6 +1402,67 @@ const helpModalBody = document.getElementById('helpModalBody');
 const btnCloseHelpModal = document.getElementById('btnCloseHelpModal');
 const btnCloseHelpModal2 = document.getElementById('btnCloseHelpModal2');
 
+const modalSuperAdmin = document.getElementById('modalSuperAdmin');
+const btnCloseModalSuperAdmin = document.getElementById('btnCloseModalSuperAdmin');
+const btnSuperAdminClose = document.getElementById('btnSuperAdminClose');
+const saEmpresa = document.getElementById('saEmpresa');
+const saScope = document.getElementById('saScope');
+const saTableWrap = document.getElementById('saTableWrap');
+const saTable = document.getElementById('saTable');
+const saClearAudit = document.getElementById('saClearAudit');
+const saConfirm = document.getElementById('saConfirm');
+const btnSaDryRun = document.getElementById('btnSaDryRun');
+const btnSaExecute = document.getElementById('btnSaExecute');
+const saPlan = document.getElementById('saPlan');
+const saResult = document.getElementById('saResult');
+
+const btnMarketingTabFidelidade = document.getElementById('btnMarketingTabFidelidade');
+const btnMarketingTabCampanhas = document.getElementById('btnMarketingTabCampanhas');
+const btnMarketingTabSmtp = document.getElementById('btnMarketingTabSmtp');
+const marketingTabFidelidade = document.getElementById('marketingTabFidelidade');
+const marketingTabCampanhas = document.getElementById('marketingTabCampanhas');
+const marketingTabSmtp = document.getElementById('marketingTabSmtp');
+const marketingBucket = document.getElementById('marketingBucket');
+const btnMarketingRefresh = document.getElementById('btnMarketingRefresh');
+const btnMarketingSend = document.getElementById('btnMarketingSend');
+const marketingActiveCampaign = document.getElementById('marketingActiveCampaign');
+const marketingSendResult = document.getElementById('marketingSendResult');
+const kpiMkAtivos = document.getElementById('kpiMkAtivos');
+const kpiMk7a8 = document.getElementById('kpiMk7a8');
+const kpiMk9a11 = document.getElementById('kpiMk9a11');
+const kpiMk12a17 = document.getElementById('kpiMk12a17');
+const kpiMk18 = document.getElementById('kpiMk18');
+const marketingPatientsSummary = document.getElementById('marketingPatientsSummary');
+const marketingPatientsBody = document.getElementById('marketingPatientsBody');
+
+const btnMkNewCampaign = document.getElementById('btnMkNewCampaign');
+const mkCampaignsBody = document.getElementById('mkCampaignsBody');
+const mkCampaignFormTitle = document.getElementById('mkCampaignFormTitle');
+const mkCampaignId = document.getElementById('mkCampaignId');
+const mkCampaignNome = document.getElementById('mkCampaignNome');
+const mkCampaignAssunto = document.getElementById('mkCampaignAssunto');
+const mkStatusAlvo = document.getElementById('mkStatusAlvo');
+const mkDiasReenvio = document.getElementById('mkDiasReenvio');
+const mkLimiteDia = document.getElementById('mkLimiteDia');
+const mkJanelaConv = document.getElementById('mkJanelaConv');
+const mkAtivo = document.getElementById('mkAtivo');
+const mkCorpo = document.getElementById('mkCorpo');
+const mkRodape = document.getElementById('mkRodape');
+const btnMkSaveCampaign = document.getElementById('btnMkSaveCampaign');
+const btnMkDryRun = document.getElementById('btnMkDryRun');
+const btnMkSend = document.getElementById('btnMkSend');
+const mkCampaignResult = document.getElementById('mkCampaignResult');
+
+const mkSmtpEnabled = document.getElementById('mkSmtpEnabled');
+const mkSmtpHost = document.getElementById('mkSmtpHost');
+const mkSmtpPort = document.getElementById('mkSmtpPort');
+const mkSmtpUser = document.getElementById('mkSmtpUser');
+const mkSmtpPass = document.getElementById('mkSmtpPass');
+const mkFromEmail = document.getElementById('mkFromEmail');
+const btnMkSaveSmtp = document.getElementById('btnMkSaveSmtp');
+const btnMkReloadSmtp = document.getElementById('btnMkReloadSmtp');
+const mkSmtpResult = document.getElementById('mkSmtpResult');
+
 // Commissions DOM Elements
 const commissionsTable = document.getElementById('commissionsTable');
 const commissionsTableBody = document.getElementById('commissionsTableBody');
@@ -1216,6 +1530,8 @@ let selectedCommissionIds = new Set();
 const inputCpf = document.getElementById('cpf');
 const inputCelular = document.getElementById('celular');
 const inputTelefone = document.getElementById('telefone');
+const inputEmpresaTelefone = document.getElementById('empresaTelefone');
+const inputEmpresaCelular = document.getElementById('empresaCelular');
 const inputCep = document.getElementById('cep');
 const profCelular = document.getElementById('profCelular');
 const profEmailInput = document.getElementById('profEmail');
@@ -1242,6 +1558,7 @@ function updateSidebarVisibility() {
         'navServices': 'services',
         'navBudgets': 'budgets',
         'navFinanceiro': 'financeiro',
+        'navMarketing': 'marketing',
         'navCommissions': 'commissions',
         'navAtendimento': 'atendimento',
         'navAgenda': 'agenda',
@@ -1252,7 +1569,8 @@ function updateSidebarVisibility() {
         const el = document.getElementById(id);
         if (el) {
             const hasPerm = can(getModuleKey(type), 'select');
-            el.style.display = hasPerm ? 'flex' : 'none';
+            const enabled = type !== 'marketing' ? true : isMarketingEnabled();
+            el.style.display = (hasPerm && enabled) ? 'flex' : 'none';
             console.log(`DEBUG: Sidebar Sync -> ${id} (${type}): ${hasPerm ? 'VISIBLE' : 'HIDDEN'}`);
         }
     });
@@ -1262,17 +1580,638 @@ function updateSidebarVisibility() {
     const navEmpresas = document.getElementById('navEmpresas');
     const navUsersAdmin = document.getElementById('navUsersAdmin');
     const navCancelledBudgets = document.getElementById('navCancelledBudgets');
+    const navAuditLog = document.getElementById('navAuditLog');
 
     if (currentUserRole === 'admin') {
         if (navConfigSection) navConfigSection.style.display = 'block';
         if (navEmpresas) navEmpresas.style.display = isSuperAdmin ? 'flex' : 'none';
         if (navUsersAdmin) navUsersAdmin.style.display = 'flex';
         if (navCancelledBudgets) navCancelledBudgets.style.display = 'flex';
+        if (navAuditLog) navAuditLog.style.display = 'flex';
     } else {
         if (navConfigSection) navConfigSection.style.display = 'none';
         if (navEmpresas) navEmpresas.style.display = 'none';
         if (navUsersAdmin) navUsersAdmin.style.display = 'none';
         if (navCancelledBudgets) navCancelledBudgets.style.display = 'none';
+        if (navAuditLog) navAuditLog.style.display = 'none';
+    }
+}
+
+function isMarketingEnabled() {
+    try {
+        const v = localStorage.getItem('dp_feature_marketing');
+        if (v == null) return true;
+        return String(v) !== '0';
+    } catch {
+        return true;
+    }
+}
+
+function initMarketingUI() {
+    if (window.__marketingBound) return;
+    window.__marketingBound = true;
+
+    if (btnMarketingTabFidelidade) btnMarketingTabFidelidade.addEventListener('click', () => marketingShowTab('fidelidade'));
+    if (btnMarketingTabCampanhas) btnMarketingTabCampanhas.addEventListener('click', () => marketingShowTab('campanhas'));
+    if (btnMarketingTabSmtp) btnMarketingTabSmtp.addEventListener('click', () => marketingShowTab('smtp'));
+    if (btnMarketingRefresh) btnMarketingRefresh.addEventListener('click', () => marketingRefreshFidelidade());
+    if (marketingBucket) marketingBucket.addEventListener('change', () => marketingRefreshFidelidadeBucket());
+    if (btnMarketingSend) btnMarketingSend.addEventListener('click', async (e) => { e.preventDefault(); await marketingSendFromFidelidade(); });
+
+    if (btnMkNewCampaign) btnMkNewCampaign.addEventListener('click', () => marketingResetCampaignForm());
+    if (btnMkSaveCampaign) btnMkSaveCampaign.addEventListener('click', async (e) => { e.preventDefault(); await marketingSaveCampaign(); });
+    if (btnMkDryRun) btnMkDryRun.addEventListener('click', async (e) => { e.preventDefault(); await marketingDryRunCampaign(); });
+    if (btnMkSend) btnMkSend.addEventListener('click', async (e) => { e.preventDefault(); await marketingSendCampaign(); });
+
+    if (btnMkReloadSmtp) btnMkReloadSmtp.addEventListener('click', async (e) => { e.preventDefault(); await marketingLoadSmtpConfig(); });
+    if (btnMkSaveSmtp) btnMkSaveSmtp.addEventListener('click', async (e) => { e.preventDefault(); await marketingSaveSmtpConfig(); });
+}
+
+function marketingShowTab(tab) {
+    if (marketingTabFidelidade) marketingTabFidelidade.classList.add('hidden');
+    if (marketingTabCampanhas) marketingTabCampanhas.classList.add('hidden');
+    if (marketingTabSmtp) marketingTabSmtp.classList.add('hidden');
+    if (btnMarketingTabFidelidade) btnMarketingTabFidelidade.classList.remove('btn-primary');
+    if (btnMarketingTabCampanhas) btnMarketingTabCampanhas.classList.remove('btn-primary');
+    if (btnMarketingTabSmtp) btnMarketingTabSmtp.classList.remove('btn-primary');
+
+    if (tab === 'campanhas') {
+        if (marketingTabCampanhas) marketingTabCampanhas.classList.remove('hidden');
+        if (btnMarketingTabCampanhas) btnMarketingTabCampanhas.classList.add('btn-primary');
+        marketingLoadCampaigns();
+        return;
+    }
+
+    if (tab === 'smtp') {
+        if (marketingTabSmtp) marketingTabSmtp.classList.remove('hidden');
+        if (btnMarketingTabSmtp) btnMarketingTabSmtp.classList.add('btn-primary');
+        marketingLoadSmtpConfig();
+        return;
+    }
+
+    if (marketingTabFidelidade) marketingTabFidelidade.classList.remove('hidden');
+    if (btnMarketingTabFidelidade) btnMarketingTabFidelidade.classList.add('btn-primary');
+    marketingRefreshFidelidade();
+}
+
+function marketingRefreshAll() {
+    marketingShowTab('fidelidade');
+}
+
+async function marketingRefreshFidelidade() {
+    await marketingLoadKpis();
+    await marketingRefreshFidelidadeBucket();
+}
+
+function parseMarketingBucketRange() {
+    const raw = marketingBucket ? String(marketingBucket.value || '0-6') : '0-6';
+    const m = raw.split('-').map(s => s.trim());
+    const min = Number(m[0] || 0);
+    const max = Number(m[1] || 0);
+    const maxOut = (max >= 999) ? null : max;
+    return { min: Number.isFinite(min) ? min : 0, max: (maxOut == null || Number.isFinite(maxOut)) ? maxOut : null };
+}
+
+function marketingStatusFromBucketRange(range) {
+    const min = Number(range && range.min != null ? range.min : 0);
+    const max = range && range.max != null ? Number(range.max) : null;
+    if (min === 0 && max === 6) return 'ATIVOS';
+    if (min === 7 && max === 8) return 'ATENCAO';
+    if (min === 9 && max === 11) return 'REATIVACAO';
+    if (min === 12 && max === 17) return 'ALTO_RISCO';
+    if (min >= 18 && max == null) return 'PERDIDOS';
+    return 'CUSTOM';
+}
+
+function marketingStatusLabel(status) {
+    const s = String(status || '').toUpperCase();
+    if (s === 'ATIVOS') return 'Ativos';
+    if (s === 'ATENCAO') return 'Atenção';
+    if (s === 'REATIVACAO') return 'Reativação';
+    if (s === 'ALTO_RISCO') return 'Alto Risco';
+    if (s === 'PERDIDOS') return 'Perdidos';
+    return s || '—';
+}
+
+function marketingStatusToRange(status) {
+    const s = String(status || '').toUpperCase();
+    if (s === 'ATIVOS') return { min: 0, max: 6 };
+    if (s === 'ATENCAO') return { min: 7, max: 8 };
+    if (s === 'REATIVACAO') return { min: 9, max: 11 };
+    if (s === 'ALTO_RISCO') return { min: 12, max: 17 };
+    if (s === 'PERDIDOS') return { min: 18, max: null };
+    return { min: 0, max: 6 };
+}
+
+let marketingActiveCampaignCache = null;
+
+async function marketingLoadKpis() {
+    try {
+        if (!currentEmpresaId) return;
+        const { data, error } = await withTimeout(
+            db.rpc('rpc_marketing_fidelidade_kpis', { p_empresa_id: currentEmpresaId }),
+            20000,
+            'rpc_marketing_fidelidade_kpis'
+        );
+        if (error) throw error;
+        const k = data && typeof data === 'object' ? data : {};
+        if (kpiMkAtivos) kpiMkAtivos.textContent = String(k.ativos ?? '0');
+        if (kpiMk7a8) kpiMk7a8.textContent = String(k.m7_8 ?? '0');
+        if (kpiMk9a11) kpiMk9a11.textContent = String(k.m9_11 ?? '0');
+        if (kpiMk12a17) kpiMk12a17.textContent = String(k.m12_17 ?? '0');
+        if (kpiMk18) kpiMk18.textContent = String(k.m18_plus ?? '0');
+    } catch (err) {
+        console.error('Erro ao carregar KPIs marketing:', err);
+        if (kpiMkAtivos) kpiMkAtivos.textContent = '—';
+        if (kpiMk7a8) kpiMk7a8.textContent = '—';
+        if (kpiMk9a11) kpiMk9a11.textContent = '—';
+        if (kpiMk12a17) kpiMk12a17.textContent = '—';
+        if (kpiMk18) kpiMk18.textContent = '—';
+    }
+}
+
+async function marketingRefreshFidelidadeBucket() {
+    if (!marketingPatientsBody) return;
+    if (!currentEmpresaId) {
+        marketingPatientsBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color: var(--text-muted);">Selecione uma unidade.</td></tr>';
+        return;
+    }
+    marketingPatientsBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando...</td></tr>';
+    const range = parseMarketingBucketRange();
+    await marketingLoadActiveCampaignForBucket(range);
+    try {
+        const payload = {
+            p_empresa_id: currentEmpresaId,
+            p_min_meses: range.min,
+            p_max_meses: range.max,
+            p_limit: 500,
+            p_offset: 0
+        };
+        const { data, error } = await withTimeout(db.rpc('rpc_marketing_fidelidade', payload), 30000, 'rpc_marketing_fidelidade');
+        if (error) throw error;
+        const rows = Array.isArray(data) ? data : [];
+        if (!rows.length) {
+            marketingPatientsBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color: var(--text-muted);">Nenhum paciente encontrado.</td></tr>';
+            if (marketingPatientsSummary) marketingPatientsSummary.textContent = '0 pacientes';
+            return;
+        }
+        marketingPatientsBody.innerHTML = '';
+        rows.forEach(r => {
+            const tr = document.createElement('tr');
+            const total = Number(r.total_pago || 0);
+            const totalTxt = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const qtdTxt = Number(r.qtd_pagamentos || 0).toLocaleString('pt-BR');
+            const lastTxt = r.ultimo_pagamento_em ? formatDateTime(r.ultimo_pagamento_em) : '—';
+            tr.innerHTML = `
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);"><strong>${escapeHtml(String(r.nome || '—'))}</strong></td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${lastTxt}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); text-align:center;">${escapeHtml(String(r.meses_sem_pagamento ?? '—'))}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); text-align:right;"><strong>${totalTxt}</strong></td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); text-align:right;">${qtdTxt}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${escapeHtml(String(r.email || '—'))}</td>
+            `;
+            marketingPatientsBody.appendChild(tr);
+        });
+        if (marketingPatientsSummary) marketingPatientsSummary.textContent = `${rows.length} pacientes`;
+    } catch (err) {
+        console.error('Erro ao carregar fidelidade:', err);
+        marketingPatientsBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color: var(--danger-color);">Falha ao carregar.</td></tr>';
+        if (marketingPatientsSummary) marketingPatientsSummary.textContent = '—';
+    }
+}
+
+async function marketingLoadActiveCampaignForBucket(range) {
+    marketingActiveCampaignCache = null;
+    if (marketingActiveCampaign) marketingActiveCampaign.textContent = '—';
+    if (btnMarketingSend) btnMarketingSend.disabled = false;
+    if (!currentEmpresaId) return;
+    const statusKey = marketingStatusFromBucketRange(range);
+    if (statusKey === 'CUSTOM') return;
+    try {
+        let rows = [];
+        try {
+            const q1 = db.from('marketing_campanhas')
+                .select('id, nome, ativo, target_status, target_min_meses, target_max_meses, updated_at')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ativo', true)
+                .order('updated_at', { ascending: false })
+                .limit(20);
+            const { data, error } = await withTimeout(q1, 20000, 'marketing_campanhas:active');
+            if (error) throw error;
+            rows = Array.isArray(data) ? data : [];
+        } catch (e) {
+            const q2 = db.from('marketing_campanhas')
+                .select('id, nome, ativo, target_min_meses, target_max_meses, updated_at')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ativo', true)
+                .order('updated_at', { ascending: false })
+                .limit(20);
+            const { data, error } = await withTimeout(q2, 20000, 'marketing_campanhas:active');
+            if (error) throw error;
+            rows = Array.isArray(data) ? data : [];
+        }
+        const match = rows.find(c => String(c.target_status || '').toUpperCase() === statusKey)
+            || rows.find(c => {
+                const r = marketingStatusToRange(statusKey);
+                return Number(c.target_min_meses ?? -1) === r.min && (r.max == null ? c.target_max_meses == null : Number(c.target_max_meses ?? -1) === r.max);
+            })
+            || null;
+        if (!match) {
+            if (marketingActiveCampaign) marketingActiveCampaign.textContent = `Nenhuma ativa para ${marketingStatusLabel(statusKey)}`;
+            return;
+        }
+        marketingActiveCampaignCache = { id: String(match.id || ''), nome: String(match.nome || ''), status: statusKey };
+        if (marketingActiveCampaign) marketingActiveCampaign.textContent = `${marketingStatusLabel(statusKey)}: ${marketingActiveCampaignCache.nome}`;
+        if (btnMarketingSend) btnMarketingSend.disabled = false;
+    } catch (err) {
+        console.error('Erro ao carregar campanha ativa:', err);
+        if (marketingActiveCampaign) marketingActiveCampaign.textContent = 'Falha ao localizar campanha ativa.';
+    }
+}
+
+function marketingResetCampaignForm() {
+    if (mkCampaignFormTitle) mkCampaignFormTitle.textContent = 'Campanha';
+    if (mkCampaignId) mkCampaignId.value = '';
+    if (mkCampaignNome) mkCampaignNome.value = '';
+    if (mkCampaignAssunto) mkCampaignAssunto.value = '';
+    if (mkStatusAlvo) {
+        const range = parseMarketingBucketRange();
+        const statusKey = marketingStatusFromBucketRange(range);
+        mkStatusAlvo.value = statusKey === 'CUSTOM' ? 'ATIVOS' : statusKey;
+    }
+    if (mkDiasReenvio) mkDiasReenvio.value = '0';
+    if (mkLimiteDia) mkLimiteDia.value = '50';
+    if (mkJanelaConv) mkJanelaConv.value = '30';
+    if (mkAtivo) mkAtivo.checked = false;
+    if (mkCorpo) {
+        mkCorpo.value = 'Venha fazer um checkup conosco e ganhe uma limpeza inteiramente grátis.';
+    }
+    if (mkRodape) {
+        mkRodape.value = 'Atenciosamente,\n{{NOME_EMPRESA}}\nAtendimento: {{TELEFONE_EMPRESA}} / {{CELULAR_EMPRESA}}\nÀ Gerência.';
+    }
+    if (mkCampaignResult) mkCampaignResult.textContent = '';
+}
+
+async function marketingLoadCampaigns() {
+    if (!mkCampaignsBody) return;
+    if (!currentEmpresaId) {
+        mkCampaignsBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-muted);">Selecione uma unidade.</td></tr>';
+        return;
+    }
+    mkCampaignsBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando...</td></tr>';
+    try {
+        let rows = [];
+        try {
+            const q1 = db.from('marketing_campanhas')
+                .select('id, nome, assunto, ativo, target_status, target_min_meses, target_max_meses, dias_reenvio, limite_dia, janela_conversao_dias, corpo, rodape, updated_at, created_at')
+                .eq('empresa_id', currentEmpresaId)
+                .order('created_at', { ascending: false });
+            const { data, error } = await withTimeout(q1, 20000, 'marketing_campanhas');
+            if (error) throw error;
+            rows = Array.isArray(data) ? data : [];
+        } catch (e) {
+            const q2 = db.from('marketing_campanhas')
+                .select('id, nome, assunto, ativo, target_min_meses, target_max_meses, dias_reenvio, limite_dia, janela_conversao_dias, corpo, rodape, updated_at, created_at')
+                .eq('empresa_id', currentEmpresaId)
+                .order('created_at', { ascending: false });
+            const { data, error } = await withTimeout(q2, 20000, 'marketing_campanhas');
+            if (error) throw error;
+            rows = Array.isArray(data) ? data : [];
+        }
+
+        if (!rows.length) {
+            mkCampaignsBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-muted);">Nenhuma campanha cadastrada.</td></tr>';
+            return;
+        }
+        mkCampaignsBody.innerHTML = '';
+        rows.forEach(c => {
+            const tr = document.createElement('tr');
+            const targetStatus = c.target_status ? String(c.target_status) : marketingStatusFromBucketRange({ min: Number(c.target_min_meses ?? 0), max: (c.target_max_meses == null ? null : Number(c.target_max_meses)) });
+            const alvo = marketingStatusLabel(targetStatus);
+            const ativoTxt = c.ativo ? 'SIM' : 'NÃO';
+            tr.innerHTML = `
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);"><strong>${escapeHtml(String(c.nome || '—'))}</strong></td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${escapeHtml(String(c.assunto || '—'))}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${escapeHtml(alvo)}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); text-align:center;">${ativoTxt}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                    <button class="btn btn-secondary" data-action="edit" data-id="${escapeHtml(String(c.id))}"><i class="ri-edit-line"></i> Editar</button>
+                    <button class="btn btn-danger" data-action="del" data-id="${escapeHtml(String(c.id))}"><i class="ri-delete-bin-line"></i></button>
+                </td>
+            `;
+            mkCampaignsBody.appendChild(tr);
+        });
+        mkCampaignsBody.querySelectorAll('button[data-action="edit"]').forEach(b => {
+            b.addEventListener('click', () => marketingEditCampaign(b.getAttribute('data-id')));
+        });
+        mkCampaignsBody.querySelectorAll('button[data-action="del"]').forEach(b => {
+            b.addEventListener('click', () => marketingDeleteCampaign(b.getAttribute('data-id')));
+        });
+    } catch (err) {
+        console.error('Erro ao carregar campanhas:', err);
+        mkCampaignsBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--danger-color);">Falha ao carregar.</td></tr>';
+    }
+}
+
+async function marketingEditCampaign(id) {
+    if (!id || !currentEmpresaId) return;
+    try {
+        const q = db.from('marketing_campanhas')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('id', id)
+            .limit(1)
+            .single();
+        const { data, error } = await withTimeout(q, 20000, 'marketing_campanhas:one');
+        if (error) throw error;
+        const c = data || {};
+        if (mkCampaignFormTitle) mkCampaignFormTitle.textContent = 'Editar campanha';
+        if (mkCampaignId) mkCampaignId.value = String(c.id || '');
+        if (mkCampaignNome) mkCampaignNome.value = String(c.nome || '');
+        if (mkCampaignAssunto) mkCampaignAssunto.value = String(c.assunto || '');
+        if (mkStatusAlvo) {
+            const status = c.target_status ? String(c.target_status) : marketingStatusFromBucketRange({ min: Number(c.target_min_meses ?? 0), max: (c.target_max_meses == null ? null : Number(c.target_max_meses)) });
+            mkStatusAlvo.value = String(status || 'ATIVOS').toUpperCase();
+        }
+        if (mkDiasReenvio) mkDiasReenvio.value = String(c.dias_reenvio ?? 0);
+        if (mkLimiteDia) mkLimiteDia.value = String(c.limite_dia ?? 50);
+        if (mkJanelaConv) mkJanelaConv.value = String(c.janela_conversao_dias ?? 30);
+        if (mkAtivo) mkAtivo.checked = Boolean(c.ativo);
+        if (mkCorpo) mkCorpo.value = String(c.corpo || '');
+        if (mkRodape) mkRodape.value = String(c.rodape || '');
+        if (mkCampaignResult) mkCampaignResult.textContent = '';
+    } catch (err) {
+        console.error('Erro ao editar campanha:', err);
+        showToast('Falha ao abrir campanha.', true);
+    }
+}
+
+async function marketingDeleteCampaign(id) {
+    if (!id || !currentEmpresaId) return;
+    const ok = confirm('Excluir esta campanha?');
+    if (!ok) return;
+    try {
+        const { error } = await withTimeout(
+            db.from('marketing_campanhas').delete().eq('empresa_id', currentEmpresaId).eq('id', id),
+            20000,
+            'marketing_campanhas:delete'
+        );
+        if (error) throw error;
+        showToast('Campanha excluída.');
+        marketingLoadCampaigns();
+        if (mkCampaignId && mkCampaignId.value === String(id)) marketingResetCampaignForm();
+    } catch (err) {
+        console.error('Erro ao excluir campanha:', err);
+        showToast('Falha ao excluir campanha.', true);
+    }
+}
+
+function marketingCollectCampaignPayload() {
+    const id = mkCampaignId ? String(mkCampaignId.value || '') : '';
+    const nome = mkCampaignNome ? String(mkCampaignNome.value || '').trim() : '';
+    const assunto = mkCampaignAssunto ? String(mkCampaignAssunto.value || '').trim() : '';
+    const statusAlvo = mkStatusAlvo ? String(mkStatusAlvo.value || 'ATIVOS').trim().toUpperCase() : 'ATIVOS';
+    const range = marketingStatusToRange(statusAlvo);
+    const diasReenvio = mkDiasReenvio ? Number(mkDiasReenvio.value || 0) : 0;
+    const limiteDia = mkLimiteDia ? Number(mkLimiteDia.value || 50) : 50;
+    const janela = mkJanelaConv ? Number(mkJanelaConv.value || 30) : 30;
+    const ativo = mkAtivo ? Boolean(mkAtivo.checked) : false;
+    const corpo = mkCorpo ? String(mkCorpo.value || '').trim() : '';
+    const rodape = mkRodape ? String(mkRodape.value || '').trim() : '';
+    return { id, nome, assunto, statusAlvo, minMeses: range.min, maxMeses: range.max, diasReenvio, limiteDia, janela, ativo, corpo, rodape };
+}
+
+async function marketingSaveCampaign() {
+    if (!currentEmpresaId) { showToast('Selecione uma unidade.', true); return; }
+    const p = marketingCollectCampaignPayload();
+    if (!p.nome || !p.assunto || !p.corpo) { showToast('Preencha Nome, Assunto e E-mail.', true); return; }
+    if (!p.statusAlvo || p.statusAlvo === 'CUSTOM') { showToast('Status alvo inválido.', true); return; }
+
+    const payload = {
+        empresa_id: currentEmpresaId,
+        nome: p.nome,
+        assunto: p.assunto,
+        corpo: p.corpo,
+        rodape: p.rodape || null,
+        ativo: p.ativo,
+        target_status: p.statusAlvo,
+        target_min_meses: Math.trunc(p.minMeses),
+        target_max_meses: (p.maxMeses == null ? null : Math.trunc(p.maxMeses)),
+        dias_reenvio: Math.trunc(p.diasReenvio || 0),
+        limite_dia: Math.trunc(p.limiteDia || 50),
+        janela_conversao_dias: Math.trunc(p.janela || 30),
+        updated_at: new Date().toISOString()
+    };
+
+    try {
+        if (p.id) {
+            const { error } = await withTimeout(db.from('marketing_campanhas').update(payload).eq('empresa_id', currentEmpresaId).eq('id', p.id), 20000, 'marketing_campanhas:update');
+            if (error) throw error;
+            showToast('Campanha atualizada.');
+        } else {
+            payload.created_at = new Date().toISOString();
+            const { data, error } = await withTimeout(db.from('marketing_campanhas').insert(payload).select('id').single(), 20000, 'marketing_campanhas:insert');
+            if (error) throw error;
+            if (mkCampaignId) mkCampaignId.value = data && data.id ? String(data.id) : '';
+            showToast('Campanha criada.');
+        }
+        marketingLoadCampaigns();
+        const range = parseMarketingBucketRange();
+        await marketingLoadActiveCampaignForBucket(range);
+    } catch (err) {
+        console.error('Erro ao salvar campanha:', err);
+        const msg = err && err.message ? String(err.message) : '';
+        if (/target_status/i.test(msg) || /column .*target_status/i.test(msg)) {
+            showToast('Banco não está pronto para Status alvo. Rode o SQL de migração do Marketing (status alvo).', true);
+        } else {
+            showToast('Falha ao salvar campanha.', true);
+        }
+    }
+}
+
+async function marketingDryRunCampaign() {
+    if (!currentEmpresaId) { showToast('Selecione uma unidade.', true); return; }
+    const p = marketingCollectCampaignPayload();
+    if (mkCampaignResult) mkCampaignResult.textContent = 'Simulando...';
+    try {
+        const { data, error } = await withTimeout(
+            db.rpc('rpc_marketing_fidelidade_count', { p_empresa_id: currentEmpresaId, p_min_meses: Math.trunc(p.minMeses), p_max_meses: (p.maxMeses == null ? null : Math.trunc(p.maxMeses)) }),
+            20000,
+            'rpc_marketing_fidelidade_count'
+        );
+        if (error) throw error;
+        const count = Number(data || 0);
+        if (mkCampaignResult) mkCampaignResult.textContent = `Público estimado (${marketingStatusLabel(p.statusAlvo)}): ${count}`;
+    } catch (err) {
+        console.error('Erro ao simular campanha:', err);
+        if (mkCampaignResult) mkCampaignResult.textContent = 'Falha ao simular.';
+    }
+}
+
+async function marketingSendCampaign() {
+    if (!currentEmpresaId) { showToast('Selecione uma unidade.', true); return; }
+    const p = marketingCollectCampaignPayload();
+    if (!p.id) { showToast('Salve a campanha antes de enviar.', true); return; }
+    const ok = confirm('Enviar campanha agora?');
+    if (!ok) return;
+    if (mkCampaignResult) mkCampaignResult.textContent = 'Enviando...';
+    try {
+        const { data: { session } } = await db.auth.getSession();
+        if (!session) throw new Error('Sessão expirada.');
+        const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
+        const resp = await fetch(`${baseUrl}/functions/v1/run-marketing-campaign`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+                'apikey': supabaseKey
+            },
+            body: JSON.stringify({ empresa_id: currentEmpresaId, campaign_id: p.id, dry_run: false })
+        });
+        const result = await resp.json();
+        if (!resp.ok) {
+            const msg = result.error || result.message || 'Erro desconhecido';
+            throw new Error(msg);
+        }
+        if (mkCampaignResult) mkCampaignResult.textContent = JSON.stringify(result, null, 2);
+        showToast('Disparo concluído.');
+    } catch (err) {
+        console.error('Erro ao enviar campanha:', err);
+        if (mkCampaignResult) mkCampaignResult.textContent = `Falha: ${err.message || err}`;
+        showToast('Falha ao enviar campanha.', true);
+    }
+}
+
+async function marketingSendFromFidelidade() {
+    if (!currentEmpresaId) { showToast('Selecione uma unidade.', true); return; }
+    const range = parseMarketingBucketRange();
+    const statusKey = marketingStatusFromBucketRange(range);
+    if (statusKey === 'CUSTOM') { showToast('Status atual inválido para disparo.', true); return; }
+
+    if (!marketingActiveCampaignCache || marketingActiveCampaignCache.status !== statusKey) {
+        await marketingLoadActiveCampaignForBucket(range);
+    }
+    if (!marketingActiveCampaignCache || !marketingActiveCampaignCache.id) {
+        const msg = `Nenhuma campanha ativa para ${marketingStatusLabel(statusKey)}. Marque "Ativa" na campanha desse status.`;
+        if (marketingSendResult) marketingSendResult.textContent = msg;
+        showToast(msg, true);
+        return;
+    }
+
+    if (marketingSendResult) marketingSendResult.textContent = 'Simulando...';
+    showToast('Simulando público da campanha...');
+    try {
+        const { data: { session } } = await db.auth.getSession();
+        if (!session) throw new Error('Sessão expirada.');
+        const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
+
+        const respDry = await fetch(`${baseUrl}/functions/v1/run-marketing-campaign`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+                'apikey': supabaseKey
+            },
+            body: JSON.stringify({ empresa_id: currentEmpresaId, status_key: statusKey, dry_run: true })
+        });
+        let dry = null;
+        try { dry = await respDry.json(); } catch { dry = { error: 'Resposta inválida da função (deploy/URL/CORS).' }; }
+        if (!respDry.ok) {
+            const msg = dry.error || dry.message || 'Erro desconhecido';
+            throw new Error(msg);
+        }
+
+        const eligible = Number(dry.eligible || 0);
+        const selected = Number(dry.selected_count || 0);
+        const hasEmails = Number(dry.has_email || 0);
+        if (marketingSendResult) marketingSendResult.textContent = JSON.stringify(dry, null, 2);
+
+        if (selected <= 0) {
+            const msg = `Nenhum paciente elegível para envio agora. (No filtro: ${eligible}; com e-mail: ${hasEmails}).`;
+            showToast(msg, true);
+            return;
+        }
+
+        const ok = confirm(
+            `Disparar ${selected} e-mails agora?\n\n` +
+            `Status: ${marketingStatusLabel(statusKey)}\n` +
+            `Campanha: ${marketingActiveCampaignCache.nome}\n` +
+            `Elegíveis: ${eligible}\n` +
+            `Com e-mail: ${hasEmails}\n`
+        );
+        if (!ok) return;
+
+        if (marketingSendResult) marketingSendResult.textContent = 'Enviando...';
+        showToast('Enviando e-mails...');
+        const resp = await fetch(`${baseUrl}/functions/v1/run-marketing-campaign`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+                'apikey': supabaseKey
+            },
+            body: JSON.stringify({ empresa_id: currentEmpresaId, status_key: statusKey, dry_run: false })
+        });
+        let result = null;
+        try { result = await resp.json(); } catch { result = { error: 'Resposta inválida da função (deploy/URL/CORS).' }; }
+        if (!resp.ok) {
+            const msg = result.error || result.message || 'Erro desconhecido';
+            throw new Error(msg);
+        }
+        if (marketingSendResult) marketingSendResult.textContent = '';
+        showToast(`Disparo concluído. Enviados: ${Number(result.sent || 0)} | Falhas: ${Number(result.failed || 0)}`);
+    } catch (err) {
+        console.error('Erro ao disparar por Fidelidade:', err);
+        const msg = err && err.message ? String(err.message) : String(err);
+        if (marketingSendResult) marketingSendResult.textContent = `Falha: ${msg}`;
+        showToast(`Falha ao disparar e-mails: ${msg}`, true);
+    }
+}
+
+async function marketingLoadSmtpConfig() {
+    if (!currentEmpresaId) return;
+    if (mkSmtpResult) mkSmtpResult.textContent = 'Carregando...';
+    try {
+        const { data, error } = await withTimeout(db.rpc('rpc_marketing_get_smtp_config', { p_empresa_id: currentEmpresaId }), 20000, 'rpc_marketing_get_smtp_config');
+        if (error) throw error;
+        const c = data && typeof data === 'object' ? data : {};
+        if (mkSmtpEnabled) mkSmtpEnabled.checked = Boolean(c.enabled);
+        if (mkSmtpHost) mkSmtpHost.value = c.host || '';
+        if (mkSmtpPort) mkSmtpPort.value = c.port != null ? String(c.port) : '587';
+        if (mkSmtpUser) mkSmtpUser.value = c.username || '';
+        if (mkFromEmail) mkFromEmail.value = c.from_email || '';
+        if (mkSmtpPass) mkSmtpPass.value = '';
+        if (mkSmtpResult) mkSmtpResult.textContent = c.has_password ? 'Senha configurada.' : 'Senha não configurada.';
+    } catch (err) {
+        console.error('Erro ao carregar SMTP:', err);
+        if (mkSmtpResult) mkSmtpResult.textContent = 'Falha ao carregar.';
+    }
+}
+
+async function marketingSaveSmtpConfig() {
+    if (!currentEmpresaId) { showToast('Selecione uma unidade.', true); return; }
+    if (mkSmtpResult) mkSmtpResult.textContent = 'Salvando...';
+    try {
+        const payload = {
+            p_empresa_id: currentEmpresaId,
+            p_enabled: mkSmtpEnabled ? Boolean(mkSmtpEnabled.checked) : true,
+            p_host: mkSmtpHost ? String(mkSmtpHost.value || '').trim() : '',
+            p_port: mkSmtpPort ? Number(mkSmtpPort.value || 587) : 587,
+            p_username: mkSmtpUser ? String(mkSmtpUser.value || '').trim() : null,
+            p_password: mkSmtpPass ? String(mkSmtpPass.value || '').trim() : null,
+            p_from_email: mkFromEmail ? String(mkFromEmail.value || '').trim() : null,
+            p_from_name: null
+        };
+        const { data, error } = await withTimeout(db.rpc('rpc_marketing_set_smtp_config', payload), 20000, 'rpc_marketing_set_smtp_config');
+        if (error) throw error;
+        if (mkSmtpPass) mkSmtpPass.value = '';
+        if (mkSmtpResult) mkSmtpResult.textContent = 'Salvo.';
+        if (data && data.has_password) if (mkSmtpResult) mkSmtpResult.textContent = 'Salvo. Senha configurada.';
+        showToast('SMTP salvo.');
+    } catch (err) {
+        console.error('Erro ao salvar SMTP:', err);
+        if (mkSmtpResult) mkSmtpResult.textContent = 'Falha ao salvar.';
+        showToast('Falha ao salvar SMTP.', true);
     }
 }
 
@@ -1328,7 +2267,17 @@ function setActiveTab(tab) {
     console.log("setActiveTab called with:", tab);
     window.scrollTo(0, 0);
 
-    if (tab && tab !== 'usersAdmin' && tab !== 'empresas' && tab !== 'cancelledBudgets') {
+    if (tab === 'marketing' && !isMarketingEnabled()) {
+        const fallback = getDefaultHomeTab();
+        if (fallback && fallback !== tab) {
+            setActiveTab(fallback);
+            return;
+        }
+        showToast('Marketing desativado (dp_feature_marketing=0).', true);
+        return;
+    }
+
+    if (tab && tab !== 'usersAdmin' && tab !== 'empresas' && tab !== 'cancelledBudgets' && tab !== 'auditLog') {
         if (!can(getModuleKey(tab), 'select')) {
             const fallback = getDefaultHomeTab();
             if (fallback && fallback !== tab) {
@@ -1343,7 +2292,7 @@ function setActiveTab(tab) {
     // 1. Prepare Navigation Elements safely
     const navElements = [
         navDashboard, navPatients, navProfessionals, navSpecialties, navServices,
-        navBudgets, navFinanceiro, navCommissions, navAtendimento, navAgenda, navProtese, navUsersAdminBtn, navEmpresas, document.getElementById('navCancelledBudgets')
+        navBudgets, navFinanceiro, navMarketing, navCommissions, navAtendimento, navAgenda, navProtese, navUsersAdminBtn, navEmpresas, document.getElementById('navCancelledBudgets'), navAuditLog
     ];
 
     // 2. Prepare View Elements safely
@@ -1357,11 +2306,13 @@ function setActiveTab(tab) {
         'usersAdmin': [usersAdminView, userAdminFormView],
         'empresas': [empresasListView, empresaFormView],
         'financeiro': [financeiroView],
+        'marketing': [marketingView],
         'commissions': [commissionsView],
         'atendimento': [atendimentoView],
         'agenda': [agendaView],
         'protese': [proteseView],
-        'cancelledBudgets': [document.getElementById('cancelledBudgetsView')]
+        'cancelledBudgets': [document.getElementById('cancelledBudgetsView')],
+        'auditLog': [auditLogView]
     };
 
     // Reset All Nav Items
@@ -1407,10 +2358,17 @@ function setActiveTab(tab) {
         const navCB = document.getElementById('navCancelledBudgets');
         if (navCB) navCB.classList.add('active');
         showList('cancelledBudgets');
+    } else if (tab === 'auditLog') {
+        if (navAuditLog) navAuditLog.classList.add('active');
+        showList('auditLog');
     } else if (tab === 'financeiro') {
         const navFin = document.getElementById('navFinanceiro');
         if (navFin) navFin.classList.add('active');
         showList('financeiro');
+    } else if (tab === 'marketing') {
+        const navMk = document.getElementById('navMarketing');
+        if (navMk) navMk.classList.add('active');
+        showList('marketing');
     } else if (tab === 'commissions') {
         const navC = document.getElementById('navCommissions');
         if (navC) navC.classList.add('active');
@@ -1447,13 +2405,15 @@ function setupNavigationListeners() {
         'navServices': 'services',
         'navBudgets': 'budgets',
         'navFinanceiro': 'financeiro',
+        'navMarketing': 'marketing',
         'navCommissions': 'commissions',
         'navAtendimento': 'atendimento',
         'navAgenda': 'agenda',
         'navProtese': 'protese',
         'navUsersAdmin': 'usersAdmin',
         'navEmpresas': 'empresas',
-        'navCancelledBudgets': 'cancelledBudgets'
+        'navCancelledBudgets': 'cancelledBudgets',
+        'navAuditLog': 'auditLog'
     };
 
     Object.entries(navMapping).forEach(([id, tab]) => {
@@ -1612,7 +2572,8 @@ function renderTable(data = [], type = 'patients') {
             const tr = document.createElement('tr');
             const rawUserId = u.usuario_id || u.user_id || '';
             const userId = rawUserId ? String(rawUserId) : 'N/A';
-            const userEmail = u.user_email || userId;
+            const fallbackEmail = (currentUser && String(currentUser.id || '') === String(userId)) ? String(currentUser.email || '') : '';
+            const userEmail = u.user_email || fallbackEmail || userId;
             const shortId = userId !== 'N/A' && userId.length > 8 ? userId.substring(0, 8) : userId;
             const userRole = (u.perfil || 'user').toUpperCase();
 
@@ -2066,6 +3027,10 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             idInput.value = dataObj.id;
             nomeInput.value = dataObj.nome;
             document.getElementById('empresaSupervisorPin').value = dataObj.supervisor_pin || '';
+            const empTel = document.getElementById('empresaTelefone');
+            if (empTel) empTel.value = dataObj.telefone || '';
+            const empCel = document.getElementById('empresaCelular');
+            if (empCel) empCel.value = dataObj.celular || '';
             base64Input.value = dataObj.logotipo || '';
             if (dataObj.logotipo) {
                 logoPreview.innerHTML = `< img src = "${dataObj.logotipo}" style = "width: 100%; height: 100%; object-fit: cover;" > `;
@@ -2075,6 +3040,10 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
         } else {
             empresaForm.reset();
             document.getElementById('empresaSupervisorPin').value = '';
+            const empTel = document.getElementById('empresaTelefone');
+            if (empTel) empTel.value = '';
+            const empCel = document.getElementById('empresaCelular');
+            if (empCel) empCel.value = '';
             base64Input.value = '';
             logoPreview.innerHTML = `< i class="ri-image-line" style = "font-size: 1.5rem; color: var(--text-muted);" ></i > `;
         }
@@ -2124,7 +3093,12 @@ function showList(type = 'patients') {
     const detailsView = document.getElementById('patientDetailsView');
     if (detailsView) detailsView.classList.add('hidden');
 
-    if (type !== 'usersAdmin' && !can(getModuleKey(type), 'select')) {
+    if (type === 'auditLog') {
+        if (currentUserRole !== 'admin' && !isSuperAdmin) {
+            showToast("Você não possui permissão para visualizar este módulo.", true);
+            return;
+        }
+    } else if (type !== 'usersAdmin' && !can(getModuleKey(type), 'select')) {
         showToast("Você não possui permissão para visualizar este módulo.", true);
         return;
     }
@@ -2233,6 +3207,14 @@ function showList(type = 'patients') {
             }
         });
         fetchTransactions();
+    } else if (type === 'marketing') {
+        if (!isMarketingEnabled()) {
+            showToast('Marketing desativado (dp_feature_marketing=0).', true);
+            return;
+        }
+        if (marketingView) marketingView.classList.remove('hidden');
+        initMarketingUI();
+        marketingRefreshAll();
     } else if (type === 'commissions') {
         if (commissionsView) commissionsView.classList.remove('hidden');
         initCommissionsFilters();
@@ -2280,6 +3262,11 @@ function showList(type = 'patients') {
             }
         });
         viewCancelledBudgets();
+    } else if (type === 'auditLog') {
+        if (auditLogView) auditLogView.classList.remove('hidden');
+        initAuditLogFilters();
+        renderAuditLogPlaceholder();
+        fetchAuditLogFromUI();
     } else {
         professionalFormView.classList.add('hidden');
         professionalListView.classList.remove('hidden');
@@ -3578,6 +4565,7 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
     if (!modalProtese) return;
     currentProteseOrderId = orderId ? String(orderId) : null;
     if (proteseNota) proteseNota.value = '';
+    if (proteseObservacoes) proteseObservacoes.value = '';
     if (modalProteseTitle) modalProteseTitle.textContent = 'Ordem Protética (carregando...)';
     if (proteseTimeline) proteseTimeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Carregando...</div>';
     if (proteseAnexosList) proteseAnexosList.innerHTML = '<div style="text-align:center; padding: 0.75rem; color: var(--text-muted);">Carregando anexos...</div>';
@@ -3627,6 +4615,7 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
         if (proteseProtetico) proteseProtetico.value = o.protetico_id != null ? String(o.protetico_id) : '';
         if (protesePrazo) protesePrazo.value = o.prazo_previsto ? String(o.prazo_previsto).slice(0, 10) : '';
         if (protesePrioridade) protesePrioridade.value = o.prioridade || 'NORMAL';
+        if (proteseObservacoes) proteseObservacoes.value = o.observacoes || '';
         if (proteseTipoExecucao) proteseTipoExecucao.dataset.orcamentoId = o.orcamento_id || '';
         if (proteseTipoExecucao) proteseTipoExecucao.dataset.itemId = o.orcamento_item_id || '';
         if (proteseOrcamentoSeqid) {
@@ -3651,6 +4640,7 @@ async function openProteseModal({ orderId = null, pacienteId = null, orcamentoId
         if (proteseProtetico) proteseProtetico.value = '';
         if (protesePrazo) protesePrazo.value = '';
         if (protesePrioridade) protesePrioridade.value = 'NORMAL';
+        if (proteseObservacoes) proteseObservacoes.value = '';
         if (proteseTipoExecucao) proteseTipoExecucao.dataset.orcamentoId = orcamentoId || '';
         if (proteseTipoExecucao) proteseTipoExecucao.dataset.itemId = itemId || '';
         if (proteseOrcamentoSeqid) {
@@ -3907,6 +4897,7 @@ async function saveProteseOrderFromModal(opts = {}) {
         const protId = proteseProtetico ? String(proteseProtetico.value || '') : '';
         const prazo = protesePrazo ? String(protesePrazo.value || '') : '';
         const prioridade = protesePrioridade ? String(protesePrioridade.value || 'NORMAL') : 'NORMAL';
+        const obsOp = proteseObservacoes ? String(proteseObservacoes.value || '').trim() : '';
 
         if (!pacienteId) { showToast('Selecione o paciente.', true); return; }
         if (tipoExec === 'EXTERNA' && !labId) { showToast('Selecione o laboratório.', true); return; }
@@ -3935,6 +4926,7 @@ async function saveProteseOrderFromModal(opts = {}) {
                 protetico_id: tipoExec === 'INTERNA' ? (protId || null) : null,
                 prazo_previsto: prazo || null,
                 prioridade,
+                observacoes: obsOp || null,
                 updated_at: new Date().toISOString()
             };
             const q = db.from('ordens_proteticas').update(payload).eq('empresa_id', currentEmpresaId).eq('id', currentProteseOrderId);
@@ -3964,7 +4956,8 @@ async function saveProteseOrderFromModal(opts = {}) {
             prioridade,
             prazo_previsto: prazo || null,
             fase_atual: 'CRIADA',
-            status_geral: 'EM_ANDAMENTO'
+            status_geral: 'EM_ANDAMENTO',
+            observacoes: obsOp || null
         };
 
         const { data, error } = await withTimeout(db.rpc('rpc_create_ordem_protetica', { p_data: pData }), 15000, 'rpc_create_ordem_protetica');
@@ -5915,10 +6908,15 @@ async function fetchCommissions({ statuses, start, end, profId, statusVal }) {
         if (commissionsEmptyState) commissionsEmptyState.classList.add('hidden');
         if (commissionsTable) commissionsTable.style.display = 'table';
 
-        let query = db.from('financeiro_comissoes').select('*').order('data_geracao', { ascending: false });
-        if (!isSuperAdmin && currentEmpresaId) {
-            query = query.eq('empresa_id', currentEmpresaId);
+        if (!currentEmpresaId) {
+            commissionsList = [];
+            renderCommissionsTable([], statusVal);
+            showToast('Selecione uma unidade para ver Comissões.', true);
+            return;
         }
+
+        let query = db.from('financeiro_comissoes').select('*').order('data_geracao', { ascending: false });
+        query = query.eq('empresa_id', currentEmpresaId);
         if (profId) {
             query = query.eq('profissional_id', Number(profId));
         }
@@ -6103,7 +7101,8 @@ async function markSelectedCommissionsPaid() {
 
     try {
         let q = db.from('financeiro_comissoes').update(payloadFull).in('id', idsToPay);
-        if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+        if (!currentEmpresaId) { showToast('Selecione uma unidade para pagar comissões.', true); return; }
+        q = q.eq('empresa_id', currentEmpresaId);
         const { error } = await withTimeout(q, 15000, 'financeiro_comissoes:update');
         if (error) throw error;
         showToast('Comissões marcadas como pagas.');
@@ -6112,7 +7111,8 @@ async function markSelectedCommissionsPaid() {
     } catch (err) {
         try {
             let q2 = db.from('financeiro_comissoes').update(payloadFallback).in('id', idsToPay);
-            if (!isSuperAdmin && currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
+            if (!currentEmpresaId) { showToast('Selecione uma unidade para pagar comissões.', true); return; }
+            q2 = q2.eq('empresa_id', currentEmpresaId);
             const { error: e2 } = await withTimeout(q2, 15000, 'financeiro_comissoes:update2');
             if (e2) throw e2;
             showToast('Comissões marcadas como pagas.');
@@ -6506,11 +7506,12 @@ async function transferSelectedCommission() {
         const updateFallback = { status: 'ESTORNADA' };
 
         let u = db.from('financeiro_comissoes').update(updateFull).eq('id', comm.id);
-        if (!isSuperAdmin && currentEmpresaId) u = u.eq('empresa_id', currentEmpresaId);
+        if (!currentEmpresaId) { showToast('Selecione uma unidade para transferir comissão.', true); return; }
+        u = u.eq('empresa_id', currentEmpresaId);
         const { error: uErr } = await withTimeout(u, 15000, 'financeiro_comissoes:estornar');
         if (uErr) {
             let u2 = db.from('financeiro_comissoes').update(updateFallback).eq('id', comm.id);
-            if (!isSuperAdmin && currentEmpresaId) u2 = u2.eq('empresa_id', currentEmpresaId);
+            u2 = u2.eq('empresa_id', currentEmpresaId);
             const { error: uErr2 } = await withTimeout(u2, 15000, 'financeiro_comissoes:estornar2');
             if (uErr2) throw uErr2;
         }
@@ -6668,11 +7669,21 @@ window.editTenantUser = function (mappingId) {
     showForm(true, 'usersAdmin');
     document.getElementById('userAdminFormTitle').innerText = 'Editar Usuário';
     document.getElementById('editAdminUserId').value = String(u.id || '');
+    const rawUserId = u.usuario_id || u.user_id || '';
+    const authUserId = rawUserId ? String(rawUserId) : '';
+    document.getElementById('editAdminAuthUserId').value = authUserId;
 
     const emailInput = document.getElementById('adminUserEmail');
-    emailInput.value = u.user_email || '';
-    emailInput.readOnly = true;
-    emailInput.classList.add('readonly-input');
+    const fallbackEmail = (currentUser && String(currentUser.id || '') === String(authUserId)) ? String(currentUser.email || '') : '';
+    emailInput.value = u.user_email || fallbackEmail || '';
+    document.getElementById('editAdminOldEmail').value = String(emailInput.value || '');
+    const lockEmail = !isSuperAdmin;
+    emailInput.readOnly = lockEmail;
+    if (emailInput.readOnly) {
+        emailInput.classList.add('readonly-input');
+    } else {
+        emailInput.classList.remove('readonly-input');
+    }
 
     const passInput = document.getElementById('adminUserPassword');
     passInput.required = false;
@@ -8125,6 +9136,8 @@ inputCpf.addEventListener('input', e => e.target.value = maskCPF(e.target.value)
 inputCelular.addEventListener('input', e => e.target.value = maskCellphone(e.target.value));
 profCelular.addEventListener('input', e => e.target.value = maskCellphone(e.target.value));
 inputTelefone.addEventListener('input', e => e.target.value = maskPhone(e.target.value));
+if (inputEmpresaTelefone) inputEmpresaTelefone.addEventListener('input', e => e.target.value = maskPhone(e.target.value));
+if (inputEmpresaCelular) inputEmpresaCelular.addEventListener('input', e => e.target.value = maskCellphone(e.target.value));
 inputCep.addEventListener('input', e => {
     e.target.value = maskCEP(e.target.value);
 
@@ -8256,6 +9269,7 @@ patientForm.addEventListener('submit', async e => {
         telefone: document.getElementById('telefone').value,
         celular: document.getElementById('celular').value,
         email: document.getElementById('email').value,
+        nao_receber_campanhas: Boolean(document.getElementById('naoReceberCampanhas')?.checked),
         cep: document.getElementById('cep').value,
         endereco: document.getElementById('endereco').value,
         numero: document.getElementById('numero').value,
@@ -8687,6 +9701,8 @@ window.editPatient = function (id) {
     document.getElementById('telefone').value = p.telefone || '';
     document.getElementById('celular').value = p.celular || '';
     document.getElementById('email').value = p.email || '';
+    const optOut = document.getElementById('naoReceberCampanhas');
+    if (optOut) optOut.checked = Boolean(p.nao_receber_campanhas);
     document.getElementById('cep').value = p.cep || '';
     document.getElementById('endereco').value = p.endereco || '';
     document.getElementById('numero').value = p.numero || '';
@@ -12136,6 +13152,8 @@ if (userAdminForm) {
     userAdminForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const id = document.getElementById('editAdminUserId').value;
+        const authUserId = document.getElementById('editAdminAuthUserId')?.value || '';
+        const oldEmail = document.getElementById('editAdminOldEmail')?.value || '';
         const email = document.getElementById('adminUserEmail').value.trim();
         const password = document.getElementById('adminUserPassword').value;
         const role = document.getElementById('adminUserRole').value;
@@ -12172,10 +13190,34 @@ if (userAdminForm) {
             });
 
             if (id) {
+                if (isSuperAdmin && authUserId && oldEmail && email && String(oldEmail).toLowerCase() !== String(email).toLowerCase()) {
+                    const { data: { session } } = await db.auth.getSession();
+                    if (!session) throw new Error("Sessão expirada.");
+                    const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
+                    const response = await fetch(`${baseUrl}/functions/v1/update-tenant-user-email`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`,
+                            'apikey': supabaseKey
+                        },
+                        body: JSON.stringify({
+                            user_id: authUserId,
+                            new_email: email
+                        })
+                    });
+                    const result = await response.json();
+                    if (!response.ok) {
+                        const errorMsg = result.error || result.message || "Erro desconhecido na nuvem.";
+                        throw new Error(`Erro na nuvem: ${errorMsg}`);
+                    }
+                }
+
                 // Update existing user permissions/role in our mapping table
                 const { error: updateError } = await db.from('usuario_empresas')
                     .update({
                         perfil: role,
+                        user_email: email,
                         permissoes: permissions
                     })
                     .eq('id', id);
@@ -12277,7 +13319,9 @@ if (empresaForm) {
 
         try {
             const supervisorPin = document.getElementById('empresaSupervisorPin').value;
-            const empresaData = { id: newId, nome, logotipo: logo, supervisor_pin: supervisorPin };
+            const telefone = document.getElementById('empresaTelefone')?.value || '';
+            const celular = document.getElementById('empresaCelular')?.value || '';
+            const empresaData = { id: newId, nome, telefone, celular, logotipo: logo, supervisor_pin: supervisorPin };
 
             if (oldId && oldId !== newId) {
                 // Changing ID is risky if there are foreign keys, but technically Empresas is the root
@@ -12676,6 +13720,314 @@ function formatDateTimeSafe(value) {
     const d = new Date(s);
     if (!Number.isFinite(d.getTime())) return raw;
     return d.toLocaleString('pt-BR');
+}
+
+let auditLogList = [];
+const auditStart = document.getElementById('auditStart');
+const auditEnd = document.getElementById('auditEnd');
+const auditTable = document.getElementById('auditTable');
+const auditAction = document.getElementById('auditAction');
+const auditSearch = document.getElementById('auditSearch');
+const auditAllCompanies = document.getElementById('auditAllCompanies');
+const auditAllCompaniesWrap = document.getElementById('auditAllCompaniesWrap');
+const btnAuditRefresh = document.getElementById('btnAuditRefresh');
+const btnAuditClear = document.getElementById('btnAuditClear');
+const auditLogTableBody = document.getElementById('auditLogTableBody');
+const auditLogEmptyState = document.getElementById('auditLogEmptyState');
+const modalAuditLogDetails = document.getElementById('modalAuditLogDetails');
+const btnCloseModalAuditLogDetails = document.getElementById('btnCloseModalAuditLogDetails');
+const btnAuditClose = document.getElementById('btnAuditClose');
+const auditOldData = document.getElementById('auditOldData');
+const auditNewData = document.getElementById('auditNewData');
+const auditDiffData = document.getElementById('auditDiffData');
+
+function listAuditTables() {
+    const set = new Set();
+    (auditLogList || []).forEach(r => { if (r && r.table_name) set.add(String(r.table_name)); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function auditTableLabel(t) {
+    const k = String(t || '').trim();
+    const map = {
+        pacientes: 'Pacientes',
+        profissionais: 'Profissionais',
+        especialidades: 'Especialidades',
+        especialidade_subdivisoes: 'Subdivisões',
+        servicos: 'Serviços/Itens',
+        orcamentos: 'Orçamentos',
+        orcamento_itens: 'Itens do Orçamento',
+        orcamento_pagamentos: 'Pagamentos do Orçamento',
+        financeiro_transacoes: 'Financeiro (Transações)',
+        financeiro_comissoes: 'Comissões',
+        agenda_disponibilidade: 'Agenda (Disponibilidade)',
+        agenda_agendamentos: 'Agenda (Agendamentos)',
+        usuario_empresas: 'Usuários (Vínculos)',
+        paciente_evolucao: 'Prontuário (Evolução)',
+        paciente_documentos: 'Prontuário (Documentos)',
+        orcamento_cancelados: 'Audit Cancelamentos',
+        laboratorios_proteticos: 'Laboratórios',
+        ordens_proteticas: 'Produção Protética (OP)',
+        ordens_proteticas_eventos: 'Produção Protética (Eventos)',
+        ordens_proteticas_anexos: 'Produção Protética (Anexos)'
+    };
+    return map[k] || k || '—';
+}
+
+async function refreshAuditTableOptions({ start, end } = {}) {
+    if (!auditTable) return;
+    const allCompanies = Boolean(isSuperAdmin && auditAllCompanies && auditAllCompanies.checked);
+    if (!allCompanies && !currentEmpresaId) return;
+    const current = String(auditTable.value || '');
+
+    try {
+        let q = db.from('occ_audit_log')
+            .select('table_name')
+            .order('created_at', { ascending: false })
+            .limit(1000);
+        if (!allCompanies) q = q.eq('empresa_id', currentEmpresaId);
+        if (start) q = q.gte('created_at', `${start}T00:00:00`);
+        if (end) q = q.lte('created_at', `${end}T23:59:59`);
+
+        const { data, error } = await withTimeout(q, 20000, 'occ_audit_log:tables');
+        if (error) throw error;
+        const set = new Set();
+        (data || []).forEach(r => { if (r && r.table_name) set.add(String(r.table_name)); });
+        const tables = Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+        const opts = ['<option value="">Todas</option>'].concat(
+            tables.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(auditTableLabel(t))}</option>`)
+        );
+        auditTable.innerHTML = opts.join('');
+        auditTable.value = current;
+    } catch (err) {
+        console.warn('Falha ao carregar lista de tabelas da auditoria:', err);
+        const fallback = ['<option value="">Todas</option>'].concat(listAuditTables().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(auditTableLabel(t))}</option>`));
+        auditTable.innerHTML = fallback.join('');
+        auditTable.value = current;
+    }
+}
+
+function initAuditLogFilters() {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+    const start = new Date(today);
+    start.setDate(start.getDate() - 7);
+    const sY = start.getFullYear();
+    const sM = String(start.getMonth() + 1).padStart(2, '0');
+    const sD = String(start.getDate()).padStart(2, '0');
+    const startStr = `${sY}-${sM}-${sD}`;
+
+    if (auditStart && !auditStart.value) auditStart.value = startStr;
+    if (auditEnd && !auditEnd.value) auditEnd.value = todayStr;
+
+    if (auditAllCompaniesWrap) {
+        auditAllCompaniesWrap.style.display = isSuperAdmin ? '' : 'none';
+    }
+    if (!isSuperAdmin && auditAllCompanies) {
+        auditAllCompanies.checked = false;
+    }
+
+    if (auditTable && !auditTable.dataset.bound) {
+        auditTable.dataset.bound = '1';
+    }
+    if (btnAuditRefresh && !btnAuditRefresh.dataset.bound) {
+        btnAuditRefresh.addEventListener('click', (e) => { e.preventDefault(); fetchAuditLogFromUI(); });
+        btnAuditRefresh.dataset.bound = '1';
+    }
+    if (btnAuditClear && !btnAuditClear.dataset.bound) {
+        btnAuditClear.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (auditStart) auditStart.value = startStr;
+            if (auditEnd) auditEnd.value = todayStr;
+            if (auditTable) auditTable.value = '';
+            if (auditAction) auditAction.value = '';
+            if (auditSearch) auditSearch.value = '';
+            fetchAuditLogFromUI();
+        });
+        btnAuditClear.dataset.bound = '1';
+    }
+    if (auditStart && !auditStart.dataset.bound) {
+        auditStart.addEventListener('change', () => fetchAuditLogFromUI());
+        auditStart.dataset.bound = '1';
+    }
+    if (auditEnd && !auditEnd.dataset.bound) {
+        auditEnd.addEventListener('change', () => fetchAuditLogFromUI());
+        auditEnd.dataset.bound = '1';
+    }
+    if (auditTable && !auditTable.dataset.bound2) {
+        auditTable.addEventListener('change', () => fetchAuditLogFromUI());
+        auditTable.dataset.bound2 = '1';
+    }
+    if (auditAction && !auditAction.dataset.bound) {
+        auditAction.addEventListener('change', () => fetchAuditLogFromUI());
+        auditAction.dataset.bound = '1';
+    }
+    if (auditAllCompanies && !auditAllCompanies.dataset.bound) {
+        auditAllCompanies.addEventListener('change', () => fetchAuditLogFromUI());
+        auditAllCompanies.dataset.bound = '1';
+    }
+    if (auditSearch && !auditSearch.dataset.bound) {
+        auditSearch.addEventListener('input', () => {
+            try { clearTimeout(auditSearch.__t); } catch { }
+            auditSearch.__t = setTimeout(() => fetchAuditLogFromUI(), 250);
+        });
+        auditSearch.dataset.bound = '1';
+    }
+    if (btnCloseModalAuditLogDetails && !btnCloseModalAuditLogDetails.dataset.bound) {
+        btnCloseModalAuditLogDetails.addEventListener('click', closeAuditDetailsModal);
+        btnCloseModalAuditLogDetails.dataset.bound = '1';
+    }
+    if (btnAuditClose && !btnAuditClose.dataset.bound) {
+        btnAuditClose.addEventListener('click', closeAuditDetailsModal);
+        btnAuditClose.dataset.bound = '1';
+    }
+    if (modalAuditLogDetails && !modalAuditLogDetails.dataset.bound) {
+        modalAuditLogDetails.addEventListener('click', (e) => { if (e.target === modalAuditLogDetails) closeAuditDetailsModal(); });
+        modalAuditLogDetails.dataset.bound = '1';
+    }
+}
+
+function renderAuditLogPlaceholder(msg = 'Carregando...') {
+    if (!auditLogTableBody) return;
+    if (auditLogEmptyState) auditLogEmptyState.classList.add('hidden');
+    auditLogTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: var(--text-muted);">${escapeHtml(msg)}</td></tr>`;
+}
+
+function renderAuditLogTable(list) {
+    if (!auditLogTableBody) return;
+    const data = Array.isArray(list) ? list : [];
+    auditLogTableBody.innerHTML = '';
+
+    if (!data.length) {
+        if (auditLogEmptyState) auditLogEmptyState.classList.remove('hidden');
+        auditLogTableBody.innerHTML = '';
+        return;
+    }
+    if (auditLogEmptyState) auditLogEmptyState.classList.add('hidden');
+
+    data.forEach(r => {
+        const tr = document.createElement('tr');
+        const dt = formatDateTimeSafe(r.created_at);
+        const table = String(r.table_name || '—');
+        const act = String(r.action || '—').toUpperCase();
+        const email = String(r.actor_email || '—');
+        const empresaId = String(r.empresa_id || '—');
+        const rowId = String(r.row_id || '—');
+        const bg = act === 'DELETE' ? '#fee2e2' : (act === 'INSERT' ? '#dcfce7' : 'var(--bg-hover)');
+        const color = act === 'DELETE' ? '#991b1b' : (act === 'INSERT' ? '#166534' : 'var(--text-main)');
+
+        tr.innerHTML = `
+            <td>${escapeHtml(dt)}</td>
+            <td style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;">${escapeHtml(empresaId)}</td>
+            <td style="font-weight: 800;">${escapeHtml(table)}</td>
+            <td><span style="background:${bg}; color:${color}; padding: 3px 8px; border-radius: 10px; font-size: 0.8rem; font-weight: 900;">${escapeHtml(act)}</span></td>
+            <td>${escapeHtml(email)}</td>
+            <td style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;">${escapeHtml(rowId)}</td>
+            <td style="text-align:center;">
+                <button class="btn-icon" data-action="details" data-id="${escapeHtml(String(r.id || ''))}" title="Ver detalhes"><i class="ri-eye-line"></i></button>
+            </td>
+        `;
+
+        const btn = tr.querySelector('button[data-action="details"]');
+        if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); openAuditDetailsModal(String(r.id || '')); });
+        auditLogTableBody.appendChild(tr);
+    });
+}
+
+async function fetchAuditLogFromUI() {
+    if (currentUserRole !== 'admin' && !isSuperAdmin) return;
+    const allCompanies = Boolean(isSuperAdmin && auditAllCompanies && auditAllCompanies.checked);
+    if (!allCompanies && !currentEmpresaId) return;
+    renderAuditLogPlaceholder('Carregando...');
+    try {
+        const start = auditStart ? String(auditStart.value || '') : '';
+        const end = auditEnd ? String(auditEnd.value || '') : '';
+        const table = auditTable ? String(auditTable.value || '') : '';
+        const action = auditAction ? String(auditAction.value || '') : '';
+        const q = auditSearch ? String(auditSearch.value || '').trim() : '';
+
+        await refreshAuditTableOptions({ start, end });
+
+        let query = db.from('occ_audit_log')
+            .select('id, empresa_id, table_name, action, row_id, actor_email, created_at, old_data, new_data')
+            .order('created_at', { ascending: false })
+            .limit(500);
+        if (!allCompanies) query = query.eq('empresa_id', currentEmpresaId);
+
+        if (start) query = query.gte('created_at', `${start}T00:00:00`);
+        if (end) query = query.lte('created_at', `${end}T23:59:59`);
+        if (table) query = query.eq('table_name', table);
+        if (action) query = query.eq('action', action);
+
+        if (q) {
+            const escaped = q.replace(/,/g, ' ');
+            query = query.or(`actor_email.ilike.%${escaped}%,row_id.ilike.%${escaped}%,table_name.ilike.%${escaped}%`);
+        }
+
+        const { data, error } = await withTimeout(query, 20000, 'occ_audit_log');
+        if (error) throw error;
+        auditLogList = Array.isArray(data) ? data : [];
+
+        renderAuditLogTable(auditLogList);
+    } catch (err) {
+        console.error('Erro ao carregar Auditoria Geral:', err);
+        const code = err && err.code ? err.code : '-';
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        renderAuditLogPlaceholder(`Falha ao carregar (${code}).`);
+        showToast(`Erro ao carregar Auditoria Geral (${code}): ${msg}`, true);
+    }
+}
+
+function openAuditDetailsModal(auditId) {
+    if (!modalAuditLogDetails || !auditOldData || !auditNewData) return;
+    const row = (auditLogList || []).find(x => String(x.id || '') === String(auditId)) || null;
+    const oldData = row ? row.old_data : null;
+    const newData = row ? row.new_data : null;
+    if (auditDiffData) auditDiffData.textContent = formatAuditDiff(oldData, newData);
+    auditOldData.textContent = oldData ? JSON.stringify(oldData, null, 2) : '—';
+    auditNewData.textContent = newData ? JSON.stringify(newData, null, 2) : '—';
+    modalAuditLogDetails.classList.remove('hidden');
+}
+
+function closeAuditDetailsModal() {
+    if (modalAuditLogDetails) modalAuditLogDetails.classList.add('hidden');
+    if (auditDiffData) auditDiffData.textContent = '';
+    if (auditOldData) auditOldData.textContent = '';
+    if (auditNewData) auditNewData.textContent = '';
+}
+
+function formatAuditDiff(oldData, newData) {
+    try {
+        const a = oldData && typeof oldData === 'object' ? oldData : null;
+        const b = newData && typeof newData === 'object' ? newData : null;
+        if (!a && !b) return '—';
+        if (!a) return 'INSERT (sem old_data)';
+        if (!b) return 'DELETE (sem new_data)';
+
+        const keys = new Set();
+        Object.keys(a).forEach(k => keys.add(k));
+        Object.keys(b).forEach(k => keys.add(k));
+        const changed = [];
+        Array.from(keys).sort((x, y) => x.localeCompare(y, 'pt-BR')).forEach(k => {
+            const va = a[k];
+            const vb = b[k];
+            const sa = JSON.stringify(va);
+            const sb = JSON.stringify(vb);
+            if (sa !== sb) {
+                const oldTxt = va === null || va === undefined ? '—' : String(sa).slice(0, 300);
+                const newTxt = vb === null || vb === undefined ? '—' : String(sb).slice(0, 300);
+                changed.push(`${k}: ${oldTxt} -> ${newTxt}`);
+            }
+        });
+        if (!changed.length) return 'Nenhuma diferença detectada (valores iguais).';
+        return changed.join('\n');
+    } catch {
+        return '—';
+    }
 }
 
 async function hydrateBudgetCreatedAtForIds(ids) {
@@ -13372,13 +14724,19 @@ async function fetchTransactions(patientId = null) {
         }
         if (window.__dpDebug) window.__dpDebug.lastStep = 'financeiro: start';
 
+        if (!currentEmpresaId) {
+            transactions = [];
+            financeSelectedPatientId = patientId ? patientId : null;
+            renderTable([], 'financeiro');
+            showToast('Selecione uma unidade para ver o Financeiro.', true);
+            return;
+        }
+
         let query = db.from('financeiro_transacoes')
             .select('*')
             .order('data_transacao', { ascending: false });
 
-        if (!isSuperAdmin && currentEmpresaId) {
-            query = query.eq('empresa_id', currentEmpresaId);
-        }
+        query = query.eq('empresa_id', currentEmpresaId);
 
         if (patientId) {
             query = query.eq('paciente_id', patientId);
@@ -14733,6 +16091,7 @@ function calculateCommission(prof, item, budget) {
 
 async function ensureBudgetCommissions(budget) {
     if (!budget) return;
+    if (!currentEmpresaId) return;
     const tipoBudget = String(budget.tipo || 'Normal').trim();
     const tipoKey = normalizeKey(tipoBudget);
     const isFreeBudget = tipoKey === 'CORTESIA' || tipoKey === 'RETRABALHO';
@@ -14748,7 +16107,7 @@ async function ensureBudgetCommissions(budget) {
     let existing = [];
     try {
         let q = db.from('financeiro_comissoes').select('item_id,status,profissional_id').in('item_id', ids);
-        if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+        q = q.eq('empresa_id', currentEmpresaId);
         const { data, error } = await withTimeout(q, 15000, 'financeiro_comissoes:exists_for_items');
         if (error) throw error;
         existing = Array.isArray(data) ? data : [];
@@ -15168,13 +16527,16 @@ async function viewCancelledBudgets() {
 
     try {
         if (window.__dpDebug) window.__dpDebug.lastStep = 'cancelados: start';
+        if (!currentEmpresaId) {
+            renderTable([], 'cancelled_budgets');
+            showToast('Selecione uma unidade para ver Audit Cancelamentos.', true);
+            return;
+        }
         let query = db.from('orcamento_cancelados')
             .select('*')
             .order('data_cancelamento', { ascending: false });
 
-        if (!isSuperAdmin && currentEmpresaId) {
-            query = query.eq('empresa_id', currentEmpresaId);
-        }
+        query = query.eq('empresa_id', currentEmpresaId);
         if (window.__dpDebug) window.__dpDebug.lastStep = 'cancelados: querying';
 
         const { data, error } = await withTimeout(query, 15000, 'orcamento_cancelados');
