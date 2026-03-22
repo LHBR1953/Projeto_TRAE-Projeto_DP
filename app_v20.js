@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260322-0135';
+const APP_BUILD = '20260322-0300';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -808,6 +808,8 @@ let selectedCommissionIds = new Set();
 let proteseOrders = [];
 let proteseLabs = [];
 let currentProteseOrder = null;
+let protesePayables = [];
+let currentProtesePayable = null;
 
 // Shared Inputs
 const inputCpf = document.getElementById('cpf');
@@ -2060,6 +2062,7 @@ function initProteseModule() {
     const btnProteseRefresh = document.getElementById('btnProteseRefresh');
     const btnProteseNew = document.getElementById('btnProteseNew');
     const btnProteseLabs = document.getElementById('btnProteseLabs');
+    const btnProtesePayables = document.getElementById('btnProtesePayables');
     const btnProteseReports = document.getElementById('btnProteseReports');
     const statusFilter = document.getElementById('proteseStatusFilter');
     const execFilter = document.getElementById('proteseExecucaoFilter');
@@ -2070,12 +2073,29 @@ function initProteseModule() {
     const btnCloseModal = document.getElementById('btnCloseModalProtese');
     const btnCancel = document.getElementById('btnProteseCancel');
     const btnSave = document.getElementById('btnProteseSave');
+    const btnPrint = document.getElementById('btnProtesePrint');
     const execSelect = document.getElementById('proteseTipoExecucao');
+    const orcInput = document.getElementById('proteseOrcamentoSeqid');
+    const orcItemSelect = document.getElementById('proteseOrcamentoItemId');
+    const btnEventClose = document.getElementById('btnProteseEventClose');
 
     const labsModal = document.getElementById('modalProteseLabs');
     const btnLabsClose = document.getElementById('btnProteseLabsClose');
     const btnLabsClose2 = document.getElementById('btnCloseModalProteseLabs');
     const btnLabSave = document.getElementById('btnProteseLabSave');
+
+    const payablesModal = document.getElementById('modalProtesePayables');
+    const btnPayablesClose = document.getElementById('btnProtesePayablesClose');
+    const btnPayablesClose2 = document.getElementById('btnCloseModalProtesePayables');
+    const btnPayablesRefresh = document.getElementById('btnProtesePayablesRefresh');
+    const payStatusFilter = document.getElementById('protesePayablesStatusFilter');
+    const payDestFilter = document.getElementById('protesePayablesDestFilter');
+    const paySearch = document.getElementById('protesePayablesSearch');
+
+    const payModal = document.getElementById('modalProtesePayablePay');
+    const btnPayModalClose = document.getElementById('btnCloseModalProtesePayablePay');
+    const btnPayModalCancel = document.getElementById('btnProtesePayablePayCancel');
+    const btnPayModalConfirm = document.getElementById('btnProtesePayablePayConfirm');
 
     const canSelect = can('protese', 'select');
     const canInsert = can('protese', 'insert');
@@ -2083,6 +2103,8 @@ function initProteseModule() {
     if (btnProteseNew) btnProteseNew.style.opacity = canInsert ? '1' : '0.5';
     if (btnProteseLabs) btnProteseLabs.disabled = !canInsert;
     if (btnProteseLabs) btnProteseLabs.style.opacity = canInsert ? '1' : '0.5';
+    if (btnProtesePayables) btnProtesePayables.disabled = !canSelect;
+    if (btnProtesePayables) btnProtesePayables.style.opacity = canSelect ? '1' : '0.5';
     if (btnProteseRefresh) btnProteseRefresh.disabled = !canSelect;
     if (btnProteseReports) btnProteseReports.disabled = true;
 
@@ -2092,6 +2114,7 @@ function initProteseModule() {
     if (btnProteseRefresh) btnProteseRefresh.addEventListener('click', () => fetchProteseFromUI());
     if (btnProteseNew) btnProteseNew.addEventListener('click', () => openProteseModal(null));
     if (btnProteseLabs) btnProteseLabs.addEventListener('click', () => openProteseLabsModal());
+    if (btnProtesePayables) btnProtesePayables.addEventListener('click', () => openProtesePayablesModal());
     if (btnProteseReports) btnProteseReports.addEventListener('click', () => showToast('Relatórios em desenvolvimento.', true));
 
     const refetch = () => fetchProteseFromUI();
@@ -2110,7 +2133,15 @@ function initProteseModule() {
     if (btnCloseModal) btnCloseModal.addEventListener('click', closeProteseModal);
     if (btnCancel) btnCancel.addEventListener('click', closeProteseModal);
     if (btnSave) btnSave.addEventListener('click', () => saveProteseOrder());
+    if (btnPrint) btnPrint.addEventListener('click', () => printProteseOrder());
     if (execSelect) execSelect.addEventListener('change', () => syncProteseExecucaoGroups());
+    if (orcInput) orcInput.addEventListener('input', () => syncProteseOrcamentoItens());
+    if (orcItemSelect) orcItemSelect.addEventListener('change', () => updateProteseItemInfo());
+    if (btnEventClose) btnEventClose.addEventListener('click', async () => {
+        const st = document.getElementById('proteseStatusGeral');
+        if (st) st.value = 'CONCLUIDA';
+        await saveProteseOrder();
+    });
 
     const closeLabsModal = () => {
         if (labsModal) labsModal.classList.add('hidden');
@@ -2118,6 +2149,28 @@ function initProteseModule() {
     if (btnLabsClose) btnLabsClose.addEventListener('click', closeLabsModal);
     if (btnLabsClose2) btnLabsClose2.addEventListener('click', closeLabsModal);
     if (btnLabSave) btnLabSave.addEventListener('click', () => saveProteseLab());
+
+    const closePayablesModal = () => {
+        if (payablesModal) payablesModal.classList.add('hidden');
+    };
+    if (btnPayablesClose) btnPayablesClose.addEventListener('click', closePayablesModal);
+    if (btnPayablesClose2) btnPayablesClose2.addEventListener('click', closePayablesModal);
+    if (btnPayablesRefresh) btnPayablesRefresh.addEventListener('click', () => fetchProtesePayablesFromUI());
+    const refetchPay = () => fetchProtesePayablesFromUI();
+    if (payStatusFilter) payStatusFilter.addEventListener('change', refetchPay);
+    if (payDestFilter) payDestFilter.addEventListener('change', refetchPay);
+    if (paySearch) paySearch.addEventListener('input', () => {
+        clearTimeout(window.__protesePaySearchDebounce);
+        window.__protesePaySearchDebounce = setTimeout(refetchPay, 250);
+    });
+
+    const closePayModal = () => {
+        if (payModal) payModal.classList.add('hidden');
+        currentProtesePayable = null;
+    };
+    if (btnPayModalClose) btnPayModalClose.addEventListener('click', closePayModal);
+    if (btnPayModalCancel) btnPayModalCancel.addEventListener('click', closePayModal);
+    if (btnPayModalConfirm) btnPayModalConfirm.addEventListener('click', () => confirmProtesePayablePayment());
 }
 
 async function fetchProteseFromUI() {
@@ -2245,6 +2298,8 @@ function renderProteseTable({ rows, patientById, budgetById, labById, profById }
         const fase = String(o.fase_atual || '—');
         const prazo = o.prazo_previsto ? String(o.prazo_previsto) : '—';
         const st = String(o.status_geral || '—');
+        const canEdit = can('protese', 'update');
+        const canDeleteCandidate = canEdit && String(o.fase_atual || '') === 'CRIADA' && ['EM_ANDAMENTO', 'PAUSADA'].includes(String(o.status_geral || ''));
         tr.innerHTML = `
             <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);"><strong>#${o.seqid}</strong></td>
             <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${pacNome}</td>
@@ -2258,11 +2313,57 @@ function renderProteseTable({ rows, patientById, budgetById, labById, profById }
                 <button class="btn-icon" onclick="openProteseOrder('${o.id}')" title="Abrir">
                     <i class="ri-eye-line"></i>
                 </button>
+                <button class="btn-icon" onclick="openProteseOrder('${o.id}')" title="Editar" ${canEdit ? '' : 'disabled style="opacity:.4; cursor:not-allowed;"'}>
+                    <i class="ri-edit-line"></i>
+                </button>
+                <button class="btn-icon" onclick="deleteProteseOrder('${o.id}')" title="Excluir" ${canDeleteCandidate ? '' : 'disabled style="opacity:.4; cursor:not-allowed;"'}>
+                    <i class="ri-delete-bin-line"></i>
+                </button>
             </td>
         `;
         tbody.appendChild(tr);
     });
 }
+
+window.deleteProteseOrder = async function (ordemId) {
+    if (!can('protese', 'update')) {
+        showToast('Você não tem permissão para excluir OP.', true);
+        return;
+    }
+    const o = (proteseOrders || []).find(x => String(x.id) === String(ordemId));
+    if (!o) {
+        showToast('OP não encontrada. Atualize a lista.', true);
+        return;
+    }
+    if (String(o.fase_atual || '') !== 'CRIADA' || !['EM_ANDAMENTO', 'PAUSADA'].includes(String(o.status_geral || ''))) {
+        showToast('Só é possível excluir OP sem fluxo (fase CRIADA e status em andamento/pausada).', true);
+        return;
+    }
+    const ok = confirm(`Excluir a OP #${o.seqid}? Esta ação não pode ser desfeita.`);
+    if (!ok) return;
+
+    try {
+        const { data, error } = await withTimeout(
+            db.rpc('rpc_delete_ordem_protetica', { p_empresa_id: currentEmpresaId, p_ordem_id: o.id }),
+            15000,
+            'rpc_delete_ordem_protetica'
+        );
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row || row.ok !== true) {
+            showToast((row && row.message) ? String(row.message) : 'Não foi possível excluir a OP.', true);
+            return;
+        }
+
+        proteseOrders = (proteseOrders || []).filter(x => String(x.id) !== String(o.id));
+        showToast(String(row.message || 'OP excluída com sucesso!'));
+        fetchProteseFromUI();
+    } catch (err) {
+        console.error('Erro ao excluir OP:', err);
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Falha ao excluir OP: ${msg}`, true);
+    }
+};
 
 window.openProteseOrder = function (ordemId) {
     const o = (proteseOrders || []).find(x => String(x.id) === String(ordemId));
@@ -2307,7 +2408,9 @@ function openProteseModal(order) {
     }
 
     const orcSeqInput = document.getElementById('proteseOrcamentoSeqid');
+    const orcItemSel = document.getElementById('proteseOrcamentoItemId');
     const execSel = document.getElementById('proteseTipoExecucao');
+    const statusSel = document.getElementById('proteseStatusGeral');
     const prazoInput = document.getElementById('protesePrazo');
     const priSel = document.getElementById('protesePrioridade');
     const obs = document.getElementById('proteseObservacoes');
@@ -2315,7 +2418,9 @@ function openProteseModal(order) {
     if (!order) {
         if (pacienteSel) pacienteSel.value = '';
         if (orcSeqInput) orcSeqInput.value = '';
+        if (orcItemSel) orcItemSel.value = '';
         if (execSel) execSel.value = 'EXTERNA';
+        if (statusSel) statusSel.value = 'EM_ANDAMENTO';
         if (labSel) labSel.value = '';
         if (protSel) protSel.value = '';
         if (prazoInput) prazoInput.value = '';
@@ -2324,6 +2429,7 @@ function openProteseModal(order) {
     } else {
         if (pacienteSel) pacienteSel.value = String(order.paciente_id || '');
         if (execSel) execSel.value = String(order.tipo_execucao || 'EXTERNA');
+        if (statusSel) statusSel.value = String(order.status_geral || 'EM_ANDAMENTO');
         if (labSel) labSel.value = String(order.laboratorio_id || '');
         if (protSel) protSel.value = String(order.protetico_id || '');
         if (prazoInput) prazoInput.value = order.prazo_previsto ? String(order.prazo_previsto) : '';
@@ -2331,9 +2437,13 @@ function openProteseModal(order) {
         if (obs) obs.value = String(order.observacoes || '');
         const bud = (budgets || []).find(b => String(b.id) === String(order.orcamento_id || ''));
         if (orcSeqInput) orcSeqInput.value = bud && bud.seqid ? String(bud.seqid) : '';
+        if (orcItemSel) orcItemSel.value = String(order.orcamento_item_id || '');
     }
 
+    syncProteseOrcamentoItens();
     syncProteseExecucaoGroups();
+    const btnPrint = document.getElementById('btnProtesePrint');
+    if (btnPrint) btnPrint.disabled = !currentProteseOrder;
     modal.classList.remove('hidden');
 }
 
@@ -2344,6 +2454,63 @@ function syncProteseExecucaoGroups() {
     const v = execSel ? String(execSel.value || 'EXTERNA') : 'EXTERNA';
     if (labGroup) labGroup.style.display = v === 'EXTERNA' ? 'block' : 'none';
     if (protGroup) protGroup.style.display = v === 'INTERNA' ? 'block' : 'none';
+}
+
+function syncProteseOrcamentoItens() {
+    const orcSeqRaw = (document.getElementById('proteseOrcamentoSeqid') || {}).value || '';
+    const orcItemSel = document.getElementById('proteseOrcamentoItemId');
+    if (!orcItemSel) return;
+
+    const prev = String(orcItemSel.value || '');
+    const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
+    const b = (orcSeq && Number.isFinite(orcSeq)) ? (budgets || []).find(x => Number(x.seqid) === Number(orcSeq)) : null;
+    const itens = b ? (b.orcamento_itens || []) : [];
+
+    const opts = ['<option value="">Selecione...</option>'];
+    itens.forEach((it, idx) => {
+        const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
+        const desc = serv ? serv.descricao : (it.descricao || `Item ${idx + 1}`);
+        const valorItem = Number(it.valor || it.valorUnit || 0);
+        const valorProt = Number(it.valor_protetico || it.valorProtetico || 0);
+        const label = `${desc} — ${formatCurrencyBRL(valorItem)} | Prot: ${formatCurrencyBRL(valorProt)}`;
+        opts.push(`<option value="${it.id}">${label}</option>`);
+    });
+    orcItemSel.innerHTML = opts.join('');
+
+    if (prev && Array.from(orcItemSel.options).some(o => String(o.value) === prev)) {
+        orcItemSel.value = prev;
+    }
+
+    updateProteseItemInfo();
+}
+
+function updateProteseItemInfo() {
+    const descEl = document.getElementById('proteseItemDescricao');
+    const valEl = document.getElementById('proteseItemValor');
+    const protEl = document.getElementById('proteseItemValorProtetico');
+    const orcSeqRaw = (document.getElementById('proteseOrcamentoSeqid') || {}).value || '';
+    const itemId = (document.getElementById('proteseOrcamentoItemId') || {}).value || '';
+
+    if (!descEl && !valEl && !protEl) return;
+
+    const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
+    const b = (orcSeq && Number.isFinite(orcSeq)) ? (budgets || []).find(x => Number(x.seqid) === Number(orcSeq)) : null;
+    const itens = b ? (b.orcamento_itens || []) : [];
+    const it = itemId ? itens.find(x => String(x.id) === String(itemId)) : null;
+    if (!it) {
+        if (descEl) descEl.value = '';
+        if (valEl) valEl.value = '';
+        if (protEl) protEl.value = '';
+        return;
+    }
+
+    const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
+    const desc = serv ? serv.descricao : (it.descricao || '—');
+    const valorItem = Number(it.valor || it.valorUnit || 0);
+    const valorProt = Number(it.valor_protetico || it.valorProtetico || 0);
+    if (descEl) descEl.value = desc;
+    if (valEl) valEl.value = formatCurrencyBRL(valorItem);
+    if (protEl) protEl.value = formatCurrencyBRL(valorProt);
 }
 
 async function saveProteseOrder() {
@@ -2358,8 +2525,10 @@ async function saveProteseOrder() {
 
     const pacienteId = (document.getElementById('protesePaciente') || {}).value || '';
     const exec = (document.getElementById('proteseTipoExecucao') || {}).value || 'EXTERNA';
+    const statusGeral = (document.getElementById('proteseStatusGeral') || {}).value || 'EM_ANDAMENTO';
     const labId = (document.getElementById('proteseLaboratorio') || {}).value || '';
     const protId = (document.getElementById('proteseProtetico') || {}).value || '';
+    const orcItemId = (document.getElementById('proteseOrcamentoItemId') || {}).value || '';
     const prazo = (document.getElementById('protesePrazo') || {}).value || null;
     const prioridade = (document.getElementById('protesePrioridade') || {}).value || 'NORMAL';
     const obs = (document.getElementById('proteseObservacoes') || {}).value || '';
@@ -2391,9 +2560,11 @@ async function saveProteseOrder() {
                 empresa_id: currentEmpresaId,
                 paciente_id: pacienteId,
                 orcamento_id: orcamentoId || '',
+                orcamento_item_id: orcItemId || '',
                 tipo_execucao: exec,
                 laboratorio_id: exec === 'EXTERNA' ? labId : '',
                 protetico_id: exec === 'INTERNA' ? protId : '',
+                status_geral: statusGeral,
                 prioridade,
                 prazo_previsto: prazo || '',
                 observacoes: obs || ''
@@ -2402,13 +2573,17 @@ async function saveProteseOrder() {
             if (error) throw error;
             currentProteseOrder = data;
             showToast('OP criada com sucesso!');
+            const btnPrint = document.getElementById('btnProtesePrint');
+            if (btnPrint) btnPrint.disabled = false;
         } else {
             const upd = {
                 paciente_id: pacienteId,
                 orcamento_id: orcamentoId,
+                orcamento_item_id: orcItemId || null,
                 tipo_execucao: exec,
                 laboratorio_id: exec === 'EXTERNA' ? labId : null,
                 protetico_id: exec === 'INTERNA' ? protId : null,
+                status_geral: statusGeral,
                 prioridade,
                 prazo_previsto: prazo || null,
                 observacoes: obs || null,
@@ -2424,12 +2599,132 @@ async function saveProteseOrder() {
             );
             if (error) throw error;
             showToast('OP atualizada com sucesso!');
+            const btnPrint = document.getElementById('btnProtesePrint');
+            if (btnPrint) btnPrint.disabled = false;
         }
         await fetchProteseFromUI();
     } catch (err) {
         const msg = err && err.message ? err.message : 'Erro desconhecido';
         showToast(`Falha ao salvar OP: ${msg}`, true);
     }
+}
+
+function printProteseOrder() {
+    const o = currentProteseOrder;
+    if (!o) { showToast('Salve a OP antes de imprimir.', true); return; }
+
+    const pac = (patients || []).find(p => String(p.id) === String(o.paciente_id || ''));
+    const pacNome = pac ? String(pac.nome || '') : '—';
+    const b = (budgets || []).find(x => String(x.id) === String(o.orcamento_id || ''));
+    const orcSeq = b && b.seqid != null ? String(b.seqid) : '—';
+    const exec = String(o.tipo_execucao || '—');
+    const executor = exec === 'EXTERNA'
+        ? ((proteseLabs || []).find(l => String(l.id) === String(o.laboratorio_id || ''))?.nome || '—')
+        : ((professionals || []).find(p => String(p.id) === String(o.protetico_id || ''))?.nome || '—');
+
+    const itens = b ? (b.orcamento_itens || []) : [];
+    const it = (o.orcamento_item_id ? itens.find(x => String(x.id) === String(o.orcamento_item_id)) : null);
+    const serv = it ? (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || '')) : null;
+    const itemDesc = serv ? serv.descricao : (it ? (it.descricao || '—') : '—');
+    const itemValor = it ? Number(it.valor || it.valorUnit || 0) : 0;
+    const itemValorProt = it ? Number(it.valor_protetico || it.valorProtetico || 0) : 0;
+
+    const hoje = new Date().toLocaleString('pt-BR');
+    const status = String(o.status_geral || '—');
+    const fase = String(o.fase_atual || '—');
+    const prazo = o.prazo_previsto ? String(o.prazo_previsto) : '—';
+    const prioridade = String(o.prioridade || '—');
+    const obs = String(o.observacoes || '').trim();
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>OP #${o.seqid} - ${pacNome}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 13px; color:#111827; padding: 28px; }
+    .header { display:flex; justify-content: space-between; align-items:flex-start; border-bottom: 2px solid #0066cc; padding-bottom: 14px; margin-bottom: 18px; }
+    .clinic-name { font-size: 20px; font-weight: 800; color:#0066cc; line-height: 1.05; }
+    .sub { font-size: 11px; color:#6b7280; margin-top: 3px; }
+    .doc-title { font-size: 15px; font-weight: 800; text-align:right; color:#374151; }
+    .section { margin-bottom: 18px; }
+    .section-title { font-size: 12px; font-weight: 800; text-transform: uppercase; color:#0066cc; letter-spacing: .05em; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .item label { font-size: 11px; color:#6b7280; display:block; margin-bottom: 2px; }
+    .item span { font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px; }
+    th { background: #f9fafb; text-align:left; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color:#374151; }
+    .footer { margin-top: 22px; font-size: 10px; color:#9ca3af; border-top: 1px solid #e5e7eb; padding-top: 10px; text-align:center; }
+    @media print { body { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="clinic-name">OCC</div>
+      <div class="sub">Odonto Connect Cloud</div>
+      <div class="sub">Gerado em: ${hoje}</div>
+    </div>
+    <div>
+      <div class="doc-title">ORDEM PROTÉTICA</div>
+      <div class="sub" style="text-align:right;">OP #${o.seqid}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Dados</div>
+    <div class="grid">
+      <div class="item"><label>Paciente</label><span>${pacNome}</span></div>
+      <div class="item"><label>Orçamento</label><span>${orcSeq !== '—' ? `#${orcSeq}` : '—'}</span></div>
+      <div class="item"><label>Execução</label><span>${exec}</span></div>
+      <div class="item"><label>Executor</label><span>${executor}</span></div>
+      <div class="item"><label>Status</label><span>${status}</span></div>
+      <div class="item"><label>Fase</label><span>${fase}</span></div>
+      <div class="item"><label>Prazo</label><span>${prazo}</span></div>
+      <div class="item"><label>Prioridade</label><span>${prioridade}</span></div>
+      <div class="item"><label>Item do Orçamento</label><span>${itemDesc}</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Valores</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th style="width: 160px; text-align:right;">Valor do Item</th>
+          <th style="width: 160px; text-align:right;">Vlr Protético</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${itemDesc}</td>
+          <td style="text-align:right;">${formatCurrencyBRL(itemValor)}</td>
+          <td style="text-align:right;">${formatCurrencyBRL(itemValorProt)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  ${obs ? `
+  <div class="section">
+    <div class="section-title">Observações</div>
+    <div style="white-space: pre-wrap; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; background: #f9fafb;">${obs}</div>
+  </div>
+  ` : ''}
+
+  <div class="footer">Documento interno • Produção Protética</div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) { showToast('Habilite pop-ups para imprimir a OP.', true); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 500);
 }
 
 function openProteseLabsModal() {
@@ -2546,6 +2841,254 @@ async function saveProteseLab() {
     } catch (err) {
         const msg = err && err.message ? err.message : 'Erro desconhecido';
         showToast(`Falha ao salvar laboratório: ${msg}`, true);
+    }
+}
+
+async function ensureProteseLabsLoaded() {
+    if (Array.isArray(proteseLabs) && proteseLabs.length) return;
+    const { data, error } = await withTimeout(
+        db.from('laboratorios_proteticos')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .order('seqid', { ascending: true }),
+        15000,
+        'laboratorios_proteticos:ensure'
+    );
+    if (error) throw error;
+    proteseLabs = Array.isArray(data) ? data : [];
+}
+
+async function ensureProteseOrdersLoaded() {
+    if (Array.isArray(proteseOrders) && proteseOrders.length) return;
+    const { data, error } = await withTimeout(
+        db.from('ordens_proteticas')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .order('seqid', { ascending: false }),
+        15000,
+        'ordens_proteticas:ensure'
+    );
+    if (error) throw error;
+    proteseOrders = Array.isArray(data) ? data : [];
+}
+
+function openProtesePayablesModal() {
+    const modal = document.getElementById('modalProtesePayables');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    fetchProtesePayablesFromUI();
+}
+
+async function fetchProtesePayablesFromUI() {
+    const tbody = document.getElementById('protesePayablesBody');
+    const empty = document.getElementById('protesePayablesEmpty');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando...</td></tr>';
+    if (empty) empty.classList.add('hidden');
+
+    const statusVal = (document.getElementById('protesePayablesStatusFilter') || {}).value || '';
+    const destVal = (document.getElementById('protesePayablesDestFilter') || {}).value || '';
+    const q = String((document.getElementById('protesePayablesSearch') || {}).value || '').trim().toLowerCase();
+    await fetchProtesePayables({ statusVal, destVal, q });
+}
+
+async function fetchProtesePayables({ statusVal, destVal, q }) {
+    try {
+        await ensureProteseOrdersLoaded();
+
+        let payQ = db.from('protese_contas_pagar')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .order('vencimento', { ascending: true })
+            .order('seqid', { ascending: false });
+        if (statusVal) payQ = payQ.eq('status', statusVal);
+        if (destVal) payQ = payQ.eq('destinatario_tipo', destVal);
+        const { data, error } = await withTimeout(payQ, 15000, 'protese_contas_pagar');
+        if (error) throw error;
+        protesePayables = Array.isArray(data) ? data : [];
+
+        const ordersById = new Map((proteseOrders || []).map(o => [String(o.id), o]));
+        const budgetById = new Map((budgets || []).map(b => [String(b.id), b]));
+        const patientById = new Map((patients || []).map(p => [String(p.id), p]));
+        const labById = new Map((proteseLabs || []).map(l => [String(l.id), l]));
+        const profById = new Map((professionals || []).map(p => [String(p.id), p]));
+
+        let rows = protesePayables.slice();
+        if (q) {
+            rows = rows.filter(r => {
+                const ord = ordersById.get(String(r.ordem_id || ''));
+                const opSeq = ord ? String(ord.seqid || '') : '';
+                const bud = ord ? budgetById.get(String(ord.orcamento_id || '')) : null;
+                const orcSeq = bud ? String(bud.seqid || '') : '';
+                const pac = ord ? patientById.get(String(ord.paciente_id || '')) : null;
+                const pacNome = pac ? String(pac.nome || '') : '';
+                const destNome = String(getProtesePayableDestName(r, labById, profById) || '');
+                const hay = `${opSeq} ${orcSeq} ${pacNome} ${destNome}`.toLowerCase();
+                return hay.includes(q);
+            });
+        }
+
+        renderProtesePayablesTable({ rows, ordersById, budgetById, patientById, labById, profById });
+    } catch (err) {
+        console.error('Erro ao carregar contas a pagar protética:', err);
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Erro ao carregar Contas a Pagar: ${msg}`, true);
+        const tbody = document.getElementById('protesePayablesBody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 2rem; color: var(--danger-color);">Falha ao carregar. Verifique RLS/policies.</td></tr>';
+    }
+}
+
+function getProtesePayableDestName(r, labById, profById) {
+    if (!r) return '—';
+    const t = String(r.destinatario_tipo || '');
+    if (t === 'LABORATORIO') {
+        const lab = labById.get(String(r.laboratorio_id || ''));
+        return lab ? lab.nome : '—';
+    }
+    const p = profById.get(String(r.protetico_id || ''));
+    return p ? p.nome : '—';
+}
+
+function renderProtesePayablesTable({ rows, ordersById, budgetById, patientById, labById, profById }) {
+    const tbody = document.getElementById('protesePayablesBody');
+    const empty = document.getElementById('protesePayablesEmpty');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!rows.length) {
+        if (empty) empty.classList.remove('hidden');
+        return;
+    }
+    if (empty) empty.classList.add('hidden');
+
+    const canPay = can('financeiro', 'insert') || can('financeiro', 'update') || can('protese', 'update');
+
+    rows.forEach(r => {
+        const ord = ordersById.get(String(r.ordem_id || ''));
+        const opSeq = ord ? `#${ord.seqid}` : '—';
+        const bud = ord ? budgetById.get(String(ord.orcamento_id || '')) : null;
+        const orcSeq = bud && bud.seqid != null ? `#${bud.seqid}` : '—';
+        const pac = ord ? patientById.get(String(ord.paciente_id || '')) : null;
+        const pacNome = pac ? String(pac.nome || '') : '—';
+        const destNome = getProtesePayableDestName(r, labById, profById);
+        const venc = r.vencimento ? String(r.vencimento) : '—';
+        const val = Number(r.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const st = String(r.status || '—');
+        const canMarkPaid = canPay && st === 'PENDENTE';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color); font-weight:800;">${opSeq}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color); text-align:center; font-weight:700;">${orcSeq}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${pacNome}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${destNome}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color); text-align:center;">${venc}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color); text-align:right; font-weight:800;">${val}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${st}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color); text-align:center;">
+                ${canMarkPaid ? `<button class="btn btn-sm btn-primary" onclick="openProtesePayablePay('${r.id}')"><i class="ri-check-line"></i> Pagar</button>` : '<span style="color: var(--text-muted);">—</span>'}
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+window.openProtesePayablePay = function (payableId) {
+    const r = (protesePayables || []).find(x => String(x.id) === String(payableId));
+    if (!r) {
+        showToast('Conta a pagar não encontrada. Atualize a lista.', true);
+        return;
+    }
+    currentProtesePayable = r;
+    const modal = document.getElementById('modalProtesePayablePay');
+    if (!modal) return;
+    const idEl = document.getElementById('protesePayablePayId');
+    const dtEl = document.getElementById('protesePayablePayData');
+    const obsEl = document.getElementById('protesePayablePayObs');
+    if (idEl) idEl.value = String(r.id);
+    if (obsEl) obsEl.value = '';
+    if (dtEl && !dtEl.value) {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        dtEl.value = `${yyyy}-${mm}-${dd}`;
+    }
+    modal.classList.remove('hidden');
+};
+
+async function confirmProtesePayablePayment() {
+    if (!currentProtesePayable) return;
+    if (String(currentProtesePayable.status || '') !== 'PENDENTE') {
+        showToast('Somente pendentes podem ser pagos.', true);
+        return;
+    }
+
+    const forma = (document.getElementById('protesePayablePayForma') || {}).value || '';
+    const dataStr = (document.getElementById('protesePayablePayData') || {}).value || '';
+    const obs = (document.getElementById('protesePayablePayObs') || {}).value || '';
+    const payTs = dataStr ? `${dataStr}T12:00:00.000Z` : new Date().toISOString();
+
+    try {
+        const ord = (proteseOrders || []).find(o => String(o.id) === String(currentProtesePayable.ordem_id || ''));
+        const bud = ord ? (budgets || []).find(b => String(b.id) === String(ord.orcamento_id || '')) : null;
+        const refId = bud && bud.seqid != null ? Number(bud.seqid) : null;
+
+        const destLabel = String(currentProtesePayable.destinatario_tipo || '') === 'LABORATORIO' ? 'Laboratório' : 'Protético';
+        const destName = String(currentProtesePayable.destinatario_tipo || '') === 'LABORATORIO'
+            ? ((proteseLabs || []).find(l => String(l.id) === String(currentProtesePayable.laboratorio_id || ''))?.nome || '—')
+            : ((professionals || []).find(p => String(p.id) === String(currentProtesePayable.protetico_id || ''))?.nome || '—');
+
+        const observacoes = [
+            `[Prótese] ${destLabel}: ${destName}`,
+            ord && ord.seqid != null ? `OP #${ord.seqid}` : null,
+            bud && bud.seqid != null ? `Orç. #${bud.seqid}` : null,
+            obs ? String(obs).trim() : null
+        ].filter(Boolean).join(' | ');
+
+        const tx = {
+            paciente_id: null,
+            tipo: 'DEBITO',
+            categoria: 'PAGAMENTO',
+            valor: Number(currentProtesePayable.valor || 0),
+            data_transacao: payTs,
+            forma_pagamento: forma || null,
+            referencia_id: (refId != null && Number.isFinite(refId)) ? refId : null,
+            observacoes,
+            empresa_id: currentEmpresaId,
+            criado_por: currentUser.id
+        };
+        const { data: txRow, error: txErr } = await withTimeout(
+            db.from('financeiro_transacoes').insert(tx).select().single(),
+            15000,
+            'financeiro_transacoes:protese_pay'
+        );
+        if (txErr) throw txErr;
+
+        const upd = {
+            status: 'PAGO',
+            pago_em: payTs,
+            pago_por: currentUser.id,
+            transacao_id: txRow.id
+        };
+        const { error: upErr } = await withTimeout(
+            db.from('protese_contas_pagar')
+                .update(upd)
+                .eq('empresa_id', currentEmpresaId)
+                .eq('id', currentProtesePayable.id),
+            15000,
+            'protese_contas_pagar:pay'
+        );
+        if (upErr) throw upErr;
+
+        const modal = document.getElementById('modalProtesePayablePay');
+        if (modal) modal.classList.add('hidden');
+        currentProtesePayable = null;
+        showToast('Pagamento registrado com sucesso!');
+        fetchProtesePayablesFromUI();
+    } catch (err) {
+        console.error('Erro ao baixar conta a pagar protética:', err);
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Falha ao registrar pagamento: ${msg}`, true);
     }
 }
 
@@ -3888,9 +4431,10 @@ profTipoSelect.addEventListener('change', (e) => {
             document.getElementById('profEspecialidadeDiv').style.display = 'block';
             document.getElementById('profEspecialidade').required = true;
         } else if (tipo === 'Protetico') {
-            document.getElementById('comissionCEDiv').style.display = 'block';
-            document.getElementById('comissionCCDiv').style.display = 'block';
-            document.getElementById('comissionCPDiv').style.display = 'block';
+            comissionCard.style.display = 'none';
+            document.getElementById('comissionCEDiv').style.display = 'none';
+            document.getElementById('comissionCCDiv').style.display = 'none';
+            document.getElementById('comissionCPDiv').style.display = 'none';
             document.getElementById('comissionEEDiv').style.display = 'none';
             document.getElementById('comissionECDiv').style.display = 'none';
             document.getElementById('comissionEPDiv').style.display = 'none';
@@ -4871,6 +5415,20 @@ function populateBudgetProfDropdown() {
             });
     }
 
+    const labSelect = document.getElementById('budItemProteseLaboratorioId');
+    if (labSelect) {
+        const fill = () => {
+            const opts = ['<option value="">Selecione...</option>'];
+            (proteseLabs || []).filter(l => l.ativo !== false).forEach(l => opts.push(`<option value="${l.id}">#${l.seqid} - ${l.nome}</option>`));
+            labSelect.innerHTML = opts.join('');
+        };
+        if (Array.isArray(proteseLabs) && proteseLabs.length) {
+            fill();
+        } else {
+            ensureProteseLabsLoaded().then(fill).catch(() => fill());
+        }
+    }
+
     // 2. Profissional Executor (Dropdown por item)
     const executorSelect = document.getElementById('budItemExecutorId');
     if (executorSelect) {
@@ -4881,6 +5439,19 @@ function populateBudgetProfDropdown() {
                 executorSelect.innerHTML += `<option value="${p.seqid || p.id}">${p.seqid || ''} - ${p.nome} (${p.tipo || ''})</option>`;
             });
     }
+}
+
+function syncBudgetProteseExecucaoGroups() {
+    const execSel = document.getElementById('budItemProteseExecucao');
+    const protGroup = document.getElementById('budItemProteseProteticoGroup');
+    const labGroup = document.getElementById('budItemProteseLabGroup');
+    const protSel = document.getElementById('budItemProfissionalId');
+    const labSel = document.getElementById('budItemProteseLaboratorioId');
+    const v = execSel ? String(execSel.value || 'INTERNA') : 'INTERNA';
+    if (protGroup) protGroup.style.display = v === 'INTERNA' ? 'block' : 'none';
+    if (labGroup) labGroup.style.display = v === 'EXTERNA' ? 'block' : 'none';
+    if (v === 'INTERNA' && labSel) labSel.value = '';
+    if (v === 'EXTERNA' && protSel) protSel.value = '';
 }
 
 function populateBudgetItemSubdivisaoDropdown() {
@@ -4933,6 +5504,11 @@ if (btnToggleAddItem) {
             document.getElementById('budItemQtde').value = '1';
             if (document.getElementById('budItemProfissionalId')) document.getElementById('budItemProfissionalId').value = '';
             document.getElementById('budItemValorProtetico').value = '';
+            const execProtese = document.getElementById('budItemProteseExecucao');
+            const labProtese = document.getElementById('budItemProteseLaboratorioId');
+            if (execProtese) execProtese.value = 'INTERNA';
+            if (labProtese) labProtese.value = '';
+            syncBudgetProteseExecucaoGroups();
 
             // Pre-fill Executor with Header Professional
             const headerProfId = document.getElementById('budProfissionalId')?.value || '';
@@ -5021,6 +5597,15 @@ if (budItemSubdivisao) budItemSubdivisao.addEventListener('change', validateBudg
 const budItemExecutorId = document.getElementById('budItemExecutorId');
 if (budItemExecutorId) budItemExecutorId.addEventListener('change', validateBudgetItemForm);
 
+const budItemProteseExecucao = document.getElementById('budItemProteseExecucao');
+if (budItemProteseExecucao) budItemProteseExecucao.addEventListener('change', () => { syncBudgetProteseExecucaoGroups(); validateBudgetItemForm(); });
+
+const budItemProteseLaboratorioId = document.getElementById('budItemProteseLaboratorioId');
+if (budItemProteseLaboratorioId) budItemProteseLaboratorioId.addEventListener('change', validateBudgetItemForm);
+
+const budItemValorProtetico = document.getElementById('budItemValorProtetico');
+if (budItemValorProtetico) budItemValorProtetico.addEventListener('input', validateBudgetItemForm);
+
 // Save Sub-Item
 if (btnSaveAddItem) {
     btnSaveAddItem.addEventListener('click', () => {
@@ -5029,15 +5614,20 @@ if (btnSaveAddItem) {
             const valorEl = document.getElementById('budItemValor');
             const qtdeEl = document.getElementById('budItemQtde');
             const profEl = document.getElementById('budItemProfissionalId');
+            const labEl = document.getElementById('budItemProteseLaboratorioId');
+            const valorProtEl = document.getElementById('budItemValorProtetico');
+            const execProtese = document.getElementById('budItemProteseExecucao')?.value || '';
 
             const servId = servEl.value;
             const valorUnit = parseFloat(valorEl.value);
             const qtde = parseInt(qtdeEl.value) || 1;
             const profId = profEl.value; // Protético
+            const labId = labEl ? labEl.value : '';
+            const valorProtetico = valorProtEl ? parseFloat(valorProtEl.value) : 0;
             const executorId = document.getElementById('budItemExecutorId')?.value || null;
 
             // Clear previous highlights
-            [servEl, valorEl, qtdeEl, profEl].forEach(el => el.classList.remove('input-error'));
+            [servEl, valorEl, qtdeEl, profEl, labEl, valorProtEl].filter(Boolean).forEach(el => el.classList.remove('input-error'));
 
             // Validate each field individually with specific feedback
             let hasError = false;
@@ -5058,6 +5648,13 @@ if (btnSaveAddItem) {
                 hasError = true;
             }
 
+            const hasProtese = Boolean(profId) || Boolean(labId);
+            if (hasProtese) {
+                if (!valorProtetico || isNaN(valorProtetico) || valorProtetico <= 0) {
+                    if (valorProtEl) valorProtEl.classList.add('input-error');
+                    hasError = true;
+                }
+            }
 
             if (hasError) {
                 showToast('Preencha todos os campos obrigat\u00f3rios do item (destacados em vermelho).', true);
@@ -5084,7 +5681,9 @@ if (btnSaveAddItem) {
                         qtde: qtde,
                         proteticoId: profId,
                         proteticoNome: profData ? profData.nome : '',
-                        valorProtetico: parseFloat(document.getElementById('budItemValorProtetico').value) || 0,
+                        proteseExecucao: execProtese,
+                        proteseLaboratorioId: labId,
+                        valorProtetico: valorProtetico || 0,
                         profissionalId: executorId,
                         executorNome: executorData ? executorData.nome : '',
                         status: currentBudgetItems[idx].status || 'Pendente'
@@ -5100,7 +5699,9 @@ if (btnSaveAddItem) {
                     qtde: qtde,
                     proteticoId: profId,
                     proteticoNome: profData ? profData.nome : '',
-                    valorProtetico: parseFloat(document.getElementById('budItemValorProtetico').value) || 0,
+                    proteseExecucao: execProtese,
+                    proteseLaboratorioId: labId,
+                    valorProtetico: valorProtetico || 0,
                     profissionalId: executorId,
                     executorNome: executorData ? executorData.nome : '',
                     status: 'Pendente'

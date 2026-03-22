@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260322-0135">
+    <link rel="stylesheet" href="styles.css?v=20260322-0300">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260322-0135
+        build 20260322-0300
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -2346,6 +2346,7 @@
                     </div>
                     <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
                         <button id="btnProteseLabs" class="btn btn-secondary"><i class="ri-building-2-line"></i> Laboratórios</button>
+                        <button id="btnProtesePayables" class="btn btn-secondary"><i class="ri-hand-coin-line"></i> Contas a Pagar</button>
                         <button id="btnProteseRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
                         <button id="btnProteseReports" class="btn btn-secondary"><i class="ri-bar-chart-line"></i> Relatórios</button>
                         <button id="btnProteseNew" class="btn btn-primary"><i class="ri-add-line"></i> Nova OP</button>
@@ -2573,11 +2574,26 @@
                                 <label for="proteseOrcamentoSeqid">Orçamento</label>
                                 <input id="proteseOrcamentoSeqid" type="number" class="form-control" placeholder="Ex.: 123">
                             </div>
+                            <div class="form-group" style="min-width: 260px; flex:1; margin-bottom: 0;">
+                                <label for="proteseOrcamentoItemId">Item do Orçamento</label>
+                                <select id="proteseOrcamentoItemId" class="form-control">
+                                    <option value="">Selecione...</option>
+                                </select>
+                            </div>
                             <div class="form-group" style="min-width: 160px; margin-bottom: 0;">
                                 <label for="proteseTipoExecucao">Execução *</label>
                                 <select id="proteseTipoExecucao" class="form-control">
                                     <option value="EXTERNA">Externa</option>
                                     <option value="INTERNA">Interna</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="min-width: 160px; margin-bottom: 0;">
+                                <label for="proteseStatusGeral">Status *</label>
+                                <select id="proteseStatusGeral" class="form-control">
+                                    <option value="EM_ANDAMENTO">Em andamento</option>
+                                    <option value="PAUSADA">Pausada</option>
+                                    <option value="CONCLUIDA">Concluída</option>
+                                    <option value="CANCELADA">Cancelada</option>
                                 </select>
                             </div>
                             <div class="form-group" style="min-width: 220px; flex:1; margin-bottom: 0;" id="proteseLabGroup">
@@ -2600,6 +2616,21 @@
                                     <option value="ALTA">Alta</option>
                                     <option value="URGENTE">Urgente</option>
                                 </select>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 0.75rem; display:flex; gap: 1rem; flex-wrap: wrap; align-items:flex-end;">
+                            <div class="form-group" style="min-width: 280px; flex:1; margin-bottom: 0;">
+                                <label>Descrição do item</label>
+                                <input id="proteseItemDescricao" type="text" class="form-control" readonly placeholder="Selecione o item do orçamento">
+                            </div>
+                            <div class="form-group" style="min-width: 160px; margin-bottom: 0;">
+                                <label>Valor do item</label>
+                                <input id="proteseItemValor" type="text" class="form-control" readonly placeholder="R$ 0,00">
+                            </div>
+                            <div class="form-group" style="min-width: 160px; margin-bottom: 0;">
+                                <label>Vlr Protético</label>
+                                <input id="proteseItemValorProtetico" type="text" class="form-control" readonly placeholder="R$ 0,00">
                             </div>
                         </div>
 
@@ -2714,6 +2745,105 @@
                     </div>
                     <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
                         <button type="button" id="btnProteseLabsClose" class="btn btn-secondary">Fechar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="modalProtesePayables" class="modal-overlay hidden">
+                <div class="modal-content" style="max-width: 980px; width: 95%;">
+                    <div class="modal-header">
+                        <h3><i class="ri-hand-coin-line"></i> Contas a Pagar Protética</h3>
+                        <button type="button" class="btn-close-modal" id="btnCloseModalProtesePayables"><i class="ri-close-line"></i></button>
+                    </div>
+                    <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+                        <div style="display:flex; gap: 1rem; flex-wrap: wrap; align-items:flex-end;">
+                            <div class="form-group" style="min-width: 200px; margin-bottom: 0;">
+                                <label for="protesePayablesStatusFilter">Status</label>
+                                <select id="protesePayablesStatusFilter" class="form-control">
+                                    <option value="">Todos</option>
+                                    <option value="PENDENTE">Pendente</option>
+                                    <option value="PAGO">Pago</option>
+                                    <option value="CANCELADA">Cancelada</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
+                                <label for="protesePayablesDestFilter">Destinatário</label>
+                                <select id="protesePayablesDestFilter" class="form-control">
+                                    <option value="">Todos</option>
+                                    <option value="LABORATORIO">Laboratório</option>
+                                    <option value="PROTETICO_INTERNO">Protético interno</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="min-width: 260px; flex:1; margin-bottom: 0;">
+                                <label for="protesePayablesSearch">Busca</label>
+                                <input id="protesePayablesSearch" type="text" class="form-control" placeholder="OP#, Orç#, paciente, laboratório/protético...">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <button id="btnProtesePayablesRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
+                            </div>
+                        </div>
+
+                        <div class="section-divider" style="margin: 1.25rem 0 1rem;"><span>Lista</span></div>
+                        <div class="table-container">
+                            <table class="main-table" id="protesePayablesTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 90px;">OP</th>
+                                        <th style="width: 90px;">Orç.</th>
+                                        <th>Paciente</th>
+                                        <th>Destinatário</th>
+                                        <th style="width: 130px;">Venc.</th>
+                                        <th style="width: 140px; text-align:right;">Valor</th>
+                                        <th style="width: 120px;">Status</th>
+                                        <th style="width: 140px; text-align:center;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="protesePayablesBody"></tbody>
+                            </table>
+                            <div id="protesePayablesEmpty" class="empty-state hidden">
+                                <i class="ri-hand-coin-line"></i>
+                                <p>Nenhuma conta a pagar encontrada.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
+                        <button type="button" id="btnProtesePayablesClose" class="btn btn-secondary">Fechar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="modalProtesePayablePay" class="modal-overlay hidden">
+                <div class="modal-content" style="max-width: 520px; width: 95%;">
+                    <div class="modal-header">
+                        <h3><i class="ri-checkbox-circle-line"></i> Baixar Conta a Pagar</h3>
+                        <button type="button" class="btn-close-modal" id="btnCloseModalProtesePayablePay"><i class="ri-close-line"></i></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="protesePayablePayId">
+                        <div class="form-group">
+                            <label for="protesePayablePayForma">Forma de Pagamento</label>
+                            <select id="protesePayablePayForma" class="form-control">
+                                <option value="">Não informado</option>
+                                <option value="PIX">PIX</option>
+                                <option value="Cartão Débito">Cartão Débito</option>
+                                <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                <option value="Dinheiro">Dinheiro</option>
+                                <option value="Boleto">Boleto</option>
+                                <option value="Cheque">Cheque</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="protesePayablePayData">Data do Pagamento</label>
+                            <input id="protesePayablePayData" type="date" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="protesePayablePayObs">Observações</label>
+                            <textarea id="protesePayablePayObs" class="form-control" rows="3" placeholder="Opcional"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
+                        <button type="button" id="btnProtesePayablePayCancel" class="btn btn-secondary">Cancelar</button>
+                        <button type="button" id="btnProtesePayablePayConfirm" class="btn btn-primary"><i class="ri-check-line"></i> Confirmar Pagamento</button>
                     </div>
                 </div>
             </div>
@@ -3352,7 +3482,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260322-0135"></script>
+    <script src="app_v20.js?v=20260322-0300"></script>
 </body>
 
 </html>
