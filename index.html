@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260320-2010">
+    <link rel="stylesheet" href="styles.css?v=20260322-0135">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260320-2010
+        build 20260322-0135
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -1057,7 +1057,6 @@
                     <table id="servicesTable">
                         <thead>
                             <tr>
-                                <th style="width: 60px;">ID</th>
                                 <th>Descrição</th>
                                 <th>Valor</th>
                                 <th>Tipo (IE)</th>
@@ -1208,7 +1207,7 @@
                             </div>
                             <div class="form-group span-3">
                                 <label for="budPacienteNome">Buscar Paciente *</label>
-                                <input type="text" id="budPacienteNome" list="pacientesDataList" required placeholder="Digite o nome ou CPF do paciente...">
+                                <input type="text" id="budPacienteNome" list="pacientesDataList" required autocomplete="new-password" placeholder="Digite o nome ou CPF do paciente...">
                                 <datalist id="pacientesDataList"></datalist>
                                 <input type="hidden" id="budPacienteId">
                             </div>
@@ -1435,6 +1434,7 @@
                     <input type="hidden" id="editAdminUserId">
                     <input type="hidden" id="editAdminAuthUserId">
                     <input type="hidden" id="editAdminOldEmail">
+                    <input type="hidden" id="editAdminEmpresaId">
 
                     <div class="form-card">
                         <h3 class="card-title">Dados de Acesso</h3>
@@ -3352,7 +3352,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260320-2010"></script>
+    <script src="app_v20.js?v=20260322-0135"></script>
 </body>
 
 </html>

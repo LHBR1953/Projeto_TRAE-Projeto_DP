@@ -6,6 +6,32 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, apikey',
 };
 
+function normalizeRole(input: unknown): string {
+    const raw = String(input ?? '').trim().toLowerCase();
+    if (!raw) return '';
+    if (raw === 'admim' || raw === 'administrador' || raw === 'administrator') return 'admin';
+    if (raw === 'protético' || raw === 'protetico' || raw === 'lab' || raw === 'laboratorio') return 'protetico';
+    if (raw === 'recepção' || raw === 'recepcao' || raw === 'recepcionista') return 'recepcao';
+    return raw;
+}
+
+function buildFullPermissions() {
+    return {
+        dashboard: { select: true, insert: true, update: true, delete: true },
+        pacientes: { select: true, insert: true, update: true, delete: true },
+        profissionais: { select: true, insert: true, update: true, delete: true },
+        especialidades: { select: true, insert: true, update: true, delete: true },
+        servicos: { select: true, insert: true, update: true, delete: true },
+        orcamentos: { select: true, insert: true, update: true, delete: true },
+        financeiro: { select: true, insert: true, update: true, delete: true },
+        comissoes: { select: true, insert: true, update: true, delete: true },
+        marketing: { select: true, insert: true, update: true, delete: true },
+        atendimento: { select: true, insert: true, update: true, delete: true },
+        agenda: { select: true, insert: true, update: true, delete: true },
+        protese: { select: true, insert: true, update: true, delete: true },
+    };
+}
+
 Deno.serve(async (req) => {
     // 1. Handle CORS preflight request
     if (req.method === 'OPTIONS') {
@@ -35,12 +61,17 @@ Deno.serve(async (req) => {
         const body = await req.json();
         const email = body.email;
         const password = body.password;
-        const role = body.role;
+        const role = normalizeRole(body.role);
         const empresa_id = body.empresa_id;
-        const permissoes = body.permissoes || {};
+        const permissoes = role === 'admin' ? buildFullPermissions() : (body.permissoes || {});
 
         if (!email || !password || !role || !empresa_id) {
             throw new Error("Missing required fields: email, password, role, form empresa_id");
+        }
+
+        const allowedRoles = new Set(['admin', 'supervisor', 'dentista', 'protetico', 'recepcao']);
+        if (!allowedRoles.has(role)) {
+            throw new Error(`Invalid role: '${role}'. Allowed: ${Array.from(allowedRoles).join(', ')}`);
         }
 
         // 4. Verify Authorization (Caller Identity)
@@ -75,7 +106,7 @@ Deno.serve(async (req) => {
                 throw new Error(`Forbidden. No record found in usuario_empresas for User ID: ${callerUser.id} and Empresa ID: ${empresa_id}.`);
             }
 
-            if (callerTenantStatus.perfil !== 'admin') {
+            if (normalizeRole(callerTenantStatus.perfil) !== 'admin') {
                 throw new Error(`Forbidden. Your profile is '${callerTenantStatus.perfil}', but 'admin' is required to create users in this tenant.`);
             }
         }
