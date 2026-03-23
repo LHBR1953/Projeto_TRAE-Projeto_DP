@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260322-0710';
+const APP_BUILD = '20260322-0810';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -2706,6 +2706,11 @@ function initProteseModule() {
     const orcInput = document.getElementById('proteseOrcamentoSeqid');
     const orcItemSelect = document.getElementById('proteseOrcamentoItemId');
     const btnEventClose = document.getElementById('btnProteseEventClose');
+    const btnEventSend = document.getElementById('btnProteseEventSend');
+    const btnEventReceive = document.getElementById('btnProteseEventReceive');
+    const btnEventTryIn = document.getElementById('btnProteseEventTryIn');
+    const btnEventApprove = document.getElementById('btnProteseEventApprove');
+    const btnEventReprove = document.getElementById('btnProteseEventReprove');
 
     const labsModal = document.getElementById('modalProteseLabs');
     const btnLabsClose = document.getElementById('btnProteseLabsClose');
@@ -2774,6 +2779,98 @@ function initProteseModule() {
         const st = document.getElementById('proteseStatusGeral');
         if (st) st.value = 'CONCLUIDA';
         await saveProteseOrder();
+    });
+    const getExecLabels = () => {
+        const o = currentProteseOrder;
+        const exec = String((document.getElementById('proteseTipoExecucao') || {}).value || (o ? o.tipo_execucao : '') || 'EXTERNA');
+        const labId = String((document.getElementById('proteseLaboratorio') || {}).value || (o ? o.laboratorio_id : '') || '');
+        const protId = String((document.getElementById('proteseProtetico') || {}).value || (o ? o.protetico_id : '') || '');
+        const executor = exec === 'EXTERNA'
+            ? ((proteseLabs || []).find(l => String(l.id) === labId)?.nome || 'Laboratório')
+            : ((professionals || []).find(p => String(p.id) === protId)?.nome || 'Protético');
+        return {
+            exec,
+            fromClinic: 'Clínica',
+            toExec: exec === 'EXTERNA' ? `Laboratório: ${executor}` : `Protético: ${executor}`
+        };
+    };
+    const getNota = () => String((document.getElementById('proteseNota') || {}).value || '').trim();
+    if (btnEventSend) btnEventSend.addEventListener('click', async () => {
+        try {
+            const { fromClinic, toExec } = getExecLabels();
+            await addProteseTimelineEvent({
+                tipoEvento: 'ENVIO',
+                faseResultante: 'ENVIADA',
+                statusResultante: null,
+                deLocal: fromClinic,
+                paraLocal: toExec,
+                nota: getNota()
+            });
+        } catch (err) {
+            const msg = err && err.message ? err.message : 'Erro desconhecido';
+            showToast(`Falha ao registrar envio: ${msg}`, true);
+        }
+    });
+    if (btnEventReceive) btnEventReceive.addEventListener('click', async () => {
+        try {
+            const { fromClinic, toExec } = getExecLabels();
+            await addProteseTimelineEvent({
+                tipoEvento: 'RECEBIMENTO',
+                faseResultante: 'RECEBIDA',
+                statusResultante: null,
+                deLocal: toExec,
+                paraLocal: fromClinic,
+                nota: getNota()
+            });
+        } catch (err) {
+            const msg = err && err.message ? err.message : 'Erro desconhecido';
+            showToast(`Falha ao registrar recebimento: ${msg}`, true);
+        }
+    });
+    if (btnEventTryIn) btnEventTryIn.addEventListener('click', async () => {
+        try {
+            await addProteseTimelineEvent({
+                tipoEvento: 'PROVA_PACIENTE',
+                faseResultante: 'PROVA_PACIENTE',
+                statusResultante: null,
+                deLocal: null,
+                paraLocal: null,
+                nota: getNota()
+            });
+        } catch (err) {
+            const msg = err && err.message ? err.message : 'Erro desconhecido';
+            showToast(`Falha ao registrar prova: ${msg}`, true);
+        }
+    });
+    if (btnEventApprove) btnEventApprove.addEventListener('click', async () => {
+        try {
+            await addProteseTimelineEvent({
+                tipoEvento: 'APROVACAO',
+                faseResultante: 'APROVADA',
+                statusResultante: null,
+                deLocal: null,
+                paraLocal: null,
+                nota: getNota()
+            });
+        } catch (err) {
+            const msg = err && err.message ? err.message : 'Erro desconhecido';
+            showToast(`Falha ao registrar aprovação: ${msg}`, true);
+        }
+    });
+    if (btnEventReprove) btnEventReprove.addEventListener('click', async () => {
+        try {
+            await addProteseTimelineEvent({
+                tipoEvento: 'REPROVACAO',
+                faseResultante: 'REPROVADA',
+                statusResultante: 'PAUSADA',
+                deLocal: null,
+                paraLocal: null,
+                nota: getNota()
+            });
+        } catch (err) {
+            const msg = err && err.message ? err.message : 'Erro desconhecido';
+            showToast(`Falha ao registrar reprovação: ${msg}`, true);
+        }
     });
 
     const closeCustModal = () => {
@@ -3083,7 +3180,43 @@ function openProteseModal(order) {
     syncProteseExecucaoGroups();
     const btnPrint = document.getElementById('btnProtesePrint');
     if (btnPrint) btnPrint.disabled = !currentProteseOrder;
+    const timeline = document.getElementById('proteseTimeline');
+    if (timeline) {
+        if (currentProteseOrder && currentProteseOrder.id) {
+            loadProteseTimeline(String(currentProteseOrder.id));
+        } else {
+            timeline.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Salve a OP para iniciar o histórico.</div>';
+        }
+    }
+    syncProteseEventButtons();
     modal.classList.remove('hidden');
+}
+
+function syncProteseEventButtons() {
+    const btnSend = document.getElementById('btnProteseEventSend');
+    const btnReceive = document.getElementById('btnProteseEventReceive');
+    const btnTryIn = document.getElementById('btnProteseEventTryIn');
+    const btnApprove = document.getElementById('btnProteseEventApprove');
+    const btnReprove = document.getElementById('btnProteseEventReprove');
+    const btnClose = document.getElementById('btnProteseEventClose');
+
+    const canWrite = can('protese', 'insert') || can('protese', 'update');
+    const st = String((document.getElementById('proteseStatusGeral') || {}).value || (currentProteseOrder ? currentProteseOrder.status_geral : '') || '');
+    const isDone = st === 'CONCLUIDA' || st === 'CANCELADA';
+
+    const setBtn = (btn, enabled) => {
+        if (!btn) return;
+        btn.disabled = !enabled;
+        btn.style.opacity = enabled ? '1' : '0.55';
+    };
+
+    const enabled = canWrite && !isDone;
+    setBtn(btnSend, enabled);
+    setBtn(btnReceive, enabled);
+    setBtn(btnTryIn, enabled);
+    setBtn(btnApprove, enabled);
+    setBtn(btnReprove, enabled);
+    setBtn(btnClose, enabled);
 }
 
 function syncProteseExecucaoGroups() {
@@ -3237,6 +3370,169 @@ function updateProteseItemInfo() {
     }
 }
 
+async function loadProteseTimeline(orderId) {
+    const wrap = document.getElementById('proteseTimeline');
+    if (!wrap) return;
+    if (!orderId) {
+        wrap.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Salve a OP para iniciar o histórico.</div>';
+        return;
+    }
+    wrap.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Carregando...</div>';
+    try {
+        const q = db.from('ordens_proteticas_eventos')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('ordem_id', orderId)
+            .order('created_at', { ascending: true })
+            .limit(500);
+        const { data, error } = await withTimeout(q, 15000, 'ordens_proteticas_eventos');
+        if (error) throw error;
+        const events = (data || []).map(ev => ({ kind: 'op', ts: ev.created_at || null, ...ev }));
+
+        let custodia = [];
+        let custodiaErrMsg = '';
+        try {
+            const q2 = db.from('ordens_proteticas_custodia_eventos')
+                .select('*')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ordem_id', orderId)
+                .order('confirmed_at', { ascending: true })
+                .limit(200);
+            const { data: d2, error: e2 } = await withTimeout(q2, 12000, 'ordens_proteticas_custodia_eventos');
+            if (!e2) {
+                custodia = (d2 || []).map(ev => ({ kind: 'custodia', ts: ev.confirmed_at || ev.created_at || null, ...ev }));
+            } else {
+                custodiaErrMsg = String(e2.message || e2.code || 'Falha ao carregar custódia');
+            }
+        } catch {
+            custodiaErrMsg = custodiaErrMsg || 'Falha ao carregar custódia';
+        }
+
+        const all = events.concat(custodia).sort((a, b) => String(a.ts || '').localeCompare(String(b.ts || '')));
+        if (!all.length) {
+            wrap.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--text-muted);">Nenhum evento registrado.</div>';
+            return;
+        }
+
+        const warnHtml = custodiaErrMsg
+            ? `<div style="padding: 10px 12px; border: 1px solid var(--danger-color); background: rgba(239,68,68,0.06); border-radius: 12px; margin-bottom: 10px; color: var(--text-color);">
+                 <div style="font-weight: 900;">Custódia (QR) indisponível no histórico</div>
+                 <div style="margin-top:4px; color: var(--text-muted); font-size: 12px;">${custodiaErrMsg}</div>
+               </div>`
+            : '';
+
+        const rows = all.map((ev, idx) => {
+            const isCust = ev.kind === 'custodia';
+            const dtIso = ev.ts || ev.created_at || ev.confirmed_at || null;
+            const dt = dtIso ? formatDateTime(dtIso) : '—';
+            const tipo = isCust ? `CUSTÓDIA · ${String(ev.acao || '')}` : String(ev.tipo_evento || '');
+            const fase = String(ev.fase_resultante || '');
+            const de = String(ev.de_local || '');
+            const para = String(ev.para_local || '');
+            const notaRaw = isCust
+                ? `Recebedor: ${String(ev.recebedor_nome || '')}${ev.recebedor_doc ? ` (${String(ev.recebedor_doc || '')})` : ''}`
+                : String(ev.nota || '');
+            return {
+                i: idx + 1,
+                dt,
+                tipo,
+                fase,
+                de,
+                para,
+                nota: notaRaw
+            };
+        });
+
+        wrap.innerHTML = warnHtml + `
+            <div style="overflow:auto;">
+                <table class="main-table" style="min-width: 860px;">
+                    <thead>
+                        <tr>
+                            <th style="width: 54px; text-align:center;">#</th>
+                            <th style="width: 170px;">Data/Hora</th>
+                            <th style="width: 140px;">Evento</th>
+                            <th style="width: 140px;">Fase</th>
+                            <th style="width: 170px;">De</th>
+                            <th style="width: 170px;">Para</th>
+                            <th>Observação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(r => `
+                            <tr>
+                                <td style="text-align:center; font-weight:800;">${r.i}</td>
+                                <td>${escapeHtml(r.dt)}</td>
+                                <td style="font-weight:800;">${escapeHtml(r.tipo || '—')}</td>
+                                <td>${escapeHtml(r.fase || '—')}</td>
+                                <td>${escapeHtml(r.de || '—')}</td>
+                                <td>${escapeHtml(r.para || '—')}</td>
+                                <td style="white-space: pre-wrap;">${escapeHtml(r.nota || '')}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (err) {
+        console.error('Erro ao carregar histórico da OP:', err);
+        wrap.innerHTML = '<div style="text-align:center; padding: 1rem; color: var(--danger-color);">Falha ao carregar histórico.</div>';
+    }
+}
+
+async function addProteseTimelineEvent({ tipoEvento, faseResultante, statusResultante, deLocal, paraLocal, nota }) {
+    if (!currentProteseOrder) {
+        await saveProteseOrder();
+    }
+    const o = currentProteseOrder;
+    if (!o || !o.id) return;
+
+    const payload = {
+        empresa_id: currentEmpresaId,
+        ordem_id: o.id,
+        tipo_evento: tipoEvento,
+        fase_resultante: faseResultante || null,
+        de_local: deLocal || null,
+        para_local: paraLocal || null,
+        nota: nota || null,
+        created_by: currentUser.id
+    };
+
+    const { error } = await withTimeout(
+        db.from('ordens_proteticas_eventos').insert(payload),
+        15000,
+        'ordens_proteticas_eventos:insert'
+    );
+    if (error) throw error;
+
+    if (faseResultante || statusResultante) {
+        const upd = {};
+        if (faseResultante) upd.fase_atual = faseResultante;
+        if (statusResultante) upd.status_geral = statusResultante;
+        const { error: uErr } = await withTimeout(
+            db.from('ordens_proteticas')
+                .update(upd)
+                .eq('empresa_id', currentEmpresaId)
+                .eq('id', o.id),
+            15000,
+            'ordens_proteticas:update_fase'
+        );
+        if (uErr) throw uErr;
+        if (faseResultante) o.fase_atual = faseResultante;
+        if (statusResultante) o.status_geral = statusResultante;
+        const inList = (proteseOrders || []).find(x => String(x.id) === String(o.id));
+        if (inList) {
+            if (faseResultante) inList.fase_atual = faseResultante;
+            if (statusResultante) inList.status_geral = statusResultante;
+        }
+    }
+
+    const notaEl = document.getElementById('proteseNota');
+    if (notaEl) notaEl.value = '';
+
+    await loadProteseTimeline(String(o.id));
+    await fetchProteseFromUI();
+}
+
 async function saveProteseOrder() {
     if (!can('protese', 'insert') && !currentProteseOrder) {
         showToast('Você não tem permissão para criar OP.', true);
@@ -3299,6 +3595,21 @@ async function saveProteseOrder() {
             showToast('OP criada com sucesso!');
             const btnPrint = document.getElementById('btnProtesePrint');
             if (btnPrint) btnPrint.disabled = false;
+            syncProteseEventButtons();
+            try {
+                const execLocal = exec === 'EXTERNA'
+                    ? ((proteseLabs || []).find(l => String(l.id) === String(labId || ''))?.nome || 'Laboratório')
+                    : ((professionals || []).find(p => String(p.id) === String(protId || ''))?.nome || 'Protético');
+                const paraLocal = exec === 'EXTERNA' ? `Laboratório: ${execLocal}` : `Protético: ${execLocal}`;
+                await addProteseTimelineEvent({
+                    tipoEvento: 'CRIACAO',
+                    faseResultante: 'CRIADA',
+                    statusResultante: null,
+                    deLocal: 'Clínica',
+                    paraLocal,
+                    nota: obs ? String(obs) : null
+                });
+            } catch { }
         } else {
             const upd = {
                 paciente_id: pacienteId,
@@ -3325,6 +3636,7 @@ async function saveProteseOrder() {
             showToast('OP atualizada com sucesso!');
             const btnPrint = document.getElementById('btnProtesePrint');
             if (btnPrint) btnPrint.disabled = false;
+            syncProteseEventButtons();
         }
         await fetchProteseFromUI();
     } catch (err) {
@@ -3333,7 +3645,7 @@ async function saveProteseOrder() {
     }
 }
 
-function printProteseOrder() {
+async function printProteseOrder() {
     const o = currentProteseOrder;
     if (!o) { showToast('Salve a OP antes de imprimir.', true); return; }
 
@@ -3359,6 +3671,81 @@ function printProteseOrder() {
     const prazo = o.prazo_previsto ? String(o.prazo_previsto) : '—';
     const prioridade = String(o.prioridade || '—');
     const obs = String(o.observacoes || '').trim();
+
+    let historicoRows = [];
+    try {
+        const q = db.from('ordens_proteticas_eventos')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('ordem_id', o.id)
+            .order('created_at', { ascending: true })
+            .limit(500);
+        const { data, error } = await withTimeout(q, 15000, 'ordens_proteticas_eventos:print');
+        if (error) throw error;
+        historicoRows = (Array.isArray(data) ? data : []).map(r => ({
+            created_at: r.created_at,
+            tipo: String(r.tipo_evento || ''),
+            fase: String(r.fase_resultante || ''),
+            de: String(r.de_local || ''),
+            para: String(r.para_local || ''),
+            nota: String(r.nota || '')
+        }));
+    } catch {
+        historicoRows = [];
+    }
+
+    try {
+        const q2 = db.from('ordens_proteticas_custodia_eventos')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('ordem_id', o.id)
+            .order('confirmed_at', { ascending: true })
+            .limit(200);
+        const { data: d2, error: e2 } = await withTimeout(q2, 12000, 'ordens_proteticas_custodia_eventos:print');
+        if (!e2) {
+            const crows = (Array.isArray(d2) ? d2 : []).map(r => ({
+                created_at: r.confirmed_at || r.created_at,
+                tipo: `CUSTÓDIA · ${String(r.acao || '')}`,
+                fase: '',
+                de: String(r.de_local || ''),
+                para: String(r.para_local || ''),
+                nota: `Recebido por: ${String(r.recebedor_nome || '')}${r.recebedor_doc ? ` (${String(r.recebedor_doc || '')})` : ''}`
+            }));
+            historicoRows = historicoRows.concat(crows).sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+        }
+    } catch { }
+
+    const histTable = historicoRows.length ? `
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 52px; text-align:center;">#</th>
+            <th style="width: 160px;">Data/Hora</th>
+            <th style="width: 140px;">Evento</th>
+            <th style="width: 140px;">Fase</th>
+            <th style="width: 180px;">De</th>
+            <th style="width: 180px;">Para</th>
+            <th>Observação</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${historicoRows.map((r, idx) => {
+              const dt = r.created_at ? formatDateTime(r.created_at) : '—';
+              return `
+                <tr>
+                  <td style="text-align:center; font-weight:800;">${idx + 1}</td>
+                  <td>${escapeHtml(dt)}</td>
+                  <td>${escapeHtml(r.tipo || '—')}</td>
+                  <td>${escapeHtml(r.fase || '—')}</td>
+                  <td>${escapeHtml(r.de || '—')}</td>
+                  <td>${escapeHtml(r.para || '—')}</td>
+                  <td style="white-space: pre-wrap;">${escapeHtml(r.nota || '')}</td>
+                </tr>
+              `;
+          }).join('')}
+        </tbody>
+      </table>
+    ` : `<div style="color:#6b7280;">Nenhum evento registrado.</div>`;
 
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -3438,6 +3825,11 @@ function printProteseOrder() {
     <div style="white-space: pre-wrap; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; background: #f9fafb;">${obs}</div>
   </div>
   ` : ''}
+
+  <div class="section">
+    <div class="section-title">Controle de Idas e Vindas (Histórico)</div>
+    ${histTable}
+  </div>
 
   <div class="footer">Documento interno • Produção Protética</div>
 </body>
@@ -3737,6 +4129,7 @@ async function refreshProteseCustodiaEvents(ordemId, tryMirrorToTimeline) {
                 );
                 if (!exErr && Array.isArray(existing) && existing.length) {
                     showToast('Assinatura já registrada no histórico da OP.');
+                    await loadProteseTimeline(String(ordemId));
                     return;
                 }
 
@@ -3766,6 +4159,7 @@ async function refreshProteseCustodiaEvents(ordemId, tryMirrorToTimeline) {
                 );
                 if (insErr) throw insErr;
                 showToast('Assinatura registrada no histórico da OP.');
+                await loadProteseTimeline(String(ordemId));
             }
         }
     } catch (e) {
