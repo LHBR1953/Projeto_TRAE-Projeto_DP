@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260322-0300';
+const APP_BUILD = '20260322-0650';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -782,6 +782,23 @@ const agendaInicio = document.getElementById('agendaInicio');
 const agendaFim = document.getElementById('agendaFim');
 const agendaStatus = document.getElementById('agendaStatus');
 const agendaObs = document.getElementById('agendaObs');
+
+// Atendimento DOM Elements
+const atendimentoDate = document.getElementById('atendimentoDate');
+const atendimentoProfessional = document.getElementById('atendimentoProfessional');
+const atendimentoProfessionalGroup = document.getElementById('atendimentoProfessionalGroup');
+const btnAtendimentoRefresh = document.getElementById('btnAtendimentoRefresh');
+const btnAtendimentoFinalizeSelected = document.getElementById('btnAtendimentoFinalizeSelected');
+const atendimentoSummary = document.getElementById('atendimentoSummary');
+const atendimentoBody = document.getElementById('atendimentoBody');
+const atendimentoEmptyState = document.getElementById('atendimentoEmptyState');
+const btnFechamentoDiario = document.getElementById('btnFechamentoDiario');
+const fechamentoDiarioModal = document.getElementById('fechamentoDiarioModal');
+const btnCloseFechamentoDiarioModal = document.getElementById('btnCloseFechamentoDiarioModal');
+const btnCancelFechamentoDiario = document.getElementById('btnCancelFechamentoDiario');
+const btnGenerateFechamentoDiario = document.getElementById('btnGenerateFechamentoDiario');
+const fechamentoDiarioDate = document.getElementById('fechamentoDiarioDate');
+const fechamentoDiarioProfessional = document.getElementById('fechamentoDiarioProfessional');
 
 // Commissions DOM Elements
 const commissionsTable = document.getElementById('commissionsTable');
@@ -1787,6 +1804,8 @@ function showList(type = 'patients') {
         if (marketingView) marketingView.classList.remove('hidden');
     } else if (type === 'atendimento') {
         if (atendimentoView) atendimentoView.classList.remove('hidden');
+        initAtendimentoFilters();
+        renderAtendimentoPlaceholder();
     } else if (type === 'agenda') {
         if (agendaView) agendaView.classList.remove('hidden');
         initAgendaFilters();
@@ -1854,6 +1873,614 @@ function initDashboardFilters() {
         if (btnDashPrint) btnDashPrint.addEventListener('click', () => window.print());
         if (dashDate) dashDate.addEventListener('change', () => refreshDashboardFromUI());
         if (dashProfessional) dashProfessional.addEventListener('change', () => refreshDashboardFromUI());
+    }
+}
+
+function initAtendimentoFilters() {
+    if (atendimentoProfessional) {
+        const prev = String(atendimentoProfessional.value || '');
+        const opts = ['<option value="">Selecione...</option>'];
+        (professionals || [])
+            .slice()
+            .filter(p => String(p.status || '') === 'Ativo')
+            .filter(p => (String(p.tipo || '').toLowerCase() !== 'protetico'))
+            .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+            .forEach(p => {
+                opts.push(`<option value="${p.seqid}">${p.nome}</option>`);
+            });
+        atendimentoProfessional.innerHTML = opts.join('');
+        if (prev && Array.from(atendimentoProfessional.options).some(o => String(o.value) === prev)) {
+            atendimentoProfessional.value = prev;
+        }
+    }
+
+    if (atendimentoDate && !atendimentoDate.value) {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        atendimentoDate.value = `${yyyy}-${mm}-${dd}`;
+    }
+
+    const shouldAuto = currentUserRole === 'dentista';
+    if (atendimentoProfessionalGroup) atendimentoProfessionalGroup.style.display = shouldAuto ? 'none' : '';
+
+    if (shouldAuto && atendimentoProfessional && !atendimentoProfessional.value) {
+        const uEmail = String(currentUser?.email || '').trim().toLowerCase();
+        const prof = (professionals || []).find(p => String(p.email || '').trim().toLowerCase() === uEmail);
+        if (prof && prof.seqid) {
+            atendimentoProfessional.value = String(prof.seqid);
+        } else {
+            if (atendimentoProfessionalGroup) atendimentoProfessionalGroup.style.display = '';
+        }
+    }
+
+    if (!window.__atendimentoDelegated) {
+        window.__atendimentoDelegated = true;
+        if (btnAtendimentoRefresh) btnAtendimentoRefresh.addEventListener('click', () => fetchAtendimentoForUI());
+        if (atendimentoDate) atendimentoDate.addEventListener('change', () => fetchAtendimentoForUI());
+        if (atendimentoProfessional) atendimentoProfessional.addEventListener('change', () => fetchAtendimentoForUI());
+        if (btnAtendimentoFinalizeSelected) btnAtendimentoFinalizeSelected.addEventListener('click', () => finalizeAtendimentoSelectedItems());
+        if (btnFechamentoDiario) btnFechamentoDiario.addEventListener('click', () => openFechamentoDiarioModal());
+    }
+
+    fetchAtendimentoForUI();
+}
+
+function closeFechamentoDiarioModal() {
+    if (fechamentoDiarioModal) fechamentoDiarioModal.classList.add('hidden');
+}
+
+function openFechamentoDiarioModal() {
+    if (!fechamentoDiarioModal) return;
+
+    const setTodayIfEmpty = (el) => {
+        if (!el || el.value) return;
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        el.value = `${yyyy}-${mm}-${dd}`;
+    };
+
+    if (fechamentoDiarioDate) {
+        if (atendimentoDate && atendimentoDate.value) fechamentoDiarioDate.value = String(atendimentoDate.value);
+        setTodayIfEmpty(fechamentoDiarioDate);
+    }
+
+    if (fechamentoDiarioProfessional) {
+        const opts = ['<option value="">Todos</option>'];
+        (professionals || [])
+            .slice()
+            .filter(p => String(p.status || '') === 'Ativo')
+            .filter(p => String(p.tipo || '').toLowerCase() !== 'protetico')
+            .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+            .forEach(p => {
+                if (p.seqid == null) return;
+                opts.push(`<option value="${escapeHtml(String(p.seqid))}">${escapeHtml(String(p.nome || ''))}</option>`);
+            });
+        fechamentoDiarioProfessional.innerHTML = opts.join('');
+        if (atendimentoProfessional && atendimentoProfessional.value) {
+            fechamentoDiarioProfessional.value = String(atendimentoProfessional.value);
+        }
+    }
+
+    if (!fechamentoDiarioModal.dataset.bound) {
+        if (btnCloseFechamentoDiarioModal) btnCloseFechamentoDiarioModal.addEventListener('click', closeFechamentoDiarioModal);
+        if (btnCancelFechamentoDiario) btnCancelFechamentoDiario.addEventListener('click', closeFechamentoDiarioModal);
+        if (btnGenerateFechamentoDiario) {
+            btnGenerateFechamentoDiario.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const dateStr = fechamentoDiarioDate ? String(fechamentoDiarioDate.value || '') : '';
+                const profSeqId = fechamentoDiarioProfessional ? String(fechamentoDiarioProfessional.value || '') : '';
+                await printFechamentoDiario({ dateStr, profSeqId });
+            });
+        }
+        fechamentoDiarioModal.addEventListener('click', (e) => { if (e.target === fechamentoDiarioModal) closeFechamentoDiarioModal(); });
+        fechamentoDiarioModal.dataset.bound = '1';
+    }
+
+    fechamentoDiarioModal.classList.remove('hidden');
+}
+
+async function fetchAgendaRowsForFechamento({ dateStr, profSeqId }) {
+    const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
+    let q = db.from('agenda_agendamentos')
+        .select('id,paciente_id,profissional_id,inicio,status,titulo,observacoes')
+        .eq('empresa_id', currentEmpresaId)
+        .gte('inicio', startIso)
+        .lte('inicio', endIso)
+        .order('inicio', { ascending: true });
+    if (profSeqId) q = q.eq('profissional_id', Number(profSeqId));
+    const { data, error } = await withTimeout(q, 20000, 'agenda_agendamentos:fechamento');
+    if (error) throw error;
+    return data || [];
+}
+
+function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId }) {
+    const list = (agendaRows || []).filter(a => String(a.status || '') !== 'CANCELADO');
+    const byPaciente = new Map();
+    list.forEach(a => {
+        if (a.paciente_id == null) return;
+        const k = String(a.paciente_id);
+        if (!byPaciente.has(k)) byPaciente.set(k, []);
+        byPaciente.get(k).push(a);
+    });
+    byPaciente.forEach(arr => arr.sort((a, b) => String(a.inicio || '').localeCompare(String(b.inicio || ''))));
+
+    const rows = [];
+    byPaciente.forEach((arr, pacienteSeqIdStr) => {
+        const paciente = getPacienteDetailsBySeqId(pacienteSeqIdStr);
+        const pacienteUuid = paciente?.id || null;
+        if (!pacienteUuid) return;
+
+        const firstAg = arr[0];
+        const hora = firstAg && firstAg.inicio ? formatTimeHHMM(new Date(firstAg.inicio)) : '--:--';
+
+        const patientBudgets = (budgets || []).filter(b => String(b.pacienteid || b.paciente_id || '') === String(pacienteUuid));
+        patientBudgets.forEach(b => {
+            const itens = (b.orcamento_itens || b.itens || []);
+            const tipoKey = normalizeKey(String(b.tipo || 'Normal'));
+            const isFreeBudget = tipoKey === 'CORTESIA' || tipoKey === 'RETRABALHO';
+            itens.forEach(it => {
+                const executor = it.profissional_id ?? it.profissionalId ?? it.executor_id ?? it.executorId;
+                const execProf = findProfessionalByAnyId(executor);
+                const execSeqId = execProf && execProf.seqid != null ? String(execProf.seqid) : String(executor || '');
+                if (profSeqId && execSeqId !== String(profSeqId)) return;
+
+                const st = String(it.status || it.item_status || '').trim();
+                const stKey = normalizeStatusKey(st);
+                if (stKey === 'CANCELADO') return;
+                const eligible = isFreeBudget || stKey === 'LIBERADO' || stKey === 'EMEXECUCAO' || stKey === 'FINALIZADO';
+                if (!eligible) return;
+
+                const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
+                const desc = serv ? serv.descricao : (it.servicoDescricao || it.descricao || `#${it.servico_id || it.servicoId || it.id || ''}`);
+                const sub = String(it.subdivisao || it.sub_divisao || '').trim();
+                const itemLabel = sub ? `${desc} — ${sub}` : desc;
+
+                const qtde = Number(it.qtde || 1);
+                const valor = Number(it.valor || 0);
+                const total = (Number.isFinite(qtde) && qtde > 0 ? qtde : 1) * (Number.isFinite(valor) ? valor : 0);
+
+                rows.push({
+                    hora,
+                    pacienteNome: String(paciente?.nome || ''),
+                    budgetSeq: b.seqid,
+                    itemLabel,
+                    itemStatus: it.status || it.item_status || '',
+                    itemTotal: total
+                });
+            });
+        });
+    });
+
+    rows.sort((a, b) => String(a.hora || '').localeCompare(String(b.hora || '')) || String(a.pacienteNome || '').localeCompare(String(b.pacienteNome || ''), 'pt-BR'));
+    return rows;
+}
+
+async function printFechamentoDiario({ dateStr, profSeqId }) {
+    if (!dateStr) { showToast('Selecione a data.', true); return; }
+    if (btnGenerateFechamentoDiario) btnGenerateFechamentoDiario.disabled = true;
+    try {
+        const agendaRows = await fetchAgendaRowsForFechamento({ dateStr, profSeqId });
+        const agValid = (agendaRows || []).filter(a => String(a.status || '') !== 'CANCELADO');
+        const statusCounts = {};
+        agValid.forEach(a => {
+            const st = String(a.status || 'MARCADO');
+            statusCounts[st] = (statusCounts[st] || 0) + 1;
+        });
+
+        const profName = profSeqId ? getProfessionalNameBySeqId(profSeqId) : 'Todos';
+        const humanDate = dateStr.split('-').reverse().join('/');
+        const rows = buildAtendimentoRowsFromAgenda({ agendaRows: agValid, profSeqId: profSeqId || '' });
+        const totalProduzido = rows.reduce((acc, r) => acc + Number(r.itemTotal || 0), 0);
+        const totalFinalizados = rows.filter(r => normalizeStatusKey(r.itemStatus) === 'FINALIZADO').length;
+
+        const statusSummary = Object.entries(statusCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' | ') || '—';
+
+        const tableRows = rows.length ? rows.map(r => `
+            <tr>
+                <td>${escapeHtml(r.hora)}</td>
+                <td>${escapeHtml(r.pacienteNome)}</td>
+                <td>${escapeHtml(String(r.budgetSeq || '—'))}</td>
+                <td>${escapeHtml(r.itemLabel)}</td>
+                <td>${escapeHtml(String(r.itemStatus || '—'))}</td>
+                <td style="text-align:right;">${formatCurrencyBRL(r.itemTotal)}</td>
+            </tr>
+        `).join('') : `
+            <tr><td colspan="6" style="text-align:center; padding: 14px; color:#6b7280;">Nenhum item encontrado para o filtro.</td></tr>
+        `;
+
+        const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Fechamento Diário - ${humanDate}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color:#111827; padding: 24px; }
+    .header { display:flex; justify-content: space-between; border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 14px; }
+    .title { font-size: 16px; font-weight: 900; color:#0066cc; }
+    .sub { color:#6b7280; margin-top: 4px; font-size: 11px; }
+    .kpis { display:flex; gap: 14px; flex-wrap: wrap; margin: 12px 0 14px; }
+    .kpi { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; min-width: 170px; }
+    .kpi label { display:block; font-size: 10px; color:#6b7280; text-transform: uppercase; letter-spacing: .04em; }
+    .kpi div { font-weight: 900; margin-top: 4px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border: 1px solid #e5e7eb; padding: 7px; }
+    th { background: #f9fafb; text-align:left; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color:#374151; }
+    .footer { margin-top: 16px; font-size: 10px; color:#9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">Fechamento Diário</div>
+      <div class="sub">Data: <strong>${humanDate}</strong> • Profissional: <strong>${escapeHtml(profName)}</strong></div>
+      <div class="sub">Agenda: ${escapeHtml(statusSummary)}</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="sub">Gerado em: ${escapeHtml(new Date().toLocaleString('pt-BR'))}</div>
+      <div class="sub">Unidade: ${escapeHtml(String(currentEmpresaId || '—'))}</div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><label>Itens</label><div>${rows.length}</div></div>
+    <div class="kpi"><label>Finalizados</label><div>${totalFinalizados}</div></div>
+    <div class="kpi"><label>Total Produzido</label><div>${formatCurrencyBRL(totalProduzido)}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:72px;">Hora</th>
+        <th>Paciente</th>
+        <th style="width:70px; text-align:center;">Orc. #</th>
+        <th>Item</th>
+        <th style="width:120px;">Status</th>
+        <th style="width:120px; text-align:right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+
+  <div class="footer">Documento interno • Fechamento Diário</div>
+</body>
+</html>`;
+
+        const win = window.open('', '_blank', 'width=980,height=720');
+        if (!win) { showToast('Habilite pop-ups para imprimir.', true); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 500);
+        closeFechamentoDiarioModal();
+    } catch (err) {
+        console.error('Erro ao gerar Fechamento Diário:', err);
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Falha ao gerar Fechamento Diário: ${msg}`, true);
+    } finally {
+        if (btnGenerateFechamentoDiario) btnGenerateFechamentoDiario.disabled = false;
+    }
+}
+
+function renderAtendimentoPlaceholder(msg = 'Selecione a data e o profissional.') {
+    if (atendimentoBody) {
+        atendimentoBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem; color: var(--text-muted);">${msg}</td></tr>`;
+    }
+    if (atendimentoEmptyState) atendimentoEmptyState.classList.add('hidden');
+    if (atendimentoSummary) atendimentoSummary.textContent = '—';
+    atendimentoSelectedItems.clear();
+    updateAtendimentoFinalizeButton();
+}
+
+function escapeHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function normalizeKey(v) {
+    return String(v || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '')
+        .replace(/_/g, '')
+        .trim()
+        .toUpperCase();
+}
+
+function normalizeStatusKey(v) {
+    const k = normalizeKey(v);
+    if (k === 'FINALIZADO' || k === 'FINALIZADA') return 'FINALIZADO';
+    if (k === 'CANCELADO' || k === 'CANCELADA') return 'CANCELADO';
+    if (k === 'LIBERADO' || k === 'LIBERADA') return 'LIBERADO';
+    if (k === 'EMEXECUCAO' || k === 'EMEXECUÇÃO') return 'EMEXECUCAO';
+    return k;
+}
+
+function findProfessionalByAnyId(v) {
+    if (v == null) return null;
+    const raw = String(v);
+    const num = Number(raw);
+    const byId = (professionals || []).find(p => String(p.id) === raw);
+    if (byId) return byId;
+    if (Number.isFinite(num)) {
+        const bySeq = (professionals || []).find(p => Number(p.seqid) === num);
+        if (bySeq) return bySeq;
+    }
+    const bySeqStr = (professionals || []).find(p => String(p.seqid) === raw);
+    return bySeqStr || null;
+}
+
+function getPacienteDetailsBySeqId(seqId) {
+    const n = Number(seqId);
+    if (!Number.isFinite(n)) return null;
+    return (patients || []).find(p => Number(p.seqid) === n) || null;
+}
+
+const atendimentoSelectedItems = new Map();
+
+function updateAtendimentoFinalizeButton() {
+    if (!btnAtendimentoFinalizeSelected) return;
+    const n = atendimentoSelectedItems.size;
+    btnAtendimentoFinalizeSelected.disabled = n === 0;
+    btnAtendimentoFinalizeSelected.innerHTML = n === 0
+        ? '<i class="ri-check-double-line"></i> Finalizar Selecionados'
+        : `<i class="ri-check-double-line"></i> Finalizar Selecionados (${n})`;
+}
+
+async function fetchAtendimentoForUI() {
+    if (!atendimentoDate || !atendimentoProfessional) return;
+    const dateStr = atendimentoDate.value;
+    const profSeqId = atendimentoProfessional.value;
+    if (!dateStr || !profSeqId) {
+        renderAtendimentoPlaceholder();
+        return;
+    }
+    await fetchAtendimentoDay({ empresaId: currentEmpresaId, profSeqId: Number(profSeqId), dateStr });
+}
+
+async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
+    try {
+        if (!empresaId) {
+            renderAtendimentoPlaceholder('Empresa não definida.');
+            return;
+        }
+        if (!Number.isFinite(Number(profSeqId))) {
+            renderAtendimentoPlaceholder('Profissional inválido.');
+            return;
+        }
+        if (atendimentoBody) {
+            atendimentoBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando...</td></tr>';
+        }
+        if (atendimentoEmptyState) atendimentoEmptyState.classList.add('hidden');
+
+        const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
+        const agQ = db.from('agenda_agendamentos')
+            .select('*')
+            .eq('empresa_id', empresaId)
+            .eq('profissional_id', Number(profSeqId))
+            .gte('inicio', startIso)
+            .lte('inicio', endIso)
+            .order('inicio', { ascending: true });
+        const { data: ags, error: agErr } = await withTimeout(agQ, 15000, 'agenda_agendamentos:atendimento');
+        if (agErr) throw agErr;
+
+        const agendamentos = (ags || []).filter(a => String(a.status || '') !== 'CANCELADO');
+        const byPaciente = new Map();
+        agendamentos.forEach(a => {
+            if (a.paciente_id == null) return;
+            const k = String(a.paciente_id);
+            if (!byPaciente.has(k)) byPaciente.set(k, []);
+            byPaciente.get(k).push(a);
+        });
+        byPaciente.forEach(list => list.sort((a, b) => String(a.inicio || '').localeCompare(String(b.inicio || ''))));
+
+        const itemsRows = [];
+        byPaciente.forEach((list, pacienteSeqIdStr) => {
+            const paciente = getPacienteDetailsBySeqId(pacienteSeqIdStr);
+            const pacienteUuid = paciente?.id || null;
+            if (!pacienteUuid) return;
+
+            const patientBudgets = (budgets || []).filter(b => String(b.pacienteid || b.paciente_id || '') === String(pacienteUuid));
+            const firstAg = list[0];
+            const hora = firstAg && firstAg.inicio ? formatTimeHHMM(new Date(firstAg.inicio)) : '--:--';
+            const agId = firstAg && firstAg.id ? String(firstAg.id) : '';
+
+            const matched = [];
+            let hasMatchButNotEligible = false;
+            patientBudgets.forEach(b => {
+                const itens = (b.orcamento_itens || b.itens || []);
+                const tipoKey = normalizeKey(String(b.tipo || 'Normal'));
+                const isFreeBudget = tipoKey === 'CORTESIA' || tipoKey === 'RETRABALHO';
+                itens.forEach(it => {
+                    const executor = it.profissional_id ?? it.profissionalId ?? it.executor_id ?? it.executorId;
+                    const execProf = findProfessionalByAnyId(executor);
+                    const execSeqId = execProf && execProf.seqid != null ? String(execProf.seqid) : String(executor || '');
+                    if (execSeqId !== String(profSeqId)) return;
+
+                    const st = String(it.status || it.item_status || '').trim();
+                    const stKey = normalizeStatusKey(st);
+                    if (stKey === 'FINALIZADO' || stKey === 'CANCELADO') return;
+                    const eligible = isFreeBudget || stKey === 'LIBERADO' || stKey === 'EMEXECUCAO';
+                    if (!eligible) {
+                        hasMatchButNotEligible = true;
+                        return;
+                    }
+
+                    const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
+                    const desc = serv ? serv.descricao : (it.servicoDescricao || it.descricao || `#${it.servico_id || it.servicoId || it.id || ''}`);
+                    const sub = String(it.subdivisao || it.sub_divisao || '').trim();
+                    const itemLabel = sub ? `${desc} — ${sub}` : desc;
+
+                    matched.push({
+                        hora,
+                        agendamentoId: agId,
+                        paciente,
+                        budget: b,
+                        itemId: String(it.id || ''),
+                        itemLabel,
+                        itemStatus: it.status || '-'
+                    });
+                });
+            });
+
+            if (matched.length) {
+                matched.forEach(m => itemsRows.push(m));
+                return;
+            }
+
+            const budgetForOpen = patientBudgets.length ? patientBudgets[0] : null;
+            const msg = patientBudgets.length
+                ? (hasMatchButNotEligible ? 'Sem itens liberados para atendimento' : 'Sem itens para este profissional (verifique Executor)')
+                : 'Sem orçamento para este paciente';
+            itemsRows.push({
+                hora,
+                agendamentoId: agId,
+                paciente,
+                budget: budgetForOpen,
+                itemId: '',
+                itemLabel: msg,
+                itemStatus: '—',
+                isPlaceholder: true
+            });
+        });
+
+        itemsRows.sort((a, b) => a.hora.localeCompare(b.hora) || String(a.paciente?.nome || '').localeCompare(String(b.paciente?.nome || ''), 'pt-BR'));
+
+        const profName = getProfessionalNameBySeqId(profSeqId);
+        if (atendimentoSummary) {
+            const placeholders = itemsRows.filter(r => r && r.isPlaceholder).length;
+            const real = itemsRows.length - placeholders;
+            const extra = placeholders ? ` • ${placeholders} agendamentos sem itens` : '';
+            atendimentoSummary.textContent = `${profName} — ${dateStr.split('-').reverse().join('/')} • ${real} itens${extra}`;
+        }
+
+        if (!itemsRows.length) {
+            if (atendimentoBody) atendimentoBody.innerHTML = '';
+            if (atendimentoEmptyState) atendimentoEmptyState.classList.remove('hidden');
+            atendimentoSelectedItems.clear();
+            updateAtendimentoFinalizeButton();
+            return;
+        }
+
+        if (!atendimentoBody) return;
+        atendimentoBody.innerHTML = '';
+        itemsRows.forEach(r => {
+            const tr = document.createElement('tr');
+            if (r.isPlaceholder) tr.style.background = '#fff7ed';
+            const selected = r.itemId ? atendimentoSelectedItems.has(String(r.itemId)) : false;
+            tr.innerHTML = `
+                <td style="font-weight:800;">${escapeHtml(r.hora)}</td>
+                <td style="font-weight:600;">${escapeHtml(r.paciente?.nome || '-')}</td>
+                <td style="white-space: normal;">${escapeHtml(r.itemLabel || '-')}</td>
+                <td style="text-align:center; font-weight:800;">${escapeHtml(String(r.budget?.seqid || '-'))}</td>
+                <td>${escapeHtml(String(r.itemStatus || '-'))}</td>
+                <td>
+                    ${r.isPlaceholder ? '' : `
+                        <label style="display:inline-flex; align-items:center; gap: 6px; margin-right: 10px;">
+                            <input type="checkbox" data-action="done" data-agendamento="${escapeHtml(r.agendamentoId || '')}" data-budget="${escapeHtml(r.budget?.id || '')}" data-item="${escapeHtml(r.itemId || '')}" ${selected ? 'checked' : ''}>
+                            Feito
+                        </label>
+                    `}
+                    ${r.paciente?.id ? `<button class="btn-icon" onclick="showPatientDetails('${escapeHtml(r.paciente?.id)}')" title="Prontuário"><i class="ri-folder-user-line"></i></button>` : ''}
+                    ${r.budget && r.budget.id ? `<button class="btn-icon" onclick="viewBudgetPayments('${escapeHtml(r.budget?.id)}')" title="Orçamento"><i class="ri-file-list-3-line"></i></button>` : ''}
+                </td>
+            `;
+            atendimentoBody.appendChild(tr);
+        });
+
+        atendimentoBody.querySelectorAll('input[type="checkbox"][data-action="done"]').forEach(chk => {
+            chk.addEventListener('change', () => {
+                const budgetId = chk.getAttribute('data-budget') || '';
+                const itemId = chk.getAttribute('data-item') || '';
+                if (!itemId) return;
+                if (chk.checked) atendimentoSelectedItems.set(String(itemId), { budgetId, itemId });
+                else atendimentoSelectedItems.delete(String(itemId));
+                updateAtendimentoFinalizeButton();
+            });
+        });
+
+        updateAtendimentoFinalizeButton();
+    } catch (err) {
+        console.error('Erro ao carregar Atendimento:', err);
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        renderAtendimentoPlaceholder(`Erro ao carregar atendimentos: ${msg}`);
+    }
+}
+
+async function confirmAtendimentoItem({ budgetId, itemId }, { suppressRefresh } = {}) {
+    if (!itemId) return;
+    try {
+        const { error } = await withTimeout(
+            db.from('orcamento_itens')
+                .update({ status: 'Finalizado' })
+                .eq('empresa_id', currentEmpresaId)
+                .eq('id', itemId),
+            15000,
+            'orcamento_itens:finalizar_atendimento'
+        );
+        if (error) throw error;
+
+        const b = (budgets || []).find(x => String(x.id) === String(budgetId));
+        if (b && Array.isArray(b.orcamento_itens)) {
+            const it = b.orcamento_itens.find(x => String(x.id) === String(itemId));
+            if (it) it.status = 'Finalizado';
+        }
+
+        if (!suppressRefresh) {
+            showToast('Serviço marcado como Finalizado.');
+            await fetchAtendimentoForUI();
+        }
+    } catch (err) {
+        console.error('Erro ao finalizar item do atendimento:', err);
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        if (!suppressRefresh) {
+            showToast(`Falha ao finalizar: ${msg}`, true);
+            await fetchAtendimentoForUI();
+        } else {
+            throw err;
+        }
+    }
+}
+
+async function finalizeAtendimentoSelectedItems() {
+    const entries = Array.from(atendimentoSelectedItems.values());
+    if (!entries.length) return;
+    const ok = confirm(`Finalizar ${entries.length} item(ns) selecionado(s)?`);
+    if (!ok) return;
+
+    if (btnAtendimentoFinalizeSelected) btnAtendimentoFinalizeSelected.disabled = true;
+
+    let success = 0;
+    let fail = 0;
+    try {
+        for (const e of entries) {
+            try {
+                await confirmAtendimentoItem({ budgetId: e.budgetId, itemId: e.itemId }, { suppressRefresh: true });
+                success += 1;
+            } catch {
+                fail += 1;
+            }
+        }
+    } finally {
+        atendimentoSelectedItems.clear();
+        updateAtendimentoFinalizeButton();
+        if (success && !fail) showToast(`Finalizado(s) ${success} item(ns).`);
+        else if (success && fail) showToast(`Finalizado(s) ${success} item(ns). Falha em ${fail}.`, true);
+        else showToast('Nenhum item foi finalizado.', true);
+        await fetchAtendimentoForUI();
     }
 }
 
@@ -2074,6 +2701,7 @@ function initProteseModule() {
     const btnCancel = document.getElementById('btnProteseCancel');
     const btnSave = document.getElementById('btnProteseSave');
     const btnPrint = document.getElementById('btnProtesePrint');
+    const btnCustodia = document.getElementById('btnProteseCustodia');
     const execSelect = document.getElementById('proteseTipoExecucao');
     const orcInput = document.getElementById('proteseOrcamentoSeqid');
     const orcItemSelect = document.getElementById('proteseOrcamentoItemId');
@@ -2096,6 +2724,10 @@ function initProteseModule() {
     const btnPayModalClose = document.getElementById('btnCloseModalProtesePayablePay');
     const btnPayModalCancel = document.getElementById('btnProtesePayablePayCancel');
     const btnPayModalConfirm = document.getElementById('btnProtesePayablePayConfirm');
+
+    const custModal = document.getElementById('proteseCustodiaModal');
+    const btnCustClose = document.getElementById('btnCloseProteseCustodiaModal');
+    const btnCustClose2 = document.getElementById('btnCloseProteseCustodiaModal2');
 
     const canSelect = can('protese', 'select');
     const canInsert = can('protese', 'insert');
@@ -2134,6 +2766,7 @@ function initProteseModule() {
     if (btnCancel) btnCancel.addEventListener('click', closeProteseModal);
     if (btnSave) btnSave.addEventListener('click', () => saveProteseOrder());
     if (btnPrint) btnPrint.addEventListener('click', () => printProteseOrder());
+    if (btnCustodia) btnCustodia.addEventListener('click', () => openProteseCustodiaModal());
     if (execSelect) execSelect.addEventListener('change', () => syncProteseExecucaoGroups());
     if (orcInput) orcInput.addEventListener('input', () => syncProteseOrcamentoItens());
     if (orcItemSelect) orcItemSelect.addEventListener('change', () => updateProteseItemInfo());
@@ -2142,6 +2775,12 @@ function initProteseModule() {
         if (st) st.value = 'CONCLUIDA';
         await saveProteseOrder();
     });
+
+    const closeCustModal = () => {
+        if (custModal) custModal.classList.add('hidden');
+    };
+    if (btnCustClose) btnCustClose.addEventListener('click', closeCustModal);
+    if (btnCustClose2) btnCustClose2.addEventListener('click', closeCustModal);
 
     const closeLabsModal = () => {
         if (labsModal) labsModal.classList.add('hidden');
@@ -2466,6 +3105,28 @@ function syncProteseOrcamentoItens() {
     const b = (orcSeq && Number.isFinite(orcSeq)) ? (budgets || []).find(x => Number(x.seqid) === Number(orcSeq)) : null;
     const itens = b ? (b.orcamento_itens || []) : [];
 
+    const pacienteSel = document.getElementById('protesePaciente');
+    if (pacienteSel) {
+        const budgetPatientUuid = (() => {
+            const rawUuid = b ? (b.pacienteid || b.paciente_id) : null;
+            if (rawUuid && String(rawUuid).includes('-')) return String(rawUuid);
+            const rawSeq = b ? (b.pacienteseqid || b.paciente_id) : null;
+            const seq = Number(rawSeq);
+            if (!Number.isFinite(seq)) return '';
+            const p = (patients || []).find(pp => Number(pp.seqid) === seq);
+            return p && p.id ? String(p.id) : '';
+        })();
+
+        if (budgetPatientUuid) {
+            const currentVal = String(pacienteSel.value || '');
+            const lastAuto = String(pacienteSel.dataset.lastAuto || '');
+            if (!currentVal || currentVal === lastAuto) {
+                pacienteSel.value = budgetPatientUuid;
+                pacienteSel.dataset.lastAuto = budgetPatientUuid;
+            }
+        }
+    }
+
     const opts = ['<option value="">Selecione...</option>'];
     itens.forEach((it, idx) => {
         const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
@@ -2480,6 +3141,9 @@ function syncProteseOrcamentoItens() {
     if (prev && Array.from(orcItemSel.options).some(o => String(o.value) === prev)) {
         orcItemSel.value = prev;
     }
+    if (!prev && itens.length === 1) {
+        orcItemSel.value = String(itens[0].id || '');
+    }
 
     updateProteseItemInfo();
 }
@@ -2490,8 +3154,12 @@ function updateProteseItemInfo() {
     const protEl = document.getElementById('proteseItemValorProtetico');
     const orcSeqRaw = (document.getElementById('proteseOrcamentoSeqid') || {}).value || '';
     const itemId = (document.getElementById('proteseOrcamentoItemId') || {}).value || '';
+    const execSel = document.getElementById('proteseTipoExecucao');
+    const labSel = document.getElementById('proteseLaboratorio');
+    const protSel = document.getElementById('proteseProtetico');
+    const prazoEl = document.getElementById('protesePrazo');
 
-    if (!descEl && !valEl && !protEl) return;
+    if (!descEl && !valEl && !protEl && !execSel && !labSel && !protSel && !prazoEl) return;
 
     const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
     const b = (orcSeq && Number.isFinite(orcSeq)) ? (budgets || []).find(x => Number(x.seqid) === Number(orcSeq)) : null;
@@ -2511,6 +3179,62 @@ function updateProteseItemInfo() {
     if (descEl) descEl.value = desc;
     if (valEl) valEl.value = formatCurrencyBRL(valorItem);
     if (protEl) protEl.value = formatCurrencyBRL(valorProt);
+
+    const desiredExec = (() => {
+        const raw = String(it.protese_tipo_execucao || it.proteseExecucao || '').toUpperCase();
+        if (raw === 'INTERNA' || raw === 'EXTERNA') return raw;
+        const hasLab = Boolean(it.protese_laboratorio_id || it.proteseLaboratorioId);
+        const hasProt = Boolean(it.protetico_id || it.proteticoId);
+        if (hasLab) return 'EXTERNA';
+        if (hasProt) return 'INTERNA';
+        return '';
+    })();
+
+    const applyExec = (v) => {
+        if (execSel && v && String(execSel.value || '') !== v) execSel.value = v;
+        syncProteseExecucaoGroups();
+    };
+
+    if (desiredExec) applyExec(desiredExec);
+
+    if (desiredExec === 'EXTERNA') {
+        const labId = String(it.protese_laboratorio_id || it.proteseLaboratorioId || '');
+        if (protSel) protSel.value = '';
+        if (labSel && labId) labSel.value = labId;
+    } else if (desiredExec === 'INTERNA') {
+        const rawProt = String(it.protetico_id || it.proteticoId || '');
+        if (labSel) labSel.value = '';
+        if (protSel && rawProt) {
+            const direct = (professionals || []).find(p => String(p.id) === rawProt);
+            if (direct) {
+                protSel.value = String(direct.id);
+            } else {
+                const bySeq = (professionals || []).find(p => String(p.seqid) === rawProt);
+                if (bySeq) protSel.value = String(bySeq.id);
+            }
+        }
+    }
+
+    const addDays = (days) => {
+        const base = new Date();
+        const d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+        d.setDate(d.getDate() + Number(days || 0));
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    };
+
+    if (prazoEl && !String(prazoEl.value || '').trim()) {
+        if (desiredExec === 'INTERNA') {
+            prazoEl.value = addDays(5);
+        } else if (desiredExec === 'EXTERNA') {
+            const labId = String(it.protese_laboratorio_id || it.proteseLaboratorioId || '');
+            const lab = labId ? (proteseLabs || []).find(l => String(l.id) === labId) : null;
+            const dias = lab && lab.prazo_padrao_dias != null ? Number(lab.prazo_padrao_dias) : 0;
+            prazoEl.value = addDays(dias);
+        }
+    }
 }
 
 async function saveProteseOrder() {
@@ -2725,6 +3449,329 @@ function printProteseOrder() {
     win.document.close();
     win.focus();
     setTimeout(() => win.print(), 500);
+}
+
+function isProteseCustodiaEnabled() {
+    try {
+        const v = localStorage.getItem('dp_feature_protese_custodia');
+        return v !== '0';
+    } catch {
+        return true;
+    }
+}
+
+function getProteseCustodiaBaseUrl() {
+    const stored = (() => {
+        try { return localStorage.getItem('dp_protese_custodia_baseurl') || ''; } catch { return ''; }
+    })();
+    if (stored) return stored;
+
+    const origin = String(window.location.origin || '');
+    const host = String(window.location.hostname || '');
+    if (host === 'localhost' || host === '127.0.0.1') return origin;
+    return origin;
+}
+
+async function openProteseCustodiaModal() {
+    if (!isProteseCustodiaEnabled()) {
+        showToast('Custódia (QR) desativada neste navegador.', true);
+        return;
+    }
+
+    if (!currentProteseOrder) {
+        await saveProteseOrder();
+    }
+    const o = currentProteseOrder;
+    if (!o) return;
+
+    const modal = document.getElementById('proteseCustodiaModal');
+    const body = document.getElementById('proteseCustodiaBody');
+    if (!modal || !body) return;
+
+    const exec = String(o.tipo_execucao || '');
+    const executor = exec === 'EXTERNA'
+        ? ((proteseLabs || []).find(l => String(l.id) === String(o.laboratorio_id || ''))?.nome || '—')
+        : ((professionals || []).find(p => String(p.id) === String(o.protetico_id || ''))?.nome || '—');
+
+    const defaults = (() => {
+        const fromClinic = 'Clínica';
+        const toExec = exec === 'EXTERNA' ? `Laboratório: ${executor}` : `Protético: ${executor}`;
+        return {
+            acao: 'ENTREGA',
+            de_local: fromClinic,
+            para_local: toExec
+        };
+    })();
+
+    const baseUrl = getProteseCustodiaBaseUrl();
+
+    body.innerHTML = `
+        <div style="display:flex; gap: 1rem; flex-wrap: wrap; align-items:flex-end;">
+            <div class="form-group" style="min-width: 180px; margin-bottom: 0;">
+                <label for="custAcao">Ação</label>
+                <select id="custAcao" class="form-control">
+                    <option value="ENTREGA">Entrega</option>
+                    <option value="RECEBIMENTO">Recebimento</option>
+                </select>
+            </div>
+            <div class="form-group" style="min-width: 220px; flex:1; margin-bottom: 0;">
+                <label for="custDe">De (posse)</label>
+                <input id="custDe" class="form-control" placeholder="Ex.: Clínica">
+            </div>
+            <div class="form-group" style="min-width: 220px; flex:1; margin-bottom: 0;">
+                <label for="custPara">Para (posse)</label>
+                <input id="custPara" class="form-control" placeholder="Ex.: Laboratório">
+            </div>
+            <div class="form-group" style="min-width: 240px; flex: 1; margin-bottom: 0;">
+                <label for="custBaseUrl">URL base (para o celular)</label>
+                <input id="custBaseUrl" class="form-control" placeholder="Ex.: http://192.168.0.25:8282">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <button id="btnCustGerar" class="btn btn-primary"><i class="ri-qr-code-line"></i> Gerar QR</button>
+            </div>
+        </div>
+
+        <div id="custOut" style="margin-top: 1rem; display:none;"></div>
+
+        <div class="section-divider" style="margin: 1.25rem 0 1rem;"><span>Últimas confirmações</span></div>
+        <div id="custEvents" style="color: var(--text-muted);">Carregando...</div>
+    `;
+
+    const acaoEl = document.getElementById('custAcao');
+    const deEl = document.getElementById('custDe');
+    const paraEl = document.getElementById('custPara');
+    const baseEl = document.getElementById('custBaseUrl');
+    if (acaoEl) acaoEl.value = defaults.acao;
+    if (deEl) deEl.value = defaults.de_local;
+    if (paraEl) paraEl.value = defaults.para_local;
+    if (baseEl) baseEl.value = baseUrl;
+
+    const syncDePara = () => {
+        const a = acaoEl ? String(acaoEl.value || 'ENTREGA') : 'ENTREGA';
+        const fromClinic = 'Clínica';
+        const toExec = exec === 'EXTERNA' ? `Laboratório: ${executor}` : `Protético: ${executor}`;
+        if (a === 'ENTREGA') {
+            if (deEl) deEl.value = fromClinic;
+            if (paraEl) paraEl.value = toExec;
+        } else {
+            if (deEl) deEl.value = toExec;
+            if (paraEl) paraEl.value = fromClinic;
+        }
+    };
+    if (acaoEl) acaoEl.addEventListener('change', syncDePara);
+
+    const btnGerar = document.getElementById('btnCustGerar');
+    if (btnGerar) btnGerar.addEventListener('click', async () => {
+        const acao = String((acaoEl || {}).value || 'ENTREGA');
+        const de = String((deEl || {}).value || '').trim();
+        const para = String((paraEl || {}).value || '').trim();
+        const base = String((baseEl || {}).value || '').trim();
+        if (!de || !para) { showToast('Informe De/Para.', true); return; }
+        if (!base) { showToast('Informe a URL base para o celular.', true); return; }
+        try { localStorage.setItem('dp_protese_custodia_baseurl', base); } catch { }
+
+        btnGerar.disabled = true;
+        btnGerar.style.opacity = '0.6';
+
+        try {
+            const { data, error } = await withTimeout(
+                db.rpc('rpc_protese_custodia_issue_token', {
+                    p_empresa_id: currentEmpresaId,
+                    p_ordem_id: o.id,
+                    p_acao: acao,
+                    p_de_local: de,
+                    p_para_local: para,
+                    p_ttl_minutes: 10
+                }),
+                15000,
+                'rpc_protese_custodia_issue_token'
+            );
+            if (error) throw error;
+            const row = (data && data[0]) ? data[0] : null;
+            if (!row || row.ok !== true) {
+                showToast(row && row.message ? String(row.message) : 'Falha ao gerar QR.', true);
+                return;
+            }
+
+            const token = String(row.token || '');
+            const code = String(row.code || '');
+            const exp = row.expires_at ? String(row.expires_at) : '';
+            const link = `${base.replace(/\/$/, '')}/protese_custodia.html?token=${encodeURIComponent(token)}`;
+            const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
+
+            const out = document.getElementById('custOut');
+            if (out) {
+                out.style.display = '';
+                out.innerHTML = `
+                    <div class="card" style="padding: 1rem;">
+                        <div style="display:flex; gap: 1rem; flex-wrap: wrap; align-items:flex-start;">
+                            <div style="min-width: 240px;">
+                                <img src="${qrSrc}" alt="QR Code" style="width:240px; height:240px; border-radius: 12px; border:1px solid var(--border-color); background: white;">
+                            </div>
+                            <div style="flex:1; min-width: 240px;">
+                                <div style="font-weight:900; font-size: 14px;">Código (digitar no celular)</div>
+                                <div style="font-size: 28px; letter-spacing: 0.12em; font-weight: 900; margin: 6px 0 10px 0;">${code || '—'}</div>
+                                <div style="color: var(--text-muted); font-size: 12px;">Validade: ${exp ? formatDateTime(exp) : '—'}</div>
+                                <div style="margin-top: 10px;">
+                                    <label style="display:block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Link</label>
+                                    <input id="custLink" class="form-control" readonly value="${link}">
+                                </div>
+                                <div style="display:flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+                                    <button class="btn btn-secondary" id="btnCustCopy"><i class="ri-file-copy-line"></i> Copiar link</button>
+                                    <button class="btn btn-secondary" id="btnCustCancel"><i class="ri-close-line"></i> Cancelar QR</button>
+                                    <button class="btn btn-primary" id="btnCustVerify"><i class="ri-refresh-line"></i> Verificar assinatura</button>
+                                </div>
+                                <div style="margin-top: 8px; color: var(--text-muted); font-size: 12px;">
+                                    Se você estiver no PC com localhost, ajuste a URL base para o IP do PC (ex.: http://192.168.x.x:8282).
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                const btnCopy = document.getElementById('btnCustCopy');
+                if (btnCopy) btnCopy.addEventListener('click', async () => {
+                    try {
+                        await navigator.clipboard.writeText(link);
+                        showToast('Link copiado.');
+                    } catch {
+                        showToast('Falha ao copiar. Selecione e copie manualmente.', true);
+                    }
+                });
+
+                const btnCancel = document.getElementById('btnCustCancel');
+                if (btnCancel) btnCancel.addEventListener('click', async () => {
+                    try {
+                        const { error: uErr } = await withTimeout(
+                            db.from('ordens_proteticas_custodia_tokens')
+                                .update({ status: 'CANCELADO' })
+                                .eq('empresa_id', currentEmpresaId)
+                                .eq('token', token)
+                                .eq('status', 'PENDENTE'),
+                            15000,
+                            'ordens_proteticas_custodia_tokens:cancel'
+                        );
+                        if (uErr) throw uErr;
+                        showToast('QR cancelado.');
+                    } catch (e) {
+                        const msg = e && e.message ? e.message : 'Erro desconhecido';
+                        showToast(`Falha ao cancelar QR: ${msg}`, true);
+                    }
+                });
+
+                const btnVerify = document.getElementById('btnCustVerify');
+                if (btnVerify) btnVerify.addEventListener('click', async () => {
+                    await refreshProteseCustodiaEvents(o.id, true);
+                });
+            }
+
+            await refreshProteseCustodiaEvents(o.id, false);
+        } catch (e) {
+            const msg = e && e.message ? e.message : 'Erro desconhecido';
+            showToast(`Falha ao gerar QR: ${msg}`, true);
+        } finally {
+            btnGerar.disabled = false;
+            btnGerar.style.opacity = '1';
+        }
+    });
+
+    modal.classList.remove('hidden');
+    await refreshProteseCustodiaEvents(o.id, false);
+}
+
+async function refreshProteseCustodiaEvents(ordemId, tryMirrorToTimeline) {
+    const wrap = document.getElementById('custEvents');
+    if (!wrap) return;
+    wrap.innerHTML = 'Carregando...';
+
+    try {
+        const { data, error } = await withTimeout(
+            db.from('ordens_proteticas_custodia_eventos')
+                .select('*')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ordem_id', ordemId)
+                .order('confirmed_at', { ascending: false })
+                .limit(10),
+            15000,
+            'ordens_proteticas_custodia_eventos:list'
+        );
+        if (error) throw error;
+        const rows = Array.isArray(data) ? data : [];
+
+        if (!rows.length) {
+            wrap.innerHTML = '<div style="color: var(--text-muted);">Nenhuma confirmação registrada ainda.</div>';
+            return;
+        }
+
+        const html = rows.map(r => {
+            const dt = r.confirmed_at ? formatDateTime(r.confirmed_at) : '—';
+            const acao = String(r.acao || '');
+            const de = String(r.de_local || '');
+            const para = String(r.para_local || '');
+            const rec = String(r.recebedor_nome || '');
+            const doc = r.recebedor_doc ? ` (${r.recebedor_doc})` : '';
+            return `<div style="padding: 10px; border:1px solid var(--border-color); border-radius: 10px; margin-bottom: 10px;">
+                <div style="display:flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+                    <div style="font-weight:800;">${acao} • ${de} → ${para}</div>
+                    <div style="color: var(--text-muted); font-size: 12px;">${dt}</div>
+                </div>
+                <div style="margin-top: 6px; color: var(--text-muted);">Recebedor: <span style="color: var(--text-color); font-weight:700;">${rec}${doc}</span></div>
+                <div style="margin-top: 6px; color: var(--text-muted); font-size: 12px;">Evento ID: ${r.id}</div>
+            </div>`;
+        }).join('');
+        wrap.innerHTML = html;
+
+        if (tryMirrorToTimeline) {
+            const latest = rows[0];
+            if (latest && latest.id) {
+                const marker = `[custodia_evento_id=${latest.id}]`;
+                const { data: existing, error: exErr } = await withTimeout(
+                    db.from('ordens_proteticas_eventos')
+                        .select('id')
+                        .eq('empresa_id', currentEmpresaId)
+                        .eq('ordem_id', ordemId)
+                        .ilike('nota', `%${marker}%`)
+                        .limit(1),
+                    15000,
+                    'ordens_proteticas_eventos:mirror_check'
+                );
+                if (!exErr && Array.isArray(existing) && existing.length) {
+                    showToast('Assinatura já registrada no histórico da OP.');
+                    return;
+                }
+
+                const note = [
+                    marker,
+                    `Ação: ${latest.acao}`,
+                    `De: ${latest.de_local}`,
+                    `Para: ${latest.para_local}`,
+                    `Recebedor: ${latest.recebedor_nome}${latest.recebedor_doc ? ` (${latest.recebedor_doc})` : ''}`,
+                    latest.confirmed_at ? `Confirmado em: ${formatDateTime(latest.confirmed_at)}` : null
+                ].filter(Boolean).join(' | ');
+
+                const payload = {
+                    empresa_id: currentEmpresaId,
+                    ordem_id: ordemId,
+                    tipo_evento: 'CUSTODIA',
+                    fase_resultante: null,
+                    de_local: latest.de_local,
+                    para_local: latest.para_local,
+                    nota: note,
+                    created_by: currentUser.id
+                };
+                const { error: insErr } = await withTimeout(
+                    db.from('ordens_proteticas_eventos').insert(payload),
+                    15000,
+                    'ordens_proteticas_eventos:mirror_insert'
+                );
+                if (insErr) throw insErr;
+                showToast('Assinatura registrada no histórico da OP.');
+            }
+        }
+    } catch (e) {
+        const msg = e && e.message ? e.message : 'Erro desconhecido';
+        wrap.innerHTML = `<div style="color: var(--danger-color);">Falha ao carregar custódia: ${msg}</div>`;
+    }
 }
 
 function openProteseLabsModal() {
@@ -5939,6 +6986,15 @@ if (budgetForm) {
                 };
             });
 
+            const allFinalizadoNow = currentBudgetItems.length > 0
+                && currentBudgetItems.every(it => String(it.status || 'Pendente') === 'Finalizado');
+            const stNorm = String(budgetData.status || '').trim().toLowerCase();
+            if (allFinalizadoNow && stNorm !== 'cancelado' && stNorm !== 'finalizado') {
+                budgetData.status = 'Executado';
+                const statusSelect = document.getElementById('budStatus');
+                if (statusSelect) statusSelect.value = 'Executado';
+            }
+
             if (id) {
                 const originalBudget = budgets.find(b => b.id === id);
                 const hasNonFinalizadoItem = currentBudgetItems.some(it => String(it.status || 'Pendente') !== 'Finalizado');
@@ -8852,6 +9908,7 @@ window.recordBudgetPayment = async function (budgetId) {
         }
 
         await autoReleaseEligibleBudgetItems(budget, `Auto-Liberado via Pagamento (${currentUser.email.split('@')[0]})`);
+        await syncBudgetStatusToExecutedIfAllFinalized(budget.id);
 
         console.log("DEBUG V19: Atualizando interface via viewBudgetPayments...");
         viewBudgetPayments(budgetId);
@@ -9158,6 +10215,39 @@ function calculateCommission(prof, item, budget) {
     if (btn1) btn1.onclick = () => modal.classList.add('hidden');
     if (btn2) btn2.onclick = () => modal.classList.add('hidden');
 })();
+
+async function syncBudgetStatusToExecutedIfAllFinalized(budgetId) {
+    if (!budgetId) return;
+    try {
+        const { data, error } = await withTimeout(
+            db.from('orcamento_itens')
+                .select('status')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('orcamento_id', budgetId),
+            15000,
+            'orcamento_itens:sync_executado'
+        );
+        if (error) throw error;
+        const rows = Array.isArray(data) ? data : [];
+        if (!rows.length) return;
+        const allFinal = rows.every(r => String(r.status || '') === 'Finalizado');
+        if (!allFinal) return;
+
+        const { error: bErr } = await withTimeout(
+            db.from('orcamentos')
+                .update({ status: 'Executado' })
+                .eq('id', budgetId),
+            15000,
+            'orcamentos:set_executado'
+        );
+        if (bErr) throw bErr;
+
+        const b = budgets.find(x => String(x.id) === String(budgetId));
+        if (b) b.status = 'Executado';
+    } catch (e) {
+        console.warn('Falha ao sincronizar status do orçamento para Executado:', e);
+    }
+}
 
 window.finalizeBudgetItem = async function (budgetId, itemId) {
     if (!confirm('Confirmar a conclusão deste serviço?')) return;
