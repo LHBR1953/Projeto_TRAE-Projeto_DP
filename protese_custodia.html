@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>OCC — Confirmação de Custódia</title>
   <style>
     :root { --bg:#0b1220; --card:#0f172a; --text:#e5e7eb; --muted:#94a3b8; --border:#22304a; --ok:#10b981; --bad:#ef4444; --btn:#1d4ed8; }
@@ -103,7 +106,9 @@
     const db = supabase.createClient(supabaseUrl, supabaseKey);
 
     const qs = new URLSearchParams(location.search);
-    const token = String(qs.get('t') || '').trim();
+    const hash = String(location.hash || '').replace(/^#/, '');
+    const hs = new URLSearchParams(hash);
+    const token = String(qs.get('t') || qs.get('token') || hs.get('t') || hs.get('token') || '').trim();
 
     const statusLine = document.getElementById('statusLine');
     const meta = document.getElementById('meta');

@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260322-0650';
+const APP_BUILD = '20260322-0710';
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -3596,7 +3596,7 @@ async function openProteseCustodiaModal() {
             const token = String(row.token || '');
             const code = String(row.code || '');
             const exp = row.expires_at ? String(row.expires_at) : '';
-            const link = `${base.replace(/\/$/, '')}/protese_custodia.html?token=${encodeURIComponent(token)}`;
+            const link = `${base.replace(/\/$/, '')}/protese_custodia.html?t=${encodeURIComponent(token)}&v=${encodeURIComponent(APP_BUILD)}`;
             const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
 
             const out = document.getElementById('custOut');
