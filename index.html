@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260322-0810">
+    <link rel="stylesheet" href="styles.css?v=20260324-1420">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script>
         window.onerror = function (msg, url, line, col, error) {
@@ -20,7 +20,7 @@
 
 <body>
     <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260322-0810
+        build 20260324-1420
     </div>
     <!-- Login View -->
     <div id="loginView" class="login-wrapper">
@@ -1786,6 +1786,9 @@
                         <button id="btnMovDiaria" class="btn btn-secondary">
                             <i class="ri-file-list-3-line"></i> Movimentação Diária
                         </button>
+                        <button id="btnPagamentosPacientes" class="btn btn-secondary">
+                            <i class="ri-coins-line"></i> Pagamento Pacientes
+                        </button>
                         <button id="btnFechamentoDiarioFull" class="btn btn-secondary">
                             <i class="ri-clipboard-line"></i> Fechamento Diário
                         </button>
@@ -1849,6 +1852,9 @@
                                         #</th>
                                     <th
                                         style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
+                                        Orçamento</th>
+                                    <th
+                                        style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
                                         Paciente</th>
                                     <th
                                         style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
@@ -1875,7 +1881,7 @@
                             </thead>
                             <tbody id="finTransacoesBody">
                                 <tr>
-                                    <td colspan="9"
+                                    <td colspan="10"
                                         style="text-align: center; padding: 2rem; color: var(--text-muted);">
                                         <i class="ri-search-line"></i> Busque um paciente ou clique em "Ver Todos" para
                                         carregar o extrato.
@@ -2163,6 +2169,7 @@
                             <button id="btnCommPay" class="btn btn-muted"><i class="ri-money-dollar-circle-line"></i> Marcar como Pago</button>
                             <button id="btnCommTransfer" class="btn btn-secondary"><i class="ri-user-shared-2-line"></i> Transferir Comissões</button>
                             <button id="btnCommPrint" class="btn btn-secondary"><i class="ri-printer-line"></i> Imprimir Recibo</button>
+                            <button id="btnCommPrintReport" class="btn btn-secondary"><i class="ri-printer-line"></i> Imprimir Comissões</button>
                         </div>
                     </div>
                 </div>
@@ -2641,6 +2648,21 @@
 
                         <div style="margin-top: 1rem;">
                             <div class="protese-actions">
+                                <div class="protese-actions-row">
+                                    <div class="form-group" style="min-width: 260px; flex: 1; margin-bottom: 0;">
+                                        <label style="margin-bottom: 6px;">Entrega/Recebimento</label>
+                                        <select id="proteseQuickEventType" class="form-control">
+                                            <option value="">Selecione...</option>
+                                            <option value="ENTREGA">Entrega (Envio)</option>
+                                            <option value="RECEBIMENTO">Recebimento</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <button type="button" id="btnProteseQuickEventApply" class="btn btn-secondary">
+                                            <i class="ri-check-line"></i> Registrar
+                                        </button>
+                                    </div>
+                                </div>
                                 <div class="protese-actions-row protese-actions-row-primary">
                                     <button type="button" id="btnProteseCustodia" class="btn btn-protese-action" style="width: 100%; justify-content: center;">
                                         <i class="ri-qr-code-line"></i> ENVIO/RECEBIMENTO com Custódia (QR)
@@ -2651,10 +2673,6 @@
                                     <button type="button" id="btnProteseEventApprove" class="btn btn-protese-action"><i class="ri-check-line"></i> Aprovar</button>
                                     <button type="button" id="btnProteseEventReprove" class="btn btn-protese-action"><i class="ri-close-line"></i> Reprovar</button>
                                     <button type="button" id="btnProteseEventClose" class="btn btn-protese-action"><i class="ri-flag-line"></i> Encerrar</button>
-                                </div>
-                                <div class="protese-actions-row">
-                                    <button type="button" id="btnProteseEventSend" class="btn btn-secondary"><i class="ri-send-plane-line"></i> Registrar envio</button>
-                                    <button type="button" id="btnProteseEventReceive" class="btn btn-secondary"><i class="ri-inbox-archive-line"></i> Registrar recebimento</button>
                                 </div>
                             </div>
                         </div>
@@ -2689,6 +2707,7 @@
                     <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
                         <button type="button" id="btnProteseCancel" class="btn btn-secondary">Fechar</button>
                         <button type="button" id="btnProtesePrint" class="btn btn-secondary"><i class="ri-printer-line"></i> Imprimir</button>
+                        <button type="button" id="btnProtesePrintSimple" class="btn btn-secondary"><i class="ri-file-text-line"></i> Impressão Simples</button>
                         <button type="button" id="btnProteseSave" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
                     </div>
                 </div>
@@ -2812,6 +2831,7 @@
                         </div>
                     </div>
                     <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
+                        <button type="button" id="btnProtesePayablesPrint" class="btn btn-secondary"><i class="ri-printer-line"></i> Imprimir</button>
                         <button type="button" id="btnProtesePayablesClose" class="btn btn-secondary">Fechar</button>
                     </div>
                 </div>
@@ -2825,6 +2845,12 @@
                     </div>
                     <div class="modal-body">
                         <input type="hidden" id="protesePayablePayId">
+                        <div id="protesePayablePayRef" class="card" style="margin-bottom: 12px; padding: 10px;">
+                            <div style="font-size: 12px; color: var(--text-muted);">Referência</div>
+                            <div id="protesePayablePayRefContent" style="margin-top: 6px; line-height: 1.4; font-size: 13px;">
+                                Carregando referência...
+                            </div>
+                        </div>
                         <div class="form-group">
                             <label for="protesePayablePayForma">Forma de Pagamento</label>
                             <select id="protesePayablePayForma" class="form-control">
@@ -3075,6 +3101,48 @@
             <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 1rem;">
                 <button type="button" class="btn btn-secondary" id="btnCancelMovDiaria">Cancelar</button>
                 <button type="button" class="btn btn-primary" id="btnGenerateMovDiaria">
+                    <i class="ri-printer-line"></i> Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="pagamentosPacientesModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 560px; width: 95%;">
+            <div class="modal-header">
+                <h3>Pagamento Pacientes</h3>
+                <button type="button" class="btn-close-modal" id="btnClosePagamentosPacientesModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex; gap: 12px; flex-wrap: wrap;">
+                    <div class="form-group" style="min-width: 220px; flex: 1;">
+                        <label for="pagamentosPacientesStart">Início *</label>
+                        <input type="date" id="pagamentosPacientesStart" class="form-control">
+                    </div>
+                    <div class="form-group" style="min-width: 220px; flex: 1;">
+                        <label for="pagamentosPacientesEnd">Fim *</label>
+                        <input type="date" id="pagamentosPacientesEnd" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="pagamentosPacientesForma">Forma de Pagamento</label>
+                    <select id="pagamentosPacientesForma" class="form-control">
+                        <option value="">Todos</option>
+                        <option value="Dinheiro">Dinheiro</option>
+                        <option value="Cartão Débito">Cartão Débito</option>
+                        <option value="Cartão Crédito">Cartão Crédito</option>
+                        <option value="PIX">PIX</option>
+                        <option value="Boleto">Boleto</option>
+                        <option value="Cheque">Cheque</option>
+                        <option value="Saldo em Conta">Saldo em Conta</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 1rem;">
+                <button type="button" class="btn btn-secondary" id="btnCancelPagamentosPacientes">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnGeneratePagamentosPacientes">
                     <i class="ri-printer-line"></i> Imprimir
                 </button>
             </div>
@@ -3333,7 +3401,7 @@
             <div class="modal-body" style="max-height: 78vh; overflow-y: auto;">
                 <div class="card" style="padding: 0.75rem; margin-bottom: 12px;">
                     <div style="font-weight: 800;">Atalho</div>
-                    <div style="color: var(--text-muted); margin-top: 6px;">CTRL + ALT + SHIFT + P U R G E</div>
+                    <div style="color: var(--text-muted); margin-top: 6px;">CTRL + ALT + SHIFT + Z E R A R</div>
                 </div>
 
                 <div class="card" style="padding: 0.75rem; margin-bottom: 12px;">
@@ -3341,10 +3409,12 @@
                         <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
                             <label for="saEmpresa">Empresa</label>
                             <select id="saEmpresa" class="form-control"></select>
+                            <button type="button" id="btnSaRefreshEmpresas" class="btn btn-secondary" style="margin-top: 8px; width: 100%;"><i class="ri-refresh-line"></i> Atualizar lista</button>
                         </div>
                         <div class="form-group" style="min-width: 260px; margin-bottom: 0;">
                             <label for="saScope">O que zerar</label>
                             <select id="saScope" class="form-control">
+                                <option value="ZERAR">ZERAR (Tudo + occ_audit_log + empresa)</option>
                                 <option value="TABLE">Uma tabela (com dependências)</option>
                                 <option value="BUDGETS">Orçamentos</option>
                                 <option value="PATIENTS">Pacientes</option>
@@ -3471,6 +3541,62 @@
         </div>
     </div>
 
+    <div id="specialtyImportModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 920px; width: 95%;">
+            <div class="modal-header">
+                <h3><i class="ri-file-upload-line"></i> Importar Especialidades (XLSX)</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseSpecialtyImportModal">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+                <div class="card" style="padding: 0.75rem; margin-bottom: 12px;">
+                    <div style="color: var(--text-muted); font-size: 0.9rem;">
+                        Colunas do Excel: B=Especialidade, C=Subdivisão (opcional)
+                    </div>
+                </div>
+                <div style="display:flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+                    <div class="form-group" style="min-width: 260px; margin-bottom: 0;">
+                        <label for="specialtyImportFile">Arquivo XLSX</label>
+                        <input id="specialtyImportFile" type="file" accept=".xlsx" class="form-control">
+                    </div>
+                    <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
+                        <label for="specialtyImportMode">Modo</label>
+                        <select id="specialtyImportMode" class="form-control">
+                            <option value="skip_dupes" selected>Pular duplicados</option>
+                            <option value="update_dupes">Atualizar existentes</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="specialtyImportSkipHeader" checked>
+                            Ignorar primeira linha
+                        </label>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0; display:flex; gap: 0.75rem;">
+                        <button type="button" id="btnSpecialtyImportParse" class="btn btn-secondary"><i class="ri-file-search-line"></i> Ler arquivo</button>
+                    </div>
+                </div>
+                <pre id="specialtyImportStatus" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 12px 0 0;"></pre>
+                <div id="specialtyImportPreviewWrap" class="table-container hidden" style="margin-top: 12px;">
+                    <table class="main-table" id="specialtyImportPreviewTable">
+                        <thead>
+                            <tr>
+                                <th>Especialidade</th>
+                                <th>Subdivisão</th>
+                            </tr>
+                        </thead>
+                        <tbody id="specialtyImportPreviewBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
+                <button type="button" class="btn btn-secondary" id="btnCancelSpecialtyImport">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmSpecialtyImport" disabled><i class="ri-upload-cloud-2-line"></i> Importar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toastNotification" class="toast hidden">
         <div class="toast-content">
@@ -3487,7 +3613,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260322-0810"></script>
+    <script src="app_v20.js?v=20260324-1420"></script>
 </body>
 
 </html>

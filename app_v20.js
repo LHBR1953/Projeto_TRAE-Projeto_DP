@@ -62,7 +62,9 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260322-0810';
+const APP_BUILD = '20260324-1420';
+
+const AUTO_SEED_SPECIALTIES = false;
 
 document.title = `${document.title.split(' [build ')[0]} [build ${APP_BUILD}]`;
 
@@ -135,7 +137,7 @@ let transactions = []; // Global transactions state
 function normalizeRole(input) {
     const raw = String(input || '').trim().toLowerCase();
     if (!raw) return '';
-    if (raw === 'admim' || raw === 'administrador' || raw === 'administrator') return 'admin';
+    if (raw === 'adm' || raw === 'admin' || raw === 'admim' || raw === 'administrador' || raw === 'administrator') return 'admin';
     if (raw === 'protético' || raw === 'lab' || raw === 'laboratorio') return 'protetico';
     if (raw === 'recepção' || raw === 'recepcionista') return 'recepcao';
     return raw;
@@ -364,6 +366,737 @@ function clearLoadTimer(key) {
     _loadTimers[key] = null;
 }
 
+function openSuperAdminModal(presetScope = '') {
+    if (!isSuperAdmin || !modalSuperAdmin) {
+        showToast('Acesso restrito ao SuperAdmin.', true);
+        return;
+    }
+    if (!modalSuperAdmin.dataset.bound) {
+        if (btnCloseModalSuperAdmin) btnCloseModalSuperAdmin.addEventListener('click', () => modalSuperAdmin.classList.add('hidden'));
+        if (btnSuperAdminClose) btnSuperAdminClose.addEventListener('click', () => modalSuperAdmin.classList.add('hidden'));
+        modalSuperAdmin.addEventListener('click', (e) => { if (e.target === modalSuperAdmin) modalSuperAdmin.classList.add('hidden'); });
+        modalSuperAdmin.dataset.bound = '1';
+    }
+    initSuperAdminCleanupUI();
+    refreshSaEmpresaOptions({ keepSelection: true });
+    if (presetScope && saScope) {
+        saScope.value = presetScope;
+        handleSaScopeChange();
+    }
+    modalSuperAdmin.classList.remove('hidden');
+}
+
+function openServiceImportModal() {
+    if (!isSuperAdmin || !serviceImportModal) {
+        showToast('Apenas SuperAdmin pode importar serviços.', true);
+        return;
+    }
+    if (!serviceImportModal.dataset.bound) {
+        if (btnCloseServiceImportModal) btnCloseServiceImportModal.addEventListener('click', () => serviceImportModal.classList.add('hidden'));
+        if (btnCancelServiceImport) btnCancelServiceImport.addEventListener('click', () => serviceImportModal.classList.add('hidden'));
+        if (btnServiceImportParse) btnServiceImportParse.addEventListener('click', () => parseServiceImportFile());
+        if (btnConfirmServiceImport) btnConfirmServiceImport.addEventListener('click', () => confirmServiceImport());
+        serviceImportModal.addEventListener('click', (e) => { if (e.target === serviceImportModal) serviceImportModal.classList.add('hidden'); });
+        serviceImportModal.dataset.bound = '1';
+    }
+    if (serviceImportStatus) serviceImportStatus.textContent = '';
+    if (serviceImportPreviewWrap) serviceImportPreviewWrap.classList.add('hidden');
+    if (serviceImportPreviewBody) serviceImportPreviewBody.innerHTML = '';
+    if (btnConfirmServiceImport) btnConfirmServiceImport.disabled = true;
+    window.__serviceImportRows = [];
+    serviceImportModal.classList.remove('hidden');
+}
+
+async function parseServiceImportFile() {
+    try {
+        if (!serviceImportFile || !serviceImportFile.files || !serviceImportFile.files[0]) {
+            showToast('Selecione um arquivo XLSX.', true);
+            return;
+        }
+        const file = serviceImportFile.files[0];
+        if (serviceImportStatus) serviceImportStatus.textContent = 'Lendo arquivo...';
+        const rows = await readXlsxToRowArrays(file);
+        const skipHeader = serviceImportSkipHeader ? Boolean(serviceImportSkipHeader.checked) : true;
+        const dataRows = skipHeader ? rows.slice(1) : rows.slice();
+
+        const parsed = [];
+        dataRows.forEach(r => {
+            const arr = Array.isArray(r) ? r : [];
+            const descricao = String(arr[1] ?? '').trim().toUpperCase();
+            const valorRaw = String(arr[2] ?? '').replace(',', '.').trim();
+            const valor = parseFloat(valorRaw) || 0;
+            const ie = String(arr[3] ?? '').trim().toUpperCase();
+            const subdivisao = String(arr[4] ?? '').trim().toUpperCase();
+            if (!descricao) return;
+            const ieVal = (ie === 'S' || ie === 'E') ? ie : 'S';
+            parsed.push({ descricao, valor, ie: ieVal, subdivisao });
+        });
+
+        const uniqKeys = new Set(parsed.map(x => `${x.descricao}::${x.subdivisao}::${x.ie}`));
+        window.__serviceImportRows = parsed;
+
+        if (serviceImportPreviewBody) {
+            const preview = parsed.slice(0, 200).map(x => `
+                <tr>
+                    <td>${escapeHtml(x.descricao)}</td>
+                    <td style="text-align:right;">${escapeHtml(Number(x.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</td>
+                    <td>${escapeHtml(x.ie)}</td>
+                    <td>${escapeHtml(x.subdivisao || '')}</td>
+                </tr>
+            `).join('');
+            serviceImportPreviewBody.innerHTML = preview || '<tr><td colspan="4" style="text-align:center; padding: 14px; color:#6b7280;">Nenhuma linha válida.</td></tr>';
+        }
+        if (serviceImportPreviewWrap) serviceImportPreviewWrap.classList.remove('hidden');
+        if (btnConfirmServiceImport) btnConfirmServiceImport.disabled = parsed.length === 0;
+        if (serviceImportStatus) {
+            serviceImportStatus.textContent = [
+                `Linhas válidas: ${parsed.length}`,
+                `Chaves (Desc/Subdiv/IE) únicas: ${uniqKeys.size}`,
+                'Colunas: B=Descrição, C=Valor, D=Tipo (IE), E=Subdivisão'
+            ].join('\n');
+        }
+    } catch (e) {
+        const msg = e && e.message ? String(e.message) : 'Erro ao ler XLSX.';
+        if (serviceImportStatus) serviceImportStatus.textContent = msg;
+        showToast(msg, true);
+    }
+}
+
+async function confirmServiceImport() {
+    if (!isSuperAdmin) { showToast('Apenas SuperAdmin.', true); return; }
+    const parsed = Array.isArray(window.__serviceImportRows) ? window.__serviceImportRows : [];
+    if (!parsed.length) { showToast('Nenhuma linha para importar.', true); return; }
+    const mode = serviceImportMode ? String(serviceImportMode.value || 'skip_dupes') : 'skip_dupes';
+    const empresaId = String(currentEmpresaId || '');
+    if (!empresaId) { showToast('Empresa inválida.', true); return; }
+
+    if (serviceImportStatus) serviceImportStatus.textContent = 'Carregando itens atuais...';
+    const { data: existing, error } = await withTimeout(
+        db.from('servicos').select('id,descricao,subdivisao,ie,seqid,valor').eq('empresa_id', empresaId),
+        20000,
+        'srvImport:servicos'
+    );
+    if (error) { showToast('Falha ao carregar serviços.', true); return; }
+
+    const byKey = new Map();
+    let maxSeq = 0;
+    (existing || []).forEach(s => {
+        const key = `${String(s.descricao || '').trim().toUpperCase()}::${String(s.subdivisao || '').trim().toUpperCase()}::${String(s.ie || '').trim().toUpperCase()}`;
+        byKey.set(key, s);
+        if (Number(s.seqid || 0) > maxSeq) maxSeq = Number(s.seqid || 0);
+    });
+
+    let created = 0, updated = 0, skipped = 0;
+    for (const row of parsed) {
+        const key = `${row.descricao}::${row.subdivisao}::${row.ie}`;
+        const found = byKey.get(key);
+        if (found) {
+            if (mode === 'update_dupes') {
+                const upd = { valor: Number(row.valor || 0), ie: row.ie, subdivisao: row.subdivisao };
+                const { error: uErr } = await withTimeout(
+                    db.from('servicos').update(upd).eq('id', found.id),
+                    20000,
+                    'srvImport:update'
+                );
+                if (uErr) { showToast('Falha ao atualizar alguns itens.', true); continue; }
+                found.valor = upd.valor;
+                found.ie = upd.ie;
+                found.subdivisao = upd.subdivisao;
+                updated += 1;
+            } else {
+                skipped += 1;
+            }
+            continue;
+        }
+        maxSeq += 1;
+        const ins = {
+            id: generateId(),
+            seqid: maxSeq,
+            descricao: row.descricao,
+            valor: Number(row.valor || 0),
+            ie: row.ie,
+            subdivisao: row.subdivisao,
+            empresa_id: empresaId
+        };
+        const { error: iErr } = await withTimeout(
+            db.from('servicos').insert(ins),
+            20000,
+            'srvImport:insert'
+        );
+        if (iErr) { showToast('Falha ao inserir alguns itens.', true); continue; }
+        created += 1;
+    }
+
+    if (serviceImportStatus) {
+        serviceImportStatus.textContent = [
+            `Criados: ${created}`,
+            `Atualizados: ${updated}`,
+            `Ignorados: ${skipped}`
+        ].join('\n');
+    }
+    try { await initializeApp(true); } catch { }
+    showList('services');
+    showToast('Importação de serviços concluída.');
+}
+function openSpecialtyImportModal() {
+    if (!isSuperAdmin || !specialtyImportModal) {
+        showToast('Apenas SuperAdmin pode importar especialidades.', true);
+        return;
+    }
+    if (!specialtyImportModal.dataset.bound) {
+        if (btnCloseSpecialtyImportModal) btnCloseSpecialtyImportModal.addEventListener('click', () => specialtyImportModal.classList.add('hidden'));
+        if (btnCancelSpecialtyImport) btnCancelSpecialtyImport.addEventListener('click', () => specialtyImportModal.classList.add('hidden'));
+        specialtyImportModal.addEventListener('click', (e) => { if (e.target === specialtyImportModal) specialtyImportModal.classList.add('hidden'); });
+        if (btnSpecialtyImportParse) btnSpecialtyImportParse.addEventListener('click', () => parseSpecialtyImportFile());
+        if (btnConfirmSpecialtyImport) btnConfirmSpecialtyImport.addEventListener('click', () => confirmSpecialtyImport());
+        specialtyImportModal.dataset.bound = '1';
+    }
+    if (specialtyImportStatus) specialtyImportStatus.textContent = '';
+    if (specialtyImportPreviewWrap) specialtyImportPreviewWrap.classList.add('hidden');
+    if (specialtyImportPreviewBody) specialtyImportPreviewBody.innerHTML = '';
+    if (btnConfirmSpecialtyImport) btnConfirmSpecialtyImport.disabled = true;
+    window.__specialtyImportRows = [];
+    specialtyImportModal.classList.remove('hidden');
+}
+
+async function readXlsxToRowArrays(file) {
+    if (!file) return [];
+    if (!window.XLSX) throw new Error('Biblioteca XLSX não encontrada.');
+    const buf = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Falha ao ler arquivo.'));
+        reader.onload = () => resolve(reader.result);
+        reader.readAsArrayBuffer(file);
+    });
+    const wb = window.XLSX.read(buf, { type: 'array' });
+    const firstName = wb && wb.SheetNames && wb.SheetNames[0] ? wb.SheetNames[0] : null;
+    if (!firstName) return [];
+    const ws = wb.Sheets[firstName];
+    const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+    return Array.isArray(rows) ? rows : [];
+}
+
+async function parseSpecialtyImportFile() {
+    try {
+        if (!specialtyImportFile || !specialtyImportFile.files || !specialtyImportFile.files[0]) {
+            showToast('Selecione um arquivo XLSX.', true);
+            return;
+        }
+        const file = specialtyImportFile.files[0];
+        if (specialtyImportStatus) specialtyImportStatus.textContent = 'Lendo arquivo...';
+        const rows = await readXlsxToRowArrays(file);
+        const skipHeader = specialtyImportSkipHeader ? Boolean(specialtyImportSkipHeader.checked) : true;
+        const dataRows = skipHeader ? rows.slice(1) : rows.slice();
+
+        const parsed = [];
+        dataRows.forEach(r => {
+            const arr = Array.isArray(r) ? r : [];
+            const spec = String(arr[1] ?? '').trim().toUpperCase();
+            const sub = String(arr[2] ?? '').trim().toUpperCase();
+            if (!spec) return;
+            parsed.push({ spec, sub });
+        });
+
+        const uniqSpecs = new Set(parsed.map(x => x.spec));
+        const uniqPairs = new Set(parsed.map(x => `${x.spec}::${x.sub}`));
+        window.__specialtyImportRows = parsed;
+
+        if (specialtyImportPreviewBody) {
+            const preview = parsed.slice(0, 200).map(x => `
+                <tr>
+                    <td>${escapeHtml(x.spec)}</td>
+                    <td>${escapeHtml(x.sub || '')}</td>
+                </tr>
+            `).join('');
+            specialtyImportPreviewBody.innerHTML = preview || '<tr><td colspan="2" style="text-align:center; padding: 14px; color:#6b7280;">Nenhuma linha válida.</td></tr>';
+        }
+        if (specialtyImportPreviewWrap) specialtyImportPreviewWrap.classList.remove('hidden');
+        if (btnConfirmSpecialtyImport) btnConfirmSpecialtyImport.disabled = parsed.length === 0;
+        if (specialtyImportStatus) {
+            specialtyImportStatus.textContent = [
+                `Linhas válidas: ${parsed.length}`,
+                `Especialidades (únicas): ${uniqSpecs.size}`,
+                `Combinações (únicas): ${uniqPairs.size}`,
+                'Colunas: B=Especialidade, C=Subdivisão'
+            ].join('\n');
+        }
+    } catch (e) {
+        const msg = e && e.message ? String(e.message) : 'Erro ao ler XLSX.';
+        if (specialtyImportStatus) specialtyImportStatus.textContent = msg;
+        showToast(msg, true);
+    }
+}
+
+async function confirmSpecialtyImport() {
+    if (!isSuperAdmin) { showToast('Apenas SuperAdmin.', true); return; }
+    const parsed = Array.isArray(window.__specialtyImportRows) ? window.__specialtyImportRows : [];
+    if (!parsed.length) { showToast('Nenhuma linha para importar.', true); return; }
+    const mode = specialtyImportMode ? String(specialtyImportMode.value || 'skip_dupes') : 'skip_dupes';
+    const empresaId = String(currentEmpresaId || '');
+    if (!empresaId) { showToast('Empresa inválida.', true); return; }
+
+    if (specialtyImportStatus) specialtyImportStatus.textContent = 'Carregando estado atual...';
+
+    const { data: existingSpecs, error: sErr } = await withTimeout(
+        db.from('especialidades').select('id,nome,seqid').eq('empresa_id', empresaId),
+        20000,
+        'specImport:especialidades'
+    );
+    if (sErr) { showToast('Falha ao carregar especialidades.', true); return; }
+    const { data: existingSubs, error: subErr } = await withTimeout(
+        db.from('especialidade_subdivisoes').select('especialidade_id,nome').eq('empresa_id', empresaId),
+        20000,
+        'specImport:subdivisoes'
+    );
+    if (subErr) { showToast('Falha ao carregar subdivisões.', true); return; }
+
+    const specByKey = new Map();
+    let maxSeq = 0;
+    (existingSpecs || []).forEach(s => {
+        const key = String(s.nome || '').trim().toUpperCase();
+        if (!key) return;
+        specByKey.set(key, { id: String(s.id), seqid: Number(s.seqid || 0), nome: key });
+        if (Number(s.seqid || 0) > maxSeq) maxSeq = Number(s.seqid || 0);
+    });
+    const subsBySpecId = new Map();
+    (existingSubs || []).forEach(r => {
+        const sid = String(r.especialidade_id || '');
+        const nk = String(r.nome || '').trim().toUpperCase();
+        if (!sid || !nk) return;
+        if (!subsBySpecId.has(sid)) subsBySpecId.set(sid, new Set());
+        subsBySpecId.get(sid).add(nk);
+    });
+
+    let createdSpecs = 0;
+    let createdSubs = 0;
+    let skipped = 0;
+
+    for (const row of parsed) {
+        const specKey = String(row.spec || '').trim().toUpperCase();
+        const subKey = String(row.sub || '').trim().toUpperCase();
+        if (!specKey) continue;
+
+        let spec = specByKey.get(specKey);
+        if (!spec) {
+            maxSeq += 1;
+            const specData = { id: generateId(), seqid: maxSeq, nome: specKey, empresa_id: empresaId };
+            const { data: ins, error } = await withTimeout(
+                db.from('especialidades').insert(specData).select('id,seqid,nome').single(),
+                20000,
+                'specImport:insertEspecialidade'
+            );
+            if (error) throw error;
+            spec = { id: String(ins.id), seqid: Number(ins.seqid || specData.seqid), nome: String(ins.nome || specKey) };
+            specByKey.set(specKey, spec);
+            createdSpecs += 1;
+        }
+
+        if (!subKey) continue;
+        if (!subsBySpecId.has(spec.id)) subsBySpecId.set(spec.id, new Set());
+        const set = subsBySpecId.get(spec.id);
+        if (set.has(subKey)) {
+            if (mode === 'skip_dupes') skipped += 1;
+            continue;
+        }
+        const subData = { id: generateId(), especialidade_id: spec.id, nome: subKey, empresa_id: empresaId };
+        const { error: insErr } = await withTimeout(
+            db.from('especialidade_subdivisoes').insert(subData),
+            20000,
+            'specImport:insertSub'
+        );
+        if (insErr) throw insErr;
+        set.add(subKey);
+        createdSubs += 1;
+    }
+
+    if (specialtyImportStatus) {
+        specialtyImportStatus.textContent = [
+            `Especialidades criadas: ${createdSpecs}`,
+            `Subdivisões criadas: ${createdSubs}`,
+            `Duplicados ignorados: ${skipped}`
+        ].join('\n');
+    }
+    try { await initializeApp(true); } catch { }
+    showList('specialties');
+    showToast('Importação concluída.');
+}
+
+function bindGlobalHotkeys() {
+    if (window.__globalHotkeysInit) return;
+    window.__globalHotkeysInit = true;
+    let seq = '';
+    let lastTs = 0;
+    const resetSeq = () => { seq = ''; lastTs = 0; };
+    document.addEventListener('keydown', (e) => {
+        const mods = e.ctrlKey && e.altKey && e.shiftKey;
+        if (!mods) { resetSeq(); return; }
+        const code = String(e.code || '');
+        if (!code) return;
+        const now = Date.now();
+        if (lastTs && now - lastTs > 1500) resetSeq();
+        lastTs = now;
+        // Sequence first: ZERAR (layout-independent)
+        const codeToLetter = { KeyZ: 'Z', KeyE: 'E', KeyR: 'R', KeyA: 'A' };
+        const letter = codeToLetter[code] || '';
+        if (letter && !e.repeat) {
+            let advanced = false;
+            if (seq === '' && letter === 'Z') { seq = 'Z'; advanced = true; }
+            else if (seq !== '') {
+                const next = seq + letter;
+                if ('ZERAR'.startsWith(next)) { seq = next; advanced = true; }
+                else if (letter === 'Z') { seq = 'Z'; advanced = true; }
+                else { seq = ''; }
+            }
+            if (seq === 'ZERAR') {
+                e.preventDefault();
+                openSuperAdminModal('ZERAR');
+                resetSeq();
+                return;
+            }
+            if (advanced) return;
+        }
+        // Single-key hotkeys (only when not building sequence)
+        const ctx = String(window.__activeHelpContext || '').toLowerCase();
+        if (code === 'KeyS' && ctx === 'services') {
+            e.preventDefault();
+            openServiceImportModal();
+            resetSeq();
+            return;
+        }
+        if (code === 'KeyE' && ctx === 'specialties') {
+            e.preventDefault();
+            openSpecialtyImportModal();
+            resetSeq();
+            return;
+        }
+    }, true);
+}
+
+function handleSaScopeChange() {
+    if (!saScope) return;
+    const scope = String(saScope.value || '');
+    if (saTableWrap) saTableWrap.style.display = scope === 'TABLE' ? '' : 'none';
+    if (saClearAudit) {
+        saClearAudit.checked = (scope === 'ZERAR');
+    }
+    renderSaPlan();
+}
+
+function getSaEmpresaId() {
+    if (!saEmpresa) return String(currentEmpresaId || '');
+    return String(saEmpresa.value || currentEmpresaId || '');
+}
+
+async function refreshSaEmpresaOptions({ keepSelection = true } = {}) {
+    if (!isSuperAdmin || !saEmpresa) return;
+    const prev = keepSelection ? String(saEmpresa.value || '') : '';
+    try {
+        const { data, error } = await withTimeout(
+            db.from('empresas').select('*').order('nome'),
+            20000,
+            'sa:empresas_refresh'
+        );
+        if (error) throw error;
+        activeEmpresasList = Array.isArray(data) ? data : [];
+    } catch { }
+    const empresas = (activeEmpresasList || []).slice().sort((a, b) => String(a.nome || a.id || '').localeCompare(String(b.nome || b.id || ''), 'pt-BR'));
+    saEmpresa.innerHTML = empresas.map(e => `<option value="${escapeHtml(String(e.id))}">${escapeHtml(String(e.nome || e.id))}</option>`).join('');
+    const canKeep = prev && empresas.some(e => String(e.id) === prev);
+    const canUseCurrent = currentEmpresaId && empresas.some(e => String(e.id) === String(currentEmpresaId));
+    const next = canKeep ? prev : (canUseCurrent ? String(currentEmpresaId) : (empresas[0] ? String(empresas[0].id) : ''));
+    if (next) saEmpresa.value = next;
+}
+
+function buildSaPlan(scopeRaw, empresaId, tableNameRaw, clearAuditFlag) {
+    const scope = String(scopeRaw || '').trim().toUpperCase();
+    const tableName = String(tableNameRaw || '').trim();
+    const clearAudit = Boolean(clearAuditFlag);
+
+    const plan = [];
+    const add = (table) => plan.push({ table: String(table) });
+
+    const baseAll = () => {
+        add('orcamento_itens');
+        add('orcamento_pagamentos');
+        add('orcamentos');
+        add('orcamento_cancelados');
+        add('financeiro_comissoes');
+        add('financeiro_transacoes');
+        add('agenda_agendamentos');
+        add('agenda_disponibilidade');
+        add('paciente_documentos');
+        add('paciente_evolucao');
+        add('ordens_proteticas_anexos');
+        add('ordens_proteticas_eventos');
+        add('ordens_proteticas');
+        add('protese_contas_pagas');
+        add('ordens_proteticas_custodia_eventos');
+        add('ordens_proteticas_custodia_tokens');
+        add('laboratorios_proteticos');
+        add('marketing_envios');
+        add('marketing_campanhas');
+        add('marketing_smtp_config');
+        add('servicos');
+        add('especialidade_subdivisoes');
+        add('especialidades');
+        add('profissionais');
+        add('pacientes');
+        add('usuario_empresas');
+    };
+
+    if (scope === 'ZERAR') {
+        baseAll();
+        add('occ_audit_log');
+        add('empresas'); // delete empresa ao final
+    } else if (scope === 'ALL') {
+        baseAll();
+        if (clearAudit) add('occ_audit_log');
+        // opcionalmente não remove empresa em ALL (mantém cadastro)
+    } else if (scope === 'AUDIT') {
+        add('occ_audit_log');
+    } else if (scope === 'CATALOG') {
+        add('servicos');
+        add('especialidade_subdivisoes');
+        add('especialidades');
+        if (clearAudit) add('occ_audit_log');
+    } else if (scope === 'FINANCE') {
+        add('financeiro_comissoes');
+        add('financeiro_transacoes');
+        add('orcamento_pagamentos');
+        if (clearAudit) add('occ_audit_log');
+    } else if (scope === 'AGENDA') {
+        add('agenda_agendamentos');
+        add('agenda_disponibilidade');
+        if (clearAudit) add('occ_audit_log');
+    } else if (scope === 'PATIENTS') {
+        add('paciente_documentos');
+        add('paciente_evolucao');
+        add('pacientes');
+        if (clearAudit) add('occ_audit_log');
+    } else if (scope === 'BUDGETS') {
+        add('orcamento_itens');
+        add('orcamento_pagamentos');
+        add('orcamentos');
+        add('orcamento_cancelados');
+        if (clearAudit) add('occ_audit_log');
+    } else if (scope === 'PROTESE') {
+        add('ordens_proteticas_anexos');
+        add('ordens_proteticas_eventos');
+        add('ordens_proteticas');
+        add('protese_contas_pagas');
+        add('ordens_proteticas_custodia_eventos');
+        add('ordens_proteticas_custodia_tokens');
+        add('laboratorios_proteticos');
+        if (clearAudit) add('occ_audit_log');
+    } else if (scope === 'TABLE') {
+        const t = tableName;
+        if (!t) return [];
+        if (t === 'especialidades') {
+            add('especialidade_subdivisoes');
+            add('especialidades');
+        } else if (t === 'orcamentos') {
+            add('orcamento_itens');
+            add('orcamento_pagamentos');
+            add('orcamentos');
+        } else if (t === 'profissionais') {
+            add('agenda_disponibilidade');
+            add('agenda_agendamentos');
+            add('profissionais');
+        } else {
+            add(t);
+        }
+        if (clearAudit) add('occ_audit_log');
+    }
+
+    const seen = new Set();
+    return plan.filter(p => {
+        if (!p.table) return false;
+        const k = String(p.table);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+    }).map(p => ({ ...p, empresaId }));
+}
+
+function renderSaPlan() {
+    if (!saPlan) return;
+    const empresaId = getSaEmpresaId();
+    const scope = saScope ? String(saScope.value || '') : 'ALL';
+    const tableName = saTable ? String(saTable.value || '') : '';
+    const clearAudit = saClearAudit ? Boolean(saClearAudit.checked) : false;
+    const plan = buildSaPlan(scope, empresaId, tableName, clearAudit);
+    const lines = [`[ESCOPO: ${scope || 'ALL'}]`];
+    lines.push(...plan.map((p, idx) => {
+        const n = String(idx + 1).padStart(2, '0');
+        if (p.table === 'empresas') return `${String(idx + 1).padStart(2, '0')}. delete from empresas where id='${empresaId}'`;
+        return `${n}. delete from ${p.table} where empresa_id='${empresaId}'`;
+    }));
+    saPlan.textContent = lines.length ? lines.join('\n') : 'Selecione o escopo.';
+}
+
+async function saCountTableRows(table, empresaId) {
+    try {
+        const { count, error } = await withTimeout(
+            db.from(table).select('*', { count: 'exact', head: true }).eq('empresa_id', empresaId),
+            15000,
+            `sa:count:${table}`
+        );
+        if (error) throw error;
+        return Number(count || 0);
+    } catch {
+        return null;
+    }
+}
+
+async function saExecutePlan(plan) {
+    const results = [];
+    for (const step of plan) {
+        const table = String(step.table);
+        try {
+            let error = null;
+            if (table === 'empresas') {
+                const res = await withTimeout(
+                    db.from('empresas').delete().eq('id', step.empresaId),
+                    30000,
+                    `sa:delete:empresas`
+                );
+                error = res.error || null;
+            } else {
+                const res = await withTimeout(
+                    db.from(table).delete().eq('empresa_id', step.empresaId),
+                    30000,
+                    `sa:delete:${table}`
+                );
+                error = res.error || null;
+            }
+            if (error) throw error;
+            results.push({ table, ok: true });
+        } catch (e) {
+            const msg = e && e.message ? String(e.message) : String(e);
+            results.push({ table, ok: false, msg });
+        }
+    }
+    return results;
+}
+
+function initSuperAdminCleanupUI() {
+    if (!isSuperAdmin) return;
+    if (!modalSuperAdmin) return;
+    if (!saEmpresa || !saScope || !btnSaDryRun || !btnSaExecute || !saResult) return;
+    const alreadyBound = Boolean(modalSuperAdmin.dataset.saBound);
+    refreshSaEmpresaOptions({ keepSelection: true });
+
+    const tableOptions = [
+        'orcamentos', 'orcamento_itens', 'orcamento_pagamentos', 'orcamento_cancelados',
+        'financeiro_transacoes', 'financeiro_comissoes',
+        'pacientes', 'paciente_evolucao', 'paciente_documentos',
+        'profissionais', 'especialidades', 'especialidade_subdivisoes', 'servicos',
+        'agenda_agendamentos', 'agenda_disponibilidade',
+        'ordens_proteticas', 'ordens_proteticas_eventos', 'ordens_proteticas_anexos',
+        'protese_contas_pagas',
+        'ordens_proteticas_custodia_tokens', 'ordens_proteticas_custodia_eventos',
+        'laboratorios_proteticos',
+        'marketing_envios', 'marketing_campanhas', 'marketing_smtp_config',
+        'usuario_empresas',
+        'occ_audit_log',
+        'empresas'
+    ];
+    if (saTable) {
+        saTable.innerHTML = tableOptions.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    }
+
+    if (alreadyBound) {
+        handleSaScopeChange();
+        return;
+    }
+
+    saEmpresa.addEventListener('change', () => {
+        if (saConfirm) saConfirm.value = '';
+        renderSaPlan();
+    });
+    saScope.addEventListener('change', handleSaScopeChange);
+    if (saClearAudit) saClearAudit.addEventListener('change', renderSaPlan);
+    if (saTable) saTable.addEventListener('change', renderSaPlan);
+    if (btnSaRefreshEmpresas) btnSaRefreshEmpresas.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await refreshSaEmpresaOptions({ keepSelection: true });
+        renderSaPlan();
+    });
+
+    btnSaDryRun.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const empresaId = getSaEmpresaId();
+        const scope = saScope ? String(saScope.value || '') : 'ALL';
+        const tableName = saTable ? String(saTable.value || '') : '';
+        const clearAudit = saClearAudit ? Boolean(saClearAudit.checked) : false;
+        const plan = buildSaPlan(scope, empresaId, tableName, clearAudit);
+        saResult.textContent = 'Calculando...';
+        const lines = [];
+        let total = 0;
+        for (const step of plan) {
+            const c = await saCountTableRows(step.table, step.empresaId);
+            const label = c == null ? '?' : String(c);
+            lines.push(`${step.table}: ${label}`);
+            if (c != null) total += c;
+        }
+        lines.push(`TOTAL (somatório): ${total}`);
+        saResult.textContent = lines.join('\n');
+    });
+
+    btnSaExecute.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const empresaId = getSaEmpresaId();
+        const expected = `DELETE ${empresaId}`.toUpperCase();
+        const got = saConfirm ? String(saConfirm.value || '').trim().toUpperCase() : '';
+        if (got !== expected) {
+            showToast(`Confirmação inválida. Digite exatamente: ${expected}`, true);
+            return;
+        }
+        const scope = saScope ? String(saScope.value || '') : 'ALL';
+        const tableName = saTable ? String(saTable.value || '') : '';
+        const clearAudit = saClearAudit ? Boolean(saClearAudit.checked) : false;
+        const plan = buildSaPlan(scope, empresaId, tableName, clearAudit);
+        saResult.textContent = 'Executando...';
+        const res = await saExecutePlan(plan);
+        const out = res.map(r => r.ok ? `OK: ${r.table}` : `ERRO: ${r.table} -> ${r.msg}`);
+        let summary = out.join('\n');
+
+        // Auth users purge (always for ZERAR)
+        if (scope === 'ZERAR') {
+            try {
+                const { data: { session } } = await db.auth.getSession();
+                if (!session) throw new Error('Sessão expirada.');
+                const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
+                const resp = await fetch(`${baseUrl}/functions/v1/purge-tenant-users`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'apikey': supabaseKey
+                    },
+                    body: JSON.stringify({ empresa_id: empresaId, only_exclusive: false })
+                });
+                const j = await resp.json();
+                if (!resp.ok) throw new Error(j && (j.error || j.message) ? (j.error || j.message) : 'Erro desconhecido ao limpar auth.users');
+                summary += `\nAUTH: candidatos=${j.candidates} removidos=${j.deleted_auth}`;
+            } catch (err) {
+                summary += `\nAUTH ERRO: ${(err && err.message) ? err.message : String(err)}`;
+            }
+        }
+
+        saResult.textContent = summary;
+        try { await initializeApp(true); } catch { }
+    });
+
+    handleSaScopeChange();
+    modalSuperAdmin.dataset.saBound = '1';
+}
+
+function updateFinanceiroHeaderVisibility() {
+    if (btnMovDiaria) btnMovDiaria.style.display = isSuperAdmin ? '' : 'none';
+    if (btnPagamentosPacientes) btnPagamentosPacientes.style.display = (isSuperAdmin || isAdminRole()) ? '' : 'none';
+}
+
 async function initializeApp(isContextSwitch = false) {
     try {
         if (!isContextSwitch) {
@@ -476,8 +1209,7 @@ async function initializeApp(isContextSwitch = false) {
             payments: allPayments.length
         });
 
-        // Pre-fill default specialties if empty for this company
-        if (specialties.length === 0) {
+        if (AUTO_SEED_SPECIALTIES && specialties.length === 0) {
             const defaultSpecialties = [
                 { nome: "CLINICO GERAL", subs: ["Avaliação/Consulta", "Profilaxia (Limpeza)", "Restauração", "Extração Simples"] },
                 { nome: "ORTODONTIA", subs: ["Manutenção de Aparelho", "Instalação de Aparelho", "Contenção"] },
@@ -522,6 +1254,8 @@ async function initializeApp(isContextSwitch = false) {
         // Render initial view
         initHelpShortcuts();
         updateSidebarVisibility();
+        updateFinanceiroHeaderVisibility();
+        bindGlobalHotkeys();
         showList('patients');
         if (!isContextSwitch) {
             setupNavigationListeners();
@@ -760,6 +1494,21 @@ const transacaoPacienteDestino = document.getElementById('transacaoPacienteDesti
 const btnFinBuscar = document.getElementById('btnFinBuscar');
 const finPacienteSearch = document.getElementById('finPacienteSearch');
 const btnFinVerTodos = document.getElementById('btnFinVerTodos');
+const btnMovDiaria = document.getElementById('btnMovDiaria');
+const btnPagamentosPacientes = document.getElementById('btnPagamentosPacientes');
+const movDiariaModal = document.getElementById('movDiariaModal');
+const btnCloseMovDiariaModal = document.getElementById('btnCloseMovDiariaModal');
+const btnCancelMovDiaria = document.getElementById('btnCancelMovDiaria');
+const btnGenerateMovDiaria = document.getElementById('btnGenerateMovDiaria');
+const movDiariaDate = document.getElementById('movDiariaDate');
+const movDiariaProfessional = document.getElementById('movDiariaProfessional');
+const pagamentosPacientesModal = document.getElementById('pagamentosPacientesModal');
+const btnClosePagamentosPacientesModal = document.getElementById('btnClosePagamentosPacientesModal');
+const btnCancelPagamentosPacientes = document.getElementById('btnCancelPagamentosPacientes');
+const btnGeneratePagamentosPacientes = document.getElementById('btnGeneratePagamentosPacientes');
+const pagamentosPacientesStart = document.getElementById('pagamentosPacientesStart');
+const pagamentosPacientesEnd = document.getElementById('pagamentosPacientesEnd');
+const pagamentosPacientesForma = document.getElementById('pagamentosPacientesForma');
 
 // Agenda DOM Elements
 const agendaDate = document.getElementById('agendaDate');
@@ -799,6 +1548,13 @@ const btnCancelFechamentoDiario = document.getElementById('btnCancelFechamentoDi
 const btnGenerateFechamentoDiario = document.getElementById('btnGenerateFechamentoDiario');
 const fechamentoDiarioDate = document.getElementById('fechamentoDiarioDate');
 const fechamentoDiarioProfessional = document.getElementById('fechamentoDiarioProfessional');
+const btnFechamentoDiarioFull = document.getElementById('btnFechamentoDiarioFull');
+const fechamentoDiarioFullModal = document.getElementById('fechamentoDiarioFullModal');
+const btnCloseFechamentoDiarioFullModal = document.getElementById('btnCloseFechamentoDiarioFullModal');
+const btnCancelFechamentoDiarioFull = document.getElementById('btnCancelFechamentoDiarioFull');
+const btnGenerateFechamentoDiarioFull = document.getElementById('btnGenerateFechamentoDiarioFull');
+const fechamentoDiarioFullDate = document.getElementById('fechamentoDiarioFullDate');
+const fechamentoDiarioFullProfessional = document.getElementById('fechamentoDiarioFullProfessional');
 
 // Commissions DOM Elements
 const commissionsTable = document.getElementById('commissionsTable');
@@ -811,9 +1567,48 @@ const commProfessional = document.getElementById('commProfessional');
 const btnCommSearch = document.getElementById('btnCommSearch');
 const btnCommPay = document.getElementById('btnCommPay');
 const btnCommPrint = document.getElementById('btnCommPrint');
+const btnCommPrintReport = document.getElementById('btnCommPrintReport');
 const commSelectAll = document.getElementById('commSelectAll');
 const commSelectedTotal = document.getElementById('commSelectedTotal');
 
+const modalSuperAdmin = document.getElementById('modalSuperAdmin');
+const btnCloseModalSuperAdmin = document.getElementById('btnCloseModalSuperAdmin');
+const btnSuperAdminClose = document.getElementById('btnSuperAdminClose');
+const saEmpresa = document.getElementById('saEmpresa');
+const saScope = document.getElementById('saScope');
+const saTableWrap = document.getElementById('saTableWrap');
+const saTable = document.getElementById('saTable');
+const saClearAudit = document.getElementById('saClearAudit');
+const saConfirm = document.getElementById('saConfirm');
+const btnSaDryRun = document.getElementById('btnSaDryRun');
+const btnSaExecute = document.getElementById('btnSaExecute');
+const btnSaRefreshEmpresas = document.getElementById('btnSaRefreshEmpresas');
+const saPlan = document.getElementById('saPlan');
+const saResult = document.getElementById('saResult');
+
+const serviceImportModal = document.getElementById('serviceImportModal');
+const btnCloseServiceImportModal = document.getElementById('btnCloseServiceImportModal');
+const btnCancelServiceImport = document.getElementById('btnCancelServiceImport');
+const serviceImportFile = document.getElementById('serviceImportFile');
+const serviceImportMode = document.getElementById('serviceImportMode');
+const serviceImportSkipHeader = document.getElementById('serviceImportSkipHeader');
+const btnServiceImportParse = document.getElementById('btnServiceImportParse');
+const serviceImportStatus = document.getElementById('serviceImportStatus');
+const serviceImportPreviewWrap = document.getElementById('serviceImportPreviewWrap');
+const serviceImportPreviewBody = document.getElementById('serviceImportPreviewBody');
+const btnConfirmServiceImport = document.getElementById('btnConfirmServiceImport');
+
+const specialtyImportModal = document.getElementById('specialtyImportModal');
+const btnCloseSpecialtyImportModal = document.getElementById('btnCloseSpecialtyImportModal');
+const btnCancelSpecialtyImport = document.getElementById('btnCancelSpecialtyImport');
+const specialtyImportFile = document.getElementById('specialtyImportFile');
+const specialtyImportMode = document.getElementById('specialtyImportMode');
+const specialtyImportSkipHeader = document.getElementById('specialtyImportSkipHeader');
+const btnSpecialtyImportParse = document.getElementById('btnSpecialtyImportParse');
+const specialtyImportStatus = document.getElementById('specialtyImportStatus');
+const specialtyImportPreviewWrap = document.getElementById('specialtyImportPreviewWrap');
+const specialtyImportPreviewBody = document.getElementById('specialtyImportPreviewBody');
+const btnConfirmSpecialtyImport = document.getElementById('btnConfirmSpecialtyImport');
 // Active State
 let currentSpecialtySubdivisions = [];
 let editingSubSpecIndex = -1;
@@ -826,6 +1621,7 @@ let proteseOrders = [];
 let proteseLabs = [];
 let currentProteseOrder = null;
 let protesePayables = [];
+let protesePayablesFilteredRows = [];
 let currentProtesePayable = null;
 
 // Shared Inputs
@@ -1146,6 +1942,7 @@ function renderTable(data = [], type = 'patients') {
 
         data.forEach(s => {
             const tr = document.createElement('tr');
+            tr.dataset.id = String(s.id || '');
             tr.innerHTML = `
                 <td>${s.seqid}</td>
                 <td><strong>${s.descricao}</strong></td>
@@ -1166,6 +1963,38 @@ function renderTable(data = [], type = 'patients') {
             `;
             servicesTableBody.appendChild(tr);
         });
+
+        if (window.__afterListScrollToServiceId) {
+            const tid = String(window.__afterListScrollToServiceId);
+            window.__afterListScrollToServiceId = '';
+            const rows = Array.from(servicesTableBody.children);
+            const row = rows.find(el => el && el.dataset && String(el.dataset.id) === tid);
+            if (row) {
+                try {
+                    const sc = row.closest('.table-container');
+                    const doScroll = () => {
+                        if (sc && sc.scrollTo) {
+                            let off = 0, n = row;
+                            while (n && n !== sc) {
+                                off += n.offsetTop || 0;
+                                n = n.offsetParent;
+                            }
+                            const target = Math.max(0, off - Math.max(0, (sc.clientHeight / 2) - (row.clientHeight / 2)));
+                            sc.scrollTo({ top: target, behavior: 'auto' });
+                        } else if (row.scrollIntoView) {
+                            row.scrollIntoView({ block: 'center' });
+                        }
+                        row.style.outline = '2px solid var(--primary-color)';
+                        setTimeout(() => { try { row.style.outline = ''; } catch {} }, 1000);
+                    };
+                    if (typeof requestAnimationFrame === 'function') {
+                        requestAnimationFrame(() => requestAnimationFrame(doScroll));
+                    } else {
+                        setTimeout(doScroll, 0);
+                    }
+                } catch { /* ignore */ }
+            }
+        }
     } else if (type === 'usersAdmin') {
         const usersAdminTableBody = document.getElementById('usersAdminTableBody');
         const usersAdminEmptyState = document.getElementById('usersAdminEmptyState');
@@ -1347,20 +2176,37 @@ function renderTable(data = [], type = 'patients') {
 
         data.forEach((t, index) => {
             const tr = document.createElement('tr');
+            let obsRaw = String(t.observacoes_display || t.observacoes || '');
+            const obsNorm = obsRaw
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+            const obsBudgetMatch = obsNorm.match(/(?:Orc\.?\s*#|Orcamento\s*#|Orcamento\s+)\s*(\d{1,})/i);
+            const obsBudgetSeq = obsBudgetMatch && obsBudgetMatch[1] ? String(obsBudgetMatch[1]) : '';
+            const refOrc = (t.referencia_id != null && String(t.referencia_id).trim() !== '') ? String(t.referencia_id) : '';
+            const orcIdCol = (t.orcamento_id != null && String(t.orcamento_id).trim() !== '') ? String(t.orcamento_id) : '';
+            const txnId = t.seqid || (index + 1);
+            // Orçamento visível: prioriza extração da observação, depois orcamento_id, depois referencia_id
+            const budgetId = obsBudgetSeq || orcIdCol || refOrc || '';
+            if (obsBudgetSeq) {
+                const pretty = `Orçamento ${obsBudgetSeq}`;
+                const hasPretty = obsNorm.includes(`Orcamento ${obsBudgetSeq}`);
+                if (!hasPretty) obsRaw = `${obsRaw} | ${pretty}`;
+            }
             const valorFormatado = Number(t.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             const tipoLabel = t.tipo === 'CREDITO' ?
                 '<span style="color: var(--success-color); font-weight: 600;">CRÉDITO</span>' :
                 '<span style="color: #dc3545; font-weight: 600;">DÉBITO</span>';
 
             tr.innerHTML = `
-                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${t.seqid || index + 1}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${escapeHtml(String(txnId))}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);" title="${escapeHtml(obsBudgetSeq ? `ref: observação (orç=${obsBudgetSeq})${refOrc && refOrc !== obsBudgetSeq ? ` (referencia_id=${refOrc})` : ''}` : (orcIdCol ? `ref: orcamento_id${refOrc && refOrc !== orcIdCol ? ` (referencia_id=${refOrc})` : ''}` : (refOrc ? 'ref: referencia_id' : 'ref: seq')))}">${escapeHtml(budgetId || '—')}</td>
                 <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);"><strong>${t.paciente_nome || '—'}</strong></td>
                 <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${formatDateTime(t.data_transacao)}</td>
                 <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${t.categoria}</td>
                 <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${t.forma_pagamento || '—'}</td>
                 <td style="padding: 0.75rem; text-align: right; border-bottom: 1px solid var(--border-color);"><strong>${valorFormatado}</strong></td>
                 <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">${tipoLabel}</td>
-                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${t.observacoes || ''}">${t.observacoes || '—'}</td>
+                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${obsRaw}">${obsRaw || '—'}</td>
                 <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); text-align: center;">
                     <button class="btn-icon delete-btn" onclick="deleteTransaction('${t.id}')" title="Excluir Lançamento">
                         <i class="ri-delete-bin-line"></i>
@@ -1385,9 +2231,10 @@ function renderTable(data = [], type = 'patients') {
 
         data.forEach(p => {
             const tr = document.createElement('tr');
-            const photoEl = p.photo
-                ? `< img src = "${p.photo}" class="photo-thumb" alt = "Foto" > `
-                : `< div class="photo-thumb" > <i class="ri-user-line"></i></div > `;
+            const photoSrc = getProfessionalPhotoValue(p);
+            const photoEl = photoSrc
+                ? `<img src="${escapeHtml(photoSrc)}" class="photo-thumb" alt="Foto">`
+                : `<div class="photo-thumb photo-thumb--placeholder"><i class="ri-user-line"></i></div>`;
 
             const statusColor = p.status === 'Ativo' ? 'var(--success-color)' : 'var(--text-muted)';
 
@@ -1622,15 +2469,15 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             document.getElementById('empresaSupervisorPin').value = dataObj.supervisor_pin || '';
             base64Input.value = dataObj.logotipo || '';
             if (dataObj.logotipo) {
-                logoPreview.innerHTML = `< img src = "${dataObj.logotipo}" style = "width: 100%; height: 100%; object-fit: cover;" > `;
+                logoPreview.innerHTML = `<img src="${dataObj.logotipo}" style="width: 100%; height: 100%; object-fit: cover;">`;
             } else {
-                logoPreview.innerHTML = `< i class="ri-image-line" style = "font-size: 1.5rem; color: var(--text-muted);" ></i > `;
+                logoPreview.innerHTML = `<i class="ri-image-line" style="font-size: 1.5rem; color: var(--text-muted);"></i>`;
             }
         } else {
             empresaForm.reset();
             document.getElementById('empresaSupervisorPin').value = '';
             base64Input.value = '';
-            logoPreview.innerHTML = `< i class="ri-image-line" style = "font-size: 1.5rem; color: var(--text-muted);" ></i > `;
+            logoPreview.innerHTML = `<i class="ri-image-line" style="font-size: 1.5rem; color: var(--text-muted);"></i>`;
         }
     } else {
         if (professionalListView) professionalListView.classList.add('hidden');
@@ -1922,6 +2769,7 @@ function initAtendimentoFilters() {
         if (atendimentoProfessional) atendimentoProfessional.addEventListener('change', () => fetchAtendimentoForUI());
         if (btnAtendimentoFinalizeSelected) btnAtendimentoFinalizeSelected.addEventListener('click', () => finalizeAtendimentoSelectedItems());
         if (btnFechamentoDiario) btnFechamentoDiario.addEventListener('click', () => openFechamentoDiarioModal());
+        if (btnFechamentoDiarioFull) btnFechamentoDiarioFull.addEventListener('click', () => openFechamentoDiarioFullModal());
     }
 
     fetchAtendimentoForUI();
@@ -1981,6 +2829,542 @@ function openFechamentoDiarioModal() {
     }
 
     fechamentoDiarioModal.classList.remove('hidden');
+}
+
+function closeFechamentoDiarioFullModal() {
+    if (fechamentoDiarioFullModal) fechamentoDiarioFullModal.classList.add('hidden');
+}
+
+function openFechamentoDiarioFullModal() {
+    if (!fechamentoDiarioFullModal) return;
+
+    const setTodayIfEmpty = (el) => {
+        if (!el || el.value) return;
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        el.value = `${yyyy}-${mm}-${dd}`;
+    };
+
+    if (fechamentoDiarioFullDate) {
+        if (atendimentoDate && atendimentoDate.value) fechamentoDiarioFullDate.value = String(atendimentoDate.value);
+        setTodayIfEmpty(fechamentoDiarioFullDate);
+    }
+
+    if (fechamentoDiarioFullProfessional) {
+        const opts = ['<option value="">Todos</option>'];
+        (professionals || []).forEach(p => {
+            if (p.seqid == null) return;
+            opts.push(`<option value="${escapeHtml(String(p.seqid))}">${escapeHtml(String(p.nome || ''))}</option>`);
+        });
+        fechamentoDiarioFullProfessional.innerHTML = opts.join('');
+        if (atendimentoProfessional && atendimentoProfessional.value) {
+            fechamentoDiarioFullProfessional.value = String(atendimentoProfessional.value);
+        }
+    }
+
+    if (!fechamentoDiarioFullModal.dataset.bound) {
+        if (btnCloseFechamentoDiarioFullModal) btnCloseFechamentoDiarioFullModal.addEventListener('click', closeFechamentoDiarioFullModal);
+        if (btnCancelFechamentoDiarioFull) btnCancelFechamentoDiarioFull.addEventListener('click', closeFechamentoDiarioFullModal);
+        if (btnGenerateFechamentoDiarioFull) {
+            btnGenerateFechamentoDiarioFull.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const dateStr = fechamentoDiarioFullDate ? String(fechamentoDiarioFullDate.value || '') : '';
+                const profSeqId = fechamentoDiarioFullProfessional ? String(fechamentoDiarioFullProfessional.value || '') : '';
+                await printFechamentoDiario({ dateStr, profSeqId });
+                closeFechamentoDiarioFullModal();
+            });
+        }
+        fechamentoDiarioFullModal.addEventListener('click', (e) => { if (e.target === fechamentoDiarioFullModal) closeFechamentoDiarioFullModal(); });
+        fechamentoDiarioFullModal.dataset.bound = '1';
+    }
+
+    fechamentoDiarioFullModal.classList.remove('hidden');
+}
+
+function closeMovDiariaModal() {
+    if (movDiariaModal) movDiariaModal.classList.add('hidden');
+}
+
+function openMovDiariaModal() {
+    if (!movDiariaModal) return;
+
+    const setTodayIfEmpty = (el) => {
+        if (!el || el.value) return;
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        el.value = `${yyyy}-${mm}-${dd}`;
+    };
+
+    if (movDiariaDate) setTodayIfEmpty(movDiariaDate);
+
+    if (movDiariaProfessional) {
+        const opts = ['<option value="">Todos</option>'];
+        (professionals || [])
+            .slice()
+            .filter(p => String(p.status || '') === 'Ativo')
+            .filter(p => String(p.tipo || '').toLowerCase() !== 'protetico')
+            .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+            .forEach(p => {
+                if (p.seqid == null) return;
+                opts.push(`<option value="${escapeHtml(String(p.seqid))}">${escapeHtml(String(p.nome || ''))}</option>`);
+            });
+        movDiariaProfessional.innerHTML = opts.join('');
+    }
+
+    if (!movDiariaModal.dataset.bound) {
+        if (btnCloseMovDiariaModal) btnCloseMovDiariaModal.addEventListener('click', closeMovDiariaModal);
+        if (btnCancelMovDiaria) btnCancelMovDiaria.addEventListener('click', closeMovDiariaModal);
+        if (btnGenerateMovDiaria) {
+            btnGenerateMovDiaria.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const dateStr = movDiariaDate ? String(movDiariaDate.value || '') : '';
+                const profSeqId = movDiariaProfessional ? String(movDiariaProfessional.value || '') : '';
+                await printMovimentacaoDiaria({ dateStr, profSeqId });
+                closeMovDiariaModal();
+            });
+        }
+        movDiariaModal.addEventListener('click', (e) => { if (e.target === movDiariaModal) closeMovDiariaModal(); });
+        movDiariaModal.dataset.bound = '1';
+    }
+
+    movDiariaModal.classList.remove('hidden');
+}
+
+function closePagamentosPacientesModal() {
+    if (pagamentosPacientesModal) pagamentosPacientesModal.classList.add('hidden');
+}
+
+function openPagamentosPacientesModal() {
+    if (!pagamentosPacientesModal) return;
+
+    const setTodayIfEmpty = (el) => {
+        if (!el || el.value) return;
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        el.value = `${yyyy}-${mm}-${dd}`;
+    };
+
+    if (pagamentosPacientesStart) setTodayIfEmpty(pagamentosPacientesStart);
+    if (pagamentosPacientesEnd) setTodayIfEmpty(pagamentosPacientesEnd);
+    if (pagamentosPacientesForma && pagamentosPacientesForma.value == null) pagamentosPacientesForma.value = '';
+
+    if (!pagamentosPacientesModal.dataset.bound) {
+        if (btnClosePagamentosPacientesModal) btnClosePagamentosPacientesModal.addEventListener('click', closePagamentosPacientesModal);
+        if (btnCancelPagamentosPacientes) btnCancelPagamentosPacientes.addEventListener('click', closePagamentosPacientesModal);
+        if (btnGeneratePagamentosPacientes) {
+            btnGeneratePagamentosPacientes.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const startDateStr = pagamentosPacientesStart ? String(pagamentosPacientesStart.value || '') : '';
+                const endDateStr = pagamentosPacientesEnd ? String(pagamentosPacientesEnd.value || '') : '';
+                const forma = pagamentosPacientesForma ? String(pagamentosPacientesForma.value || '') : '';
+                await printPagamentosPacientes({ startDateStr, endDateStr, forma });
+                closePagamentosPacientesModal();
+            });
+        }
+        pagamentosPacientesModal.addEventListener('click', (e) => { if (e.target === pagamentosPacientesModal) closePagamentosPacientesModal(); });
+        pagamentosPacientesModal.dataset.bound = '1';
+    }
+
+    pagamentosPacientesModal.classList.remove('hidden');
+}
+
+async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
+    if (!startDateStr || !endDateStr) { showToast('Selecione o período.', true); return; }
+    if (startDateStr > endDateStr) { showToast('Período inválido: início maior que fim.', true); return; }
+
+    const { startIso } = buildDayDateRangeUTC(startDateStr);
+    const { endIso } = buildDayDateRangeUTC(endDateStr);
+
+    const formaKey = forma ? normalizeKey(forma) : '';
+
+    let paymentsRaw = [];
+    let payDateCol = 'created_at';
+    try {
+        const qByDateCol = async (dateCol) => {
+            const { data, error } = await withTimeout(
+                db.from('orcamento_pagamentos')
+                    .select('*')
+                    .eq('empresa_id', currentEmpresaId)
+                    .gte(dateCol, startIso)
+                    .lte(dateCol, endIso)
+                    .order(dateCol, { ascending: true }),
+                20000,
+                `pagamentos_pacientes:orcamento_pagamentos:${dateCol}`
+            );
+            if (error) throw error;
+            return Array.isArray(data) ? data : [];
+        };
+        try {
+            paymentsRaw = await qByDateCol('created_at');
+            payDateCol = 'created_at';
+        } catch {
+            paymentsRaw = await qByDateCol('data_pagamento');
+            payDateCol = 'data_pagamento';
+        }
+    } catch (err) {
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Falha ao carregar pagamentos: ${msg}`, true);
+        return;
+    }
+
+    if (formaKey) {
+        paymentsRaw = paymentsRaw.filter(p => normalizeKey(String(p.forma_pagamento || '')) === formaKey);
+    }
+
+    const budgetBySeqid = new Map((budgets || []).map(b => [String(b.seqid), b]));
+    const patientById = new Map((patients || []).map(p => [String(p.id), p]));
+    const patientBySeq = new Map((patients || []).map(p => [String(p.seqid), p]));
+
+    const seqids = Array.from(new Set(paymentsRaw.map(p => String(p.orcamento_id || '')).filter(Boolean)));
+    const seqidToPacienteUuid = new Map();
+    seqids.forEach(s => {
+        const b = budgetBySeqid.get(String(s));
+        const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
+        if (pid) seqidToPacienteUuid.set(String(s), pid);
+    });
+    const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
+    if (missingSeq.length) {
+        try {
+            const { data: orcs, error: oErr } = await withTimeout(
+                db.from('orcamentos')
+                    .select('seqid,paciente_id,pacienteid,pacientenome')
+                    .eq('empresa_id', currentEmpresaId)
+                    .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
+                15000,
+                'pagamentos_pacientes:orcamentos:seqid'
+            );
+            if (!oErr && Array.isArray(orcs)) {
+                orcs.forEach(o => {
+                    const pid = String(o.pacienteid || o.paciente_id || '');
+                    if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
+                });
+            }
+        } catch { }
+    }
+
+    const rows = paymentsRaw.map(p => {
+        const dt = p[payDateCol] ? new Date(p[payDateCol]) : null;
+        const hora = dt ? formatTimeHHMM(dt) : '—';
+        const data = dt ? dt.toLocaleDateString('pt-BR') : '—';
+        const seq = String(p.orcamento_id || '');
+        const pacUuid = seqidToPacienteUuid.get(seq) || '';
+        const pac = pacUuid ? (patientById.get(pacUuid) || patientBySeq.get(pacUuid)) : null;
+        const pacNome = pac ? String(pac.nome || '') : (seq ? `Orçamento #${seq}` : '—');
+        const formaLabel = String(p.forma_pagamento || '—');
+        const valor = Number(p.valor_pago || 0);
+        return { data, hora, orc: seq || '—', paciente: pacNome, forma: formaLabel, valor };
+    });
+
+    const total = rows.reduce((acc, r) => acc + Number(r.valor || 0), 0);
+    const byForma = {};
+    rows.forEach(r => {
+        const f = String(r.forma || '—');
+        byForma[f] = (byForma[f] || 0) + Number(r.valor || 0);
+    });
+    const formaSummary = Object.entries(byForma)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `${k}: ${formatCurrencyBRL(v)}`)
+        .join(' | ') || '—';
+
+    const humanStart = startDateStr.split('-').reverse().join('/');
+    const humanEnd = endDateStr.split('-').reverse().join('/');
+    const filtroForma = forma ? forma : 'Todos';
+
+    const sorted = rows
+        .slice()
+        .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')) || String(a.hora || '').localeCompare(String(b.hora || '')) || String(a.paciente || '').localeCompare(String(b.paciente || ''), 'pt-BR'));
+
+    const groupedRows = [];
+    let currentDay = null;
+    let daySubtotal = 0;
+    let dayCount = 0;
+    const flushDay = () => {
+        if (!currentDay) return;
+        groupedRows.push(`
+            <tr>
+                <td colspan="5" style="text-align:right; font-weight: 900;">SUBTOTAL ${escapeHtml(currentDay)} (${dayCount})</td>
+                <td style="text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(daySubtotal))}</td>
+            </tr>
+        `);
+    };
+
+    if (!sorted.length) {
+        groupedRows.push(`<tr><td colspan="6" style="text-align:center; padding: 14px; color:#6b7280;">Nenhum pagamento no período/filtro.</td></tr>`);
+    } else {
+        sorted.forEach(r => {
+            if (currentDay !== r.data) {
+                flushDay();
+                currentDay = r.data;
+                daySubtotal = 0;
+                dayCount = 0;
+            }
+            daySubtotal += Number(r.valor || 0);
+            dayCount += 1;
+            groupedRows.push(`
+                <tr>
+                    <td style="width:90px;">${escapeHtml(r.data)}</td>
+                    <td style="width:72px;">${escapeHtml(r.hora)}</td>
+                    <td style="width:90px; text-align:center;">${escapeHtml(String(r.orc || '—'))}</td>
+                    <td>${escapeHtml(r.paciente)}</td>
+                    <td style="width:160px;">${escapeHtml(r.forma)}</td>
+                    <td style="width:120px; text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(r.valor))}</td>
+                </tr>
+            `);
+        });
+        flushDay();
+        groupedRows.push(`
+            <tr>
+                <td colspan="5" style="text-align:right; font-weight: 900;">TOTAL GERAL (${sorted.length})</td>
+                <td style="text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(total))}</td>
+            </tr>
+        `);
+    }
+
+    const tableRows = groupedRows.join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Pagamentos de Pacientes - ${humanStart} a ${humanEnd}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color:#111827; padding: 24px; }
+    .header { border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 14px; }
+    .title { font-size: 16px; font-weight: 900; color:#0066cc; }
+    .sub { color:#6b7280; margin-top: 4px; font-size: 11px; }
+    .kpis { display:flex; gap: 14px; flex-wrap: wrap; margin: 12px 0 14px; }
+    .kpi { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; min-width: 170px; }
+    .kpi label { display:block; font-size: 10px; color:#6b7280; text-transform: uppercase; letter-spacing: .04em; }
+    .kpi div { font-weight: 900; margin-top: 4px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border: 1px solid #e5e7eb; padding: 7px; }
+    th { background: #f9fafb; text-align:left; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color:#374151; }
+    .footer { margin-top: 16px; font-size: 10px; color:#9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">Pagamentos de Pacientes</div>
+    <div class="sub">Período: <strong>${escapeHtml(humanStart)}</strong> a <strong>${escapeHtml(humanEnd)}</strong> • Forma: <strong>${escapeHtml(filtroForma)}</strong></div>
+    <div class="sub">Unidade: ${escapeHtml(String(currentEmpresaId || '—'))}</div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><label>Registros</label><div>${rows.length}</div></div>
+    <div class="kpi"><label>Total</label><div>${escapeHtml(formatCurrencyBRL(total))}</div></div>
+    <div class="kpi"><label>Por forma</label><div style="font-size: 12px; font-weight: 700;">${escapeHtml(formaSummary)}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:90px;">Data</th>
+        <th style="width:72px;">Hora</th>
+        <th style="width:90px; text-align:center;">Orç. #</th>
+        <th>Paciente</th>
+        <th style="width:160px;">Forma</th>
+        <th style="width:120px; text-align:right;">Valor</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+
+  <div class="footer">Documento interno • Pagamentos de Pacientes</div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=980,height=720');
+    if (!win) { showToast('Habilite pop-ups para gerar o relatório.', true); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 600);
+}
+
+async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
+    if (!dateStr) { showToast('Selecione a data.', true); return; }
+    const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
+
+    let paymentsRaw = [];
+    let payDateCol = 'created_at';
+    try {
+        const qByDateCol = async (dateCol) => {
+            const { data, error } = await withTimeout(
+                db.from('orcamento_pagamentos')
+                    .select('*')
+                    .eq('empresa_id', currentEmpresaId)
+                    .gte(dateCol, startIso)
+                    .lte(dateCol, endIso)
+                    .order(dateCol, { ascending: true }),
+                20000,
+                `movdiaria:orcamento_pagamentos:${dateCol}`
+            );
+            if (error) throw error;
+            return Array.isArray(data) ? data : [];
+        };
+        try {
+            paymentsRaw = await qByDateCol('created_at');
+            payDateCol = 'created_at';
+        } catch {
+            paymentsRaw = await qByDateCol('data_pagamento');
+            payDateCol = 'data_pagamento';
+        }
+    } catch (err) {
+        const msg = err && err.message ? err.message : 'Erro desconhecido';
+        showToast(`Falha ao carregar pagamentos do dia: ${msg}`, true);
+        return;
+    }
+
+    const budgetBySeqid = new Map((budgets || []).map(b => [String(b.seqid), b]));
+    const patientById = new Map((patients || []).map(p => [String(p.id), p]));
+    const servById = new Map((services || []).map(s => [String(s.id), s]));
+
+    const rows = [];
+    paymentsRaw.forEach(p => {
+        const seq = String(p.orcamento_id || '');
+        const budget = budgetBySeqid.get(seq);
+        const itens = budget ? (budget.orcamento_itens || budget.itens || []) : [];
+        const pacienteUuid = budget ? String(budget.pacienteid || budget.paciente_id || '') : '';
+        const paciente = pacienteUuid ? patientById.get(pacienteUuid) : null;
+        const pacNome = paciente ? String(paciente.nome || '') : (seq ? `Orçamento #${seq}` : '—');
+
+        const validItens = itens.filter(it => normalizeStatusKey(String(it.status || it.item_status || '')) !== 'CANCELADO');
+        const weights = validItens.map(it => {
+            const qtde = Number(it.qtde || 1);
+            const valor = Number(it.valor || 0);
+            const w = (Number.isFinite(qtde) && qtde > 0 ? qtde : 1) * (Number.isFinite(valor) ? valor : 0);
+            return w > 0 ? w : 1;
+        });
+        const totalW = weights.reduce((a, b) => a + b, 0) || 1;
+
+        const paid = Number(p.valor_pago || 0);
+        const forma = String(p.forma_pagamento || '—');
+        const dt = p[payDateCol] ? new Date(p[payDateCol]) : null;
+        const hora = dt ? formatTimeHHMM(dt) : '—';
+
+        validItens.forEach((it, idx) => {
+            const executor = it.profissional_id ?? it.profissionalId ?? it.executor_id ?? it.executorId;
+            const execProf = findProfessionalByAnyId(executor);
+            const execSeqId = execProf && execProf.seqid != null ? String(execProf.seqid) : String(executor || '');
+            if (profSeqId && execSeqId !== String(profSeqId)) return;
+
+            const serv = servById.get(String(it.servico_id || it.servicoId || ''));
+            const servLabel = serv ? String(serv.descricao || serv.nome || '') : `Serviço ${it.servico_id || it.servicoId || ''}`;
+            const sub = String(it.subdivisao || it.sub_divisao || '').trim();
+            const itemLabel = sub ? `${servLabel} — ${sub}` : servLabel;
+
+            const alocado = paid * (weights[idx] / totalW);
+            rows.push({
+                hora,
+                orcSeq: seq || '—',
+                paciente: pacNome,
+                profissional: execProf ? String(execProf.nome || '') : '—',
+                forma,
+                item: itemLabel,
+                valor: alocado
+            });
+        });
+    });
+
+    const totalAlocado = rows.reduce((acc, r) => acc + Number(r.valor || 0), 0);
+    const byForma = {};
+    rows.forEach(r => {
+        const f = String(r.forma || '—');
+        byForma[f] = (byForma[f] || 0) + Number(r.valor || 0);
+    });
+    const formaSummary = Object.entries(byForma)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `${k}: ${formatCurrencyBRL(v)}`)
+        .join(' | ') || '—';
+
+    const humanDate = dateStr.split('-').reverse().join('/');
+    const profName = profSeqId ? getProfessionalNameBySeqId(profSeqId) : 'Todos';
+
+    const tableRows = rows.length ? rows
+        .slice()
+        .sort((a, b) => String(a.paciente || '').localeCompare(String(b.paciente || ''), 'pt-BR') || String(a.hora || '').localeCompare(String(b.hora || '')))
+        .map(r => `
+            <tr>
+                <td style="width:72px;">${escapeHtml(r.hora)}</td>
+                <td style="width:90px; text-align:center;">${escapeHtml(String(r.orcSeq || '—'))}</td>
+                <td>${escapeHtml(r.paciente)}</td>
+                <td>${escapeHtml(r.item)}</td>
+                <td>${escapeHtml(r.profissional)}</td>
+                <td style="width:160px;">${escapeHtml(r.forma)}</td>
+                <td style="width:120px; text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(r.valor))}</td>
+            </tr>
+        `).join('') : `<tr><td colspan="7" style="text-align:center; padding: 14px; color:#6b7280;">Nenhum registro para o dia/filtro.</td></tr>`;
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Movimentação Diária - ${humanDate}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color:#111827; padding: 24px; }
+    .header { border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 14px; }
+    .title { font-size: 16px; font-weight: 900; color:#0066cc; }
+    .sub { color:#6b7280; margin-top: 4px; font-size: 11px; }
+    .kpis { display:flex; gap: 14px; flex-wrap: wrap; margin: 12px 0 14px; }
+    .kpi { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; min-width: 170px; }
+    .kpi label { display:block; font-size: 10px; color:#6b7280; text-transform: uppercase; letter-spacing: .04em; }
+    .kpi div { font-weight: 900; margin-top: 4px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border: 1px solid #e5e7eb; padding: 7px; }
+    th { background: #f9fafb; text-align:left; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color:#374151; }
+    .footer { margin-top: 16px; font-size: 10px; color:#9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">Movimentação Diária</div>
+    <div class="sub">Data: <strong>${escapeHtml(humanDate)}</strong> • Profissional: <strong>${escapeHtml(profName)}</strong></div>
+    <div class="sub">Unidade: ${escapeHtml(String(currentEmpresaId || '—'))}</div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><label>Registros</label><div>${rows.length}</div></div>
+    <div class="kpi"><label>Total</label><div>${escapeHtml(formatCurrencyBRL(totalAlocado))}</div></div>
+    <div class="kpi"><label>Por forma</label><div style="font-size: 12px; font-weight: 700;">${escapeHtml(formaSummary)}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:72px;">Hora</th>
+        <th style="width:90px; text-align:center;">Orç. #</th>
+        <th>Paciente</th>
+        <th>Item</th>
+        <th style="width:180px;">Profissional</th>
+        <th style="width:160px;">Forma</th>
+        <th style="width:120px; text-align:right;">Valor</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+
+  <div class="footer">Documento interno • Movimentação Diária</div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=980,height=720');
+    if (!win) { showToast('Habilite pop-ups para imprimir.', true); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 500);
 }
 
 async function fetchAgendaRowsForFechamento({ dateStr, profSeqId }) {
@@ -2063,6 +3447,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
     if (!dateStr) { showToast('Selecione a data.', true); return; }
     if (btnGenerateFechamentoDiario) btnGenerateFechamentoDiario.disabled = true;
     try {
+        const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
         const agendaRows = await fetchAgendaRowsForFechamento({ dateStr, profSeqId });
         const agValid = (agendaRows || []).filter(a => String(a.status || '') !== 'CANCELADO');
         const statusCounts = {};
@@ -2076,11 +3461,208 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
         const rows = buildAtendimentoRowsFromAgenda({ agendaRows: agValid, profSeqId: profSeqId || '' });
         const totalProduzido = rows.reduce((acc, r) => acc + Number(r.itemTotal || 0), 0);
         const totalFinalizados = rows.filter(r => normalizeStatusKey(r.itemStatus) === 'FINALIZADO').length;
+        const totalFinalizadosValor = rows
+            .filter(r => normalizeStatusKey(r.itemStatus) === 'FINALIZADO')
+            .reduce((acc, r) => acc + Number(r.itemTotal || 0), 0);
 
         const statusSummary = Object.entries(statusCounts)
             .sort((a, b) => b[1] - a[1])
             .map(([k, v]) => `${k}: ${v}`)
             .join(' | ') || '—';
+
+        let paymentsRows = [];
+        try {
+            const tryFetchByDateCol = async (dateCol) => {
+                const { data, error } = await withTimeout(
+                    db.from('orcamento_pagamentos')
+                        .select('*')
+                        .eq('empresa_id', currentEmpresaId)
+                        .gte(dateCol, startIso)
+                        .lte(dateCol, endIso)
+                        .order(dateCol, { ascending: true }),
+                    15000,
+                    `fechamento:orcamento_pagamentos:${dateCol}`
+                );
+                if (error) throw error;
+                return { rows: Array.isArray(data) ? data : [], dateCol };
+            };
+
+            let paymentsRaw = [];
+            let payDateCol = 'created_at';
+            try {
+                const res = await tryFetchByDateCol('created_at');
+                paymentsRaw = res.rows;
+                payDateCol = res.dateCol;
+            } catch {
+                const res = await tryFetchByDateCol('data_pagamento');
+                paymentsRaw = res.rows;
+                payDateCol = res.dateCol;
+            }
+
+            const budgetBySeqid = new Map((budgets || []).map(b => [String(b.seqid), b]));
+            const patientById = new Map((patients || []).map(p => [String(p.id), p]));
+            const patientBySeq = new Map((patients || []).map(p => [String(p.seqid), p]));
+
+            const seqids = Array.from(new Set(paymentsRaw.map(p => String(p.orcamento_id || '')).filter(Boolean)));
+            const seqidToPacienteUuid = new Map();
+            seqids.forEach(s => {
+                const b = budgetBySeqid.get(String(s));
+                const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
+                if (pid) seqidToPacienteUuid.set(String(s), pid);
+            });
+            const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
+            if (missingSeq.length) {
+                try {
+                    const { data: orcs, error: oErr } = await withTimeout(
+                        db.from('orcamentos')
+                            .select('seqid,paciente_id,pacienteid')
+                            .eq('empresa_id', currentEmpresaId)
+                            .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
+                        15000,
+                        'fechamento:orcamentos:seqid'
+                    );
+                    if (!oErr && Array.isArray(orcs)) {
+                        orcs.forEach(o => {
+                            const pid = String(o.pacienteid || o.paciente_id || '');
+                            if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
+                        });
+                    }
+                } catch { }
+            }
+
+            paymentsRows = paymentsRaw.map(p => {
+                const dt = p[payDateCol] ? new Date(p[payDateCol]) : null;
+                const hora = dt ? formatTimeHHMM(dt) : '—';
+                const seq = String(p.orcamento_id || '');
+                const pacUuid = seqidToPacienteUuid.get(seq) || '';
+                const pac = pacUuid ? (patientById.get(pacUuid) || patientBySeq.get(pacUuid)) : null;
+                const pacNome = pac ? String(pac.nome || '') : (seq ? `Orçamento #${seq}` : '—');
+                const forma = String(p.forma_pagamento || '—');
+                const valor = Number(p.valor_pago || 0);
+                return { hora, pacNome, forma, valor };
+            });
+        } catch {
+            paymentsRows = [];
+        }
+
+        const paymentsTotal = paymentsRows.reduce((acc, r) => acc + Number(r.valor || 0), 0);
+        const paymentsByForma = {};
+        paymentsRows.forEach(r => {
+            const f = String(r.forma || '—');
+            paymentsByForma[f] = (paymentsByForma[f] || 0) + Number(r.valor || 0);
+        });
+        const paymentsFormaSummary = Object.entries(paymentsByForma)
+            .sort((a, b) => b[1] - a[1])
+            .map(([k, v]) => `${k}: ${formatCurrencyBRL(v)}`)
+            .join(' | ') || '—';
+
+        const paymentsTableRows = paymentsRows.length ? paymentsRows
+            .slice()
+            .sort((a, b) => String(a.pacNome || '').localeCompare(String(b.pacNome || ''), 'pt-BR') || String(a.hora || '').localeCompare(String(b.hora || '')))
+            .map(r => `
+                <tr>
+                    <td style="width:72px;">${escapeHtml(r.hora)}</td>
+                    <td>${escapeHtml(r.pacNome)}</td>
+                    <td>${escapeHtml(r.forma)}</td>
+                    <td style="text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(r.valor))}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="4" style="text-align:center; padding: 14px; color:#6b7280;">Nenhum pagamento registrado no dia.</td></tr>`;
+
+        const paymentsTableRowsWithTotal = paymentsRows.length ? (paymentsTableRows + `
+            <tr>
+                <td colspan="3" style="text-align:right; font-weight: 900;">TOTAL</td>
+                <td style="text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(paymentsTotal))}</td>
+            </tr>
+        `) : paymentsTableRows;
+
+        let commissionsHtml = '';
+        let commissionsTotal = null;
+        if (isAdminRole() || isSuperAdmin || can('comissoes', 'select')) {
+            try {
+                const tryFetchComByDateCol = async (dateCol) => {
+                    let comQ = db.from('financeiro_comissoes')
+                        .select('*')
+                        .eq('empresa_id', currentEmpresaId)
+                        .gte(dateCol, startIso)
+                        .lte(dateCol, endIso)
+                        .order('profissional_id', { ascending: true });
+                    if (profSeqId) comQ = comQ.eq('profissional_id', Number(profSeqId));
+                    const { data, error } = await withTimeout(comQ, 15000, `fechamento:financeiro_comissoes:${dateCol}`);
+                    if (error) throw error;
+                    return Array.isArray(data) ? data : [];
+                };
+                let comRows = [];
+                try {
+                    comRows = await tryFetchComByDateCol('data_geracao');
+                } catch {
+                    try {
+                        comRows = await tryFetchComByDateCol('criado_em');
+                    } catch {
+                        comRows = await tryFetchComByDateCol('created_at');
+                    }
+                }
+
+                const itemIds = Array.from(new Set(comRows.map(r => r.item_id).filter(Boolean).map(String)));
+                const itemToServico = new Map();
+                if (itemIds.length) {
+                    const chunk = itemIds.slice(0, 200);
+                    const { data: its, error: itErr } = await withTimeout(
+                        db.from('orcamento_itens').select('id, servico_id').in('id', chunk),
+                        15000,
+                        'fechamento:orcamento_itens'
+                    );
+                    if (!itErr && Array.isArray(its)) {
+                        its.forEach(it => itemToServico.set(String(it.id), String(it.servico_id || '')));
+                    }
+                }
+                const servById = new Map((services || []).map(s => [String(s.id), s]));
+
+                const comTotal = comRows.reduce((acc, r) => acc + Number(r.valor_comissao || 0), 0);
+                commissionsTotal = comTotal;
+                const comTableRows = comRows.length ? comRows.map(r => {
+                    const prof = getProfessionalNameBySeqId(r.profissional_id);
+                    const sid = itemToServico.get(String(r.item_id || '')) || '';
+                    const serv = sid ? servById.get(String(sid)) : null;
+                    const itemLabel = r.item_descricao ? String(r.item_descricao) : (serv ? String(serv.descricao || serv.nome || '—') : '—');
+                    const val = formatCurrencyBRL(Number(r.valor_comissao || 0));
+                    const st = String(r.status || '—');
+                    return `
+                        <tr>
+                            <td>${escapeHtml(String(prof || '—'))}</td>
+                            <td>${escapeHtml(itemLabel)}</td>
+                            <td>${escapeHtml(st)}</td>
+                            <td style="text-align:right; font-weight: 900;">${escapeHtml(val)}</td>
+                        </tr>
+                    `;
+                }).join('') : `<tr><td colspan="4" style="text-align:center; padding: 14px; color:#6b7280;">Nenhuma comissão gerada no dia.</td></tr>`;
+
+                commissionsHtml = `
+                    <div style="margin-top: 18px;">
+                        <div style="font-weight: 900; font-size: 13px;">Comissões do Dia (Admin)</div>
+                        <div style="color:#6b7280; font-size: 11px; margin-top: 4px;">Total: <strong>${escapeHtml(formatCurrencyBRL(comTotal))}</strong></div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Profissional</th>
+                                    <th>Serviço</th>
+                                    <th style="width: 110px;">Status</th>
+                                    <th style="width: 120px; text-align:right;">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>${comTableRows}</tbody>
+                        </table>
+                    </div>
+                `;
+            } catch {
+                commissionsTotal = null;
+                commissionsHtml = `
+                    <div style="margin-top: 18px;">
+                        <div style="font-weight: 900; font-size: 13px;">Comissões do Dia (Admin)</div>
+                        <div style="color:#6b7280; font-size: 11px; margin-top: 4px;">Falha ao carregar comissões.</div>
+                    </div>
+                `;
+            }
+        }
 
         const tableRows = rows.length ? rows.map(r => `
             <tr>
@@ -2133,6 +3715,11 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
     <div class="kpi"><label>Itens</label><div>${rows.length}</div></div>
     <div class="kpi"><label>Finalizados</label><div>${totalFinalizados}</div></div>
     <div class="kpi"><label>Total Produzido</label><div>${formatCurrencyBRL(totalProduzido)}</div></div>
+    <div class="kpi"><label>Total Finalizados</label><div>${formatCurrencyBRL(totalFinalizadosValor)}</div></div>
+    <div class="kpi"><label>Total Pagamentos</label><div>${formatCurrencyBRL(paymentsTotal)}</div></div>
+    ${(isAdminRole() || isSuperAdmin || can('comissoes','select'))
+        ? `<div class="kpi"><label>Total Comissões</label><div>${commissionsTotal == null ? '—' : escapeHtml(formatCurrencyBRL(commissionsTotal))}</div></div>`
+        : ''}
   </div>
 
   <table>
@@ -2150,6 +3737,26 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
       ${tableRows}
     </tbody>
   </table>
+
+  <div style="margin-top: 10px;">
+    <div style="font-weight: 900; font-size: 13px;">Pagamentos do Dia</div>
+    <div class="sub">Total: <strong>${escapeHtml(formatCurrencyBRL(paymentsTotal))}</strong> • ${escapeHtml(paymentsFormaSummary)}</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:72px;">Hora</th>
+          <th>Paciente</th>
+          <th style="width:160px;">Forma</th>
+          <th style="width:120px; text-align:right;">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${paymentsTableRowsWithTotal}
+      </tbody>
+    </table>
+  </div>
+
+  ${commissionsHtml}
 
   <div class="footer">Documento interno • Fechamento Diário</div>
 </body>
@@ -2188,6 +3795,46 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+function normalizeImageSrc(src) {
+    const s0 = String(src || '');
+    const s = s0.trim();
+    if (!s) return '';
+    const lower = s.toLowerCase();
+    if (lower.startsWith('data:')) return s;
+    if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('blob:')) return s;
+    if (s.startsWith('/')) return s;
+    const compact = s.replace(/\s+/g, '');
+    if (/^[a-z0-9+/]+={0,2}$/i.test(compact) && compact.length > 100) {
+        const mime = compact.startsWith('/9j/') ? 'image/jpeg' : (compact.startsWith('iVBOR') ? 'image/png' : 'image/png');
+        return `data:${mime};base64,${compact}`;
+    }
+    return '';
+}
+
+function getProfessionalPhotoValue(p) {
+    if (!p || typeof p !== 'object') return '';
+    const tryValue = (v) => {
+        if (!v) return '';
+        if (typeof v === 'string' || typeof v === 'number') return normalizeImageSrc(v);
+        if (typeof v === 'object') {
+            const keys = ['src', 'url', 'data', 'base64', 'value', 'photo', 'foto', 'imagem'];
+            for (const k of keys) {
+                if (v && Object.prototype.hasOwnProperty.call(v, k)) {
+                    const out = normalizeImageSrc(v[k]);
+                    if (out) return out;
+                }
+            }
+        }
+        return '';
+    };
+    const candidates = [p.photo, p.foto, p.foto_base64, p.photo_base64, p.imagem, p.imagem_base64];
+    for (const c of candidates) {
+        const out = tryValue(c);
+        if (out) return out;
+    }
+    return '';
 }
 
 function normalizeKey(v) {
@@ -2701,13 +4348,14 @@ function initProteseModule() {
     const btnCancel = document.getElementById('btnProteseCancel');
     const btnSave = document.getElementById('btnProteseSave');
     const btnPrint = document.getElementById('btnProtesePrint');
+    const btnPrintSimple = document.getElementById('btnProtesePrintSimple');
     const btnCustodia = document.getElementById('btnProteseCustodia');
+    const proteseQuickEventType = document.getElementById('proteseQuickEventType');
+    const btnProteseQuickEventApply = document.getElementById('btnProteseQuickEventApply');
     const execSelect = document.getElementById('proteseTipoExecucao');
     const orcInput = document.getElementById('proteseOrcamentoSeqid');
     const orcItemSelect = document.getElementById('proteseOrcamentoItemId');
     const btnEventClose = document.getElementById('btnProteseEventClose');
-    const btnEventSend = document.getElementById('btnProteseEventSend');
-    const btnEventReceive = document.getElementById('btnProteseEventReceive');
     const btnEventTryIn = document.getElementById('btnProteseEventTryIn');
     const btnEventApprove = document.getElementById('btnProteseEventApprove');
     const btnEventReprove = document.getElementById('btnProteseEventReprove');
@@ -2721,6 +4369,7 @@ function initProteseModule() {
     const btnPayablesClose = document.getElementById('btnProtesePayablesClose');
     const btnPayablesClose2 = document.getElementById('btnCloseModalProtesePayables');
     const btnPayablesRefresh = document.getElementById('btnProtesePayablesRefresh');
+    const btnPayablesPrint = document.getElementById('btnProtesePayablesPrint');
     const payStatusFilter = document.getElementById('protesePayablesStatusFilter');
     const payDestFilter = document.getElementById('protesePayablesDestFilter');
     const paySearch = document.getElementById('protesePayablesSearch');
@@ -2743,7 +4392,10 @@ function initProteseModule() {
     if (btnProtesePayables) btnProtesePayables.disabled = !canSelect;
     if (btnProtesePayables) btnProtesePayables.style.opacity = canSelect ? '1' : '0.5';
     if (btnProteseRefresh) btnProteseRefresh.disabled = !canSelect;
-    if (btnProteseReports) btnProteseReports.disabled = true;
+    if (btnProteseReports) {
+        btnProteseReports.disabled = !canSelect;
+        btnProteseReports.style.opacity = canSelect ? '1' : '0.5';
+    }
 
     if (window.__proteseDelegated) return;
     window.__proteseDelegated = true;
@@ -2752,7 +4404,7 @@ function initProteseModule() {
     if (btnProteseNew) btnProteseNew.addEventListener('click', () => openProteseModal(null));
     if (btnProteseLabs) btnProteseLabs.addEventListener('click', () => openProteseLabsModal());
     if (btnProtesePayables) btnProtesePayables.addEventListener('click', () => openProtesePayablesModal());
-    if (btnProteseReports) btnProteseReports.addEventListener('click', () => showToast('Relatórios em desenvolvimento.', true));
+    if (btnProteseReports) btnProteseReports.addEventListener('click', () => openProteseReportsModal());
 
     const refetch = () => fetchProteseFromUI();
     if (statusFilter) statusFilter.addEventListener('change', refetch);
@@ -2771,14 +4423,28 @@ function initProteseModule() {
     if (btnCancel) btnCancel.addEventListener('click', closeProteseModal);
     if (btnSave) btnSave.addEventListener('click', () => saveProteseOrder());
     if (btnPrint) btnPrint.addEventListener('click', () => printProteseOrder());
+    if (btnPrintSimple) btnPrintSimple.addEventListener('click', () => printProteseOrderSimple());
     if (btnCustodia) btnCustodia.addEventListener('click', () => openProteseCustodiaModal());
+    if (proteseQuickEventType) proteseQuickEventType.addEventListener('change', () => syncProteseEventButtons());
     if (execSelect) execSelect.addEventListener('change', () => syncProteseExecucaoGroups());
     if (orcInput) orcInput.addEventListener('input', () => syncProteseOrcamentoItens());
     if (orcItemSelect) orcItemSelect.addEventListener('change', () => updateProteseItemInfo());
     if (btnEventClose) btnEventClose.addEventListener('click', async () => {
-        const st = document.getElementById('proteseStatusGeral');
-        if (st) st.value = 'CONCLUIDA';
-        await saveProteseOrder();
+        try {
+            const st = document.getElementById('proteseStatusGeral');
+            if (st) st.value = 'CONCLUIDA';
+            await addProteseTimelineEvent({
+                tipoEvento: 'ENCERRAMENTO',
+                faseResultante: 'ENCERRADA',
+                statusResultante: 'CONCLUIDA',
+                deLocal: null,
+                paraLocal: null,
+                nota: getNota()
+            });
+        } catch (err) {
+            const msg = err && err.message ? err.message : 'Erro desconhecido';
+            showToast(`Falha ao registrar encerramento: ${msg}`, true);
+        }
     });
     const getExecLabels = () => {
         const o = currentProteseOrder;
@@ -2791,40 +4457,45 @@ function initProteseModule() {
         return {
             exec,
             fromClinic: 'Clínica',
-            toExec: exec === 'EXTERNA' ? `Laboratório: ${executor}` : `Protético: ${executor}`
+            executorName: executor
         };
     };
     const getNota = () => String((document.getElementById('proteseNota') || {}).value || '').trim();
-    if (btnEventSend) btnEventSend.addEventListener('click', async () => {
+    if (btnProteseQuickEventApply) btnProteseQuickEventApply.addEventListener('click', async () => {
+        const kind = proteseQuickEventType ? String(proteseQuickEventType.value || '') : '';
+        if (!kind) { showToast('Selecione Entrega ou Recebimento.', true); return; }
+        const { fromClinic, executorName } = getExecLabels();
+        const nota = getNota();
         try {
-            const { fromClinic, toExec } = getExecLabels();
-            await addProteseTimelineEvent({
-                tipoEvento: 'ENVIO',
-                faseResultante: 'ENVIADA',
-                statusResultante: null,
-                deLocal: fromClinic,
-                paraLocal: toExec,
-                nota: getNota()
-            });
+            btnProteseQuickEventApply.disabled = true;
+            if (kind === 'ENTREGA') {
+                await addProteseTimelineEvent({
+                    tipoEvento: 'ENVIO',
+                    faseResultante: 'ENVIADA',
+                    statusResultante: null,
+                    deLocal: fromClinic,
+                    paraLocal: executorName,
+                    nota
+                });
+                showToast('Entrega registrada.');
+            } else if (kind === 'RECEBIMENTO') {
+                await addProteseTimelineEvent({
+                    tipoEvento: 'RECEBIMENTO',
+                    faseResultante: 'RECEBIDA',
+                    statusResultante: null,
+                    deLocal: executorName,
+                    paraLocal: fromClinic,
+                    nota
+                });
+                showToast('Recebimento registrado.');
+            }
+            if (proteseQuickEventType) proteseQuickEventType.value = '';
         } catch (err) {
             const msg = err && err.message ? err.message : 'Erro desconhecido';
-            showToast(`Falha ao registrar envio: ${msg}`, true);
-        }
-    });
-    if (btnEventReceive) btnEventReceive.addEventListener('click', async () => {
-        try {
-            const { fromClinic, toExec } = getExecLabels();
-            await addProteseTimelineEvent({
-                tipoEvento: 'RECEBIMENTO',
-                faseResultante: 'RECEBIDA',
-                statusResultante: null,
-                deLocal: toExec,
-                paraLocal: fromClinic,
-                nota: getNota()
-            });
-        } catch (err) {
-            const msg = err && err.message ? err.message : 'Erro desconhecido';
-            showToast(`Falha ao registrar recebimento: ${msg}`, true);
+            showToast(`Falha ao registrar: ${msg}`, true);
+        } finally {
+            btnProteseQuickEventApply.disabled = false;
+            syncProteseEventButtons();
         }
     });
     if (btnEventTryIn) btnEventTryIn.addEventListener('click', async () => {
@@ -2874,7 +4545,7 @@ function initProteseModule() {
     });
 
     const closeCustModal = () => {
-        if (custModal) custModal.classList.add('hidden');
+        closeProteseCustodiaModal();
     };
     if (btnCustClose) btnCustClose.addEventListener('click', closeCustModal);
     if (btnCustClose2) btnCustClose2.addEventListener('click', closeCustModal);
@@ -2892,6 +4563,7 @@ function initProteseModule() {
     if (btnPayablesClose) btnPayablesClose.addEventListener('click', closePayablesModal);
     if (btnPayablesClose2) btnPayablesClose2.addEventListener('click', closePayablesModal);
     if (btnPayablesRefresh) btnPayablesRefresh.addEventListener('click', () => fetchProtesePayablesFromUI());
+    if (btnPayablesPrint) btnPayablesPrint.addEventListener('click', () => printProtesePayablesReport());
     const refetchPay = () => fetchProtesePayablesFromUI();
     if (payStatusFilter) payStatusFilter.addEventListener('change', refetchPay);
     if (payDestFilter) payDestFilter.addEventListener('change', refetchPay);
@@ -3180,6 +4852,8 @@ function openProteseModal(order) {
     syncProteseExecucaoGroups();
     const btnPrint = document.getElementById('btnProtesePrint');
     if (btnPrint) btnPrint.disabled = !currentProteseOrder;
+    const btnPrintSimple = document.getElementById('btnProtesePrintSimple');
+    if (btnPrintSimple) btnPrintSimple.disabled = !currentProteseOrder;
     const timeline = document.getElementById('proteseTimeline');
     if (timeline) {
         if (currentProteseOrder && currentProteseOrder.id) {
@@ -3192,9 +4866,87 @@ function openProteseModal(order) {
     modal.classList.remove('hidden');
 }
 
+function openProteseReportsModal() {
+    const modal = document.getElementById('proteseReportsModal');
+    const body = document.getElementById('proteseReportsBody');
+    const btnClose = document.getElementById('btnCloseProteseReportsModal');
+    const btnClose2 = document.getElementById('btnCloseProteseReportsModal2');
+    const btnPrint = document.getElementById('btnProteseReportsPrint');
+    if (!modal || !body) return;
+
+    const orders = Array.isArray(proteseOrders) ? proteseOrders : [];
+    const budgetById = new Map((budgets || []).map(b => [String(b.id), b]));
+    const byStatus = {};
+    const byPhase = {};
+    let totalProt = 0;
+    orders.forEach(o => {
+        const st = String(o.status_geral || '—');
+        const ph = String(o.fase_atual || '—');
+        byStatus[st] = (byStatus[st] || 0) + 1;
+        byPhase[ph] = (byPhase[ph] || 0) + 1;
+        const rawDirect = Number(o.valor_protetico || 0);
+        if (rawDirect) {
+            totalProt += rawDirect;
+        } else {
+            const b = budgetById.get(String(o.orcamento_id || ''));
+            const itens = b ? (b.orcamento_itens || []) : [];
+            const it = (o.orcamento_item_id ? itens.find(x => String(x.id) === String(o.orcamento_item_id)) : null);
+            totalProt += Number((it && (it.valor_protetico || it.valorProtetico)) || 0);
+        }
+    });
+
+    const toRows = obj => Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right;">${v}</td></tr>`).join('');
+    const html = `
+      <div class="card" style="padding: 12px; margin-bottom: 12px;">
+        <div style="display:flex; gap: 12px; flex-wrap: wrap;">
+          <div style="flex:1; min-width: 260px;">
+            <div style="font-weight: 900; margin-bottom: 6px;">Por Status</div>
+            <table class="main-table">
+              <thead><tr><th>Status</th><th style="text-align:right;">Qtd</th></tr></thead>
+              <tbody>${toRows(byStatus)}</tbody>
+            </table>
+          </div>
+          <div style="flex:1; min-width: 260px;">
+            <div style="font-weight: 900; margin-bottom: 6px;">Por Fase</div>
+            <table class="main-table">
+              <thead><tr><th>Fase</th><th style="text-align:right;">Qtd</th></tr></thead>
+              <tbody>${toRows(byPhase)}</tbody>
+            </table>
+          </div>
+          <div style="flex:1; min-width: 220px;">
+            <div style="font-weight: 900; margin-bottom: 6px;">KPIs</div>
+            <div>Total OPs: <strong>${orders.length}</strong></div>
+            <div style="margin-top: 6px;">Total Protético: <strong>${formatCurrencyBRL(totalProt)}</strong></div>
+          </div>
+        </div>
+      </div>
+    `;
+    body.innerHTML = html;
+
+    const close = () => { modal.classList.add('hidden'); };
+    if (!modal.dataset.bound) {
+        if (btnClose) btnClose.addEventListener('click', close);
+        if (btnClose2) btnClose2.addEventListener('click', close);
+        if (btnPrint) btnPrint.addEventListener('click', () => {
+            const w = window.open('', '_blank', 'width=900,height=700');
+            if (!w) return;
+            w.document.write(`<html><head><meta charset="utf-8"><title>Relatórios OP</title>
+                <link rel="stylesheet" href="styles.css?v=${encodeURIComponent(APP_BUILD)}">
+                </head><body>${body.innerHTML}</body></html>`);
+            w.document.close();
+            w.focus();
+            setTimeout(() => w.print(), 300);
+        });
+        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+        modal.dataset.bound = '1';
+    }
+    modal.classList.remove('hidden');
+}
+
 function syncProteseEventButtons() {
-    const btnSend = document.getElementById('btnProteseEventSend');
-    const btnReceive = document.getElementById('btnProteseEventReceive');
+    const quickSel = document.getElementById('proteseQuickEventType');
+    const btnQuick = document.getElementById('btnProteseQuickEventApply');
+    const btnCustodia = document.getElementById('btnProteseCustodia');
     const btnTryIn = document.getElementById('btnProteseEventTryIn');
     const btnApprove = document.getElementById('btnProteseEventApprove');
     const btnReprove = document.getElementById('btnProteseEventReprove');
@@ -3211,12 +4963,20 @@ function syncProteseEventButtons() {
     };
 
     const enabled = canWrite && !isDone;
-    setBtn(btnSend, enabled);
-    setBtn(btnReceive, enabled);
+    setBtn(btnQuick, enabled);
     setBtn(btnTryIn, enabled);
     setBtn(btnApprove, enabled);
     setBtn(btnReprove, enabled);
     setBtn(btnClose, enabled);
+    if (quickSel) {
+        quickSel.disabled = !enabled;
+        quickSel.style.opacity = enabled ? '1' : '0.55';
+    }
+    if (btnCustodia) {
+        const hasChoice = quickSel ? Boolean(String(quickSel.value || '')) : false;
+        btnCustodia.disabled = !(enabled && hasChoice);
+        btnCustodia.style.opacity = (enabled && hasChoice) ? '1' : '0.55';
+    }
 }
 
 function syncProteseExecucaoGroups() {
@@ -3528,6 +5288,9 @@ async function addProteseTimelineEvent({ tipoEvento, faseResultante, statusResul
 
     const notaEl = document.getElementById('proteseNota');
     if (notaEl) notaEl.value = '';
+    const quickSel = document.getElementById('proteseQuickEventType');
+    if (quickSel) quickSel.value = '';
+    syncProteseEventButtons();
 
     await loadProteseTimeline(String(o.id));
     await fetchProteseFromUI();
@@ -3595,12 +5358,16 @@ async function saveProteseOrder() {
             showToast('OP criada com sucesso!');
             const btnPrint = document.getElementById('btnProtesePrint');
             if (btnPrint) btnPrint.disabled = false;
+            const btnPrintSimple = document.getElementById('btnProtesePrintSimple');
+            if (btnPrintSimple) btnPrintSimple.disabled = false;
+            const quickSel = document.getElementById('proteseQuickEventType');
+            if (quickSel) quickSel.value = '';
             syncProteseEventButtons();
             try {
                 const execLocal = exec === 'EXTERNA'
                     ? ((proteseLabs || []).find(l => String(l.id) === String(labId || ''))?.nome || 'Laboratório')
                     : ((professionals || []).find(p => String(p.id) === String(protId || ''))?.nome || 'Protético');
-                const paraLocal = exec === 'EXTERNA' ? `Laboratório: ${execLocal}` : `Protético: ${execLocal}`;
+                const paraLocal = String(execLocal || 'Protético');
                 await addProteseTimelineEvent({
                     tipoEvento: 'CRIACAO',
                     faseResultante: 'CRIADA',
@@ -3636,6 +5403,10 @@ async function saveProteseOrder() {
             showToast('OP atualizada com sucesso!');
             const btnPrint = document.getElementById('btnProtesePrint');
             if (btnPrint) btnPrint.disabled = false;
+            const btnPrintSimple = document.getElementById('btnProtesePrintSimple');
+            if (btnPrintSimple) btnPrintSimple.disabled = false;
+            const quickSel = document.getElementById('proteseQuickEventType');
+            if (quickSel) quickSel.value = '';
             syncProteseEventButtons();
         }
         await fetchProteseFromUI();
@@ -3843,6 +5614,168 @@ async function printProteseOrder() {
     setTimeout(() => win.print(), 500);
 }
 
+async function printProteseOrderSimple() {
+    const o = currentProteseOrder;
+    if (!o) { showToast('Salve a OP antes de imprimir.', true); return; }
+
+    const pac = (patients || []).find(p => String(p.id) === String(o.paciente_id || ''));
+    const pacNome = pac ? String(pac.nome || '') : '—';
+    const exec = String(o.tipo_execucao || '');
+    const executor = exec === 'EXTERNA'
+        ? ((proteseLabs || []).find(l => String(l.id) === String(o.laboratorio_id || ''))?.nome || '—')
+        : ((professionals || []).find(p => String(p.id) === String(o.protetico_id || ''))?.nome || '—');
+
+    let opEvents = [];
+    try {
+        const { data, error } = await withTimeout(
+            db.from('ordens_proteticas_eventos')
+                .select('*')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ordem_id', o.id)
+                .order('created_at', { ascending: false })
+                .limit(500),
+            15000,
+            'ordens_proteticas_eventos:print_simple'
+        );
+        if (error) throw error;
+        opEvents = Array.isArray(data) ? data : [];
+    } catch {
+        opEvents = [];
+    }
+
+    let custEvents = [];
+    try {
+        const { data, error } = await withTimeout(
+            db.from('ordens_proteticas_custodia_eventos')
+                .select('*')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('ordem_id', o.id)
+                .order('confirmed_at', { ascending: false })
+                .limit(200),
+            15000,
+            'ordens_proteticas_custodia_eventos:print_simple'
+        );
+        if (error) throw error;
+        custEvents = Array.isArray(data) ? data : [];
+    } catch {
+        custEvents = [];
+    }
+
+    const all = (opEvents || [])
+        .filter(r => String(r.tipo_evento || '') !== 'CUSTODIA')
+        .filter(r => !String(r.nota || '').includes('[custodia_evento_id='))
+        .map(r => ({
+            ts: r.created_at || null,
+            evento: String(r.tipo_evento || ''),
+            fase: String(r.fase_resultante || ''),
+            de: String(r.de_local || ''),
+            para: String(r.para_local || ''),
+            obs: String(r.nota || ''),
+            rubrica: ''
+        }))
+        .concat((custEvents || []).map(r => {
+            const acao = String(r.acao || '');
+            const sig = String(r.assinatura_base64 || r.assinatura || r.assinatura_img || r.signature || '');
+            const rubrica = sig && sig.startsWith('data:image') ? sig : '';
+            const doc = r.recebedor_doc ? ` (${String(r.recebedor_doc || '')})` : '';
+            return {
+                ts: r.confirmed_at || r.created_at || null,
+                evento: `CUSTÓDIA - ${acao}`,
+                fase: acao === 'ENTREGA' ? 'ENVIADA' : (acao === 'RECEBIMENTO' ? 'RECEBIDA' : ''),
+                de: String(r.de_local || ''),
+                para: String(r.para_local || ''),
+                obs: `Recebedor: ${String(r.recebedor_nome || '')}${doc}`,
+                rubrica
+            };
+        }))
+        .filter(x => x.ts);
+
+    all.sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
+
+    const blocks = all.length ? all.map(r => {
+        const dt = r.ts ? formatDateTime(r.ts) : '—';
+        const rubricaCell = r.rubrica
+            ? `<div style="background:#fff; border:1px solid #e5e7eb; padding:2px; display:flex; align-items:center; justify-content:center;">
+                   <img src="${r.rubrica}" alt="Rubrica" style="height: 34px; width: auto; display:block; margin: 0 auto; filter: invert(1) grayscale(1) contrast(1.15) brightness(1.0); background:#fff;">
+               </div>`
+            : '';
+        return `
+            <tr>
+                <td class="nowrap">${escapeHtml(dt)}</td>
+                <td class="nowrap" style="font-weight: 900;">${escapeHtml(r.evento || '—')}</td>
+                <td class="nowrap">${escapeHtml(r.fase || '—')}</td>
+                <td>${escapeHtml(r.de || '—')}</td>
+                <td>${escapeHtml(r.para || '—')}</td>
+                <td style="white-space: pre-wrap;">${escapeHtml(r.obs || '')}</td>
+                <td style="text-align:center;">${rubricaCell}</td>
+            </tr>
+        `;
+    }).join('') : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Impressão Simples — OP</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color:#111827; padding: 16px 16px 20px; }
+    .header { border-bottom: 2px solid #0066cc; padding-bottom: 10px; margin-bottom: 10px; }
+    .title { font-size: 16px; font-weight: 900; color:#0066cc; }
+    .sub { color:#6b7280; margin-top: 6px; font-size: 12px; }
+    .sec { margin-top: 12px; }
+    .sec h3 { font-size: 13px; font-weight: 900; margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 8px; }
+    th { background: #f9fafb; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color:#374151; }
+    td.muted, .muted { color:#6b7280; }
+    .nowrap { white-space: nowrap; }
+    @media print {
+      @page { size: A4 landscape; margin: 10mm; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">Impressão Simples — Ordem Protética</div>
+    <div class="sub">Paciente: <strong>${escapeHtml(pacNome)}</strong></div>
+    <div class="sub">Executor: <strong>${escapeHtml(String(executor || '—'))}</strong></div>
+    <div class="sub">Gerado em: ${escapeHtml(new Date().toLocaleString('pt-BR'))}</div>
+  </div>
+
+  <div class="sec">
+    <h3>Controle de Idas e Vindas (Histórico)</h3>
+    ${blocks ? `
+      <table>
+        <thead>
+          <tr>
+            <th class="nowrap" style="width: 150px;">Data/Hora</th>
+            <th class="nowrap" style="width: 120px;">Evento</th>
+            <th class="nowrap" style="width: 95px;">Fase</th>
+            <th style="width: 180px;">De</th>
+            <th style="width: 180px;">Para</th>
+            <th>Observação</th>
+            <th style="width: 120px; text-align:center;">Rubrica</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${blocks}
+        </tbody>
+      </table>
+    ` : `<div class="muted">Nenhum registro de custódia encontrado.</div>`}
+  </div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) { showToast('Habilite pop-ups para imprimir.', true); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
+}
+
 function isProteseCustodiaEnabled() {
     try {
         const v = localStorage.getItem('dp_feature_protese_custodia');
@@ -3870,6 +5803,16 @@ async function openProteseCustodiaModal() {
         return;
     }
 
+    const quickSel = document.getElementById('proteseQuickEventType');
+    const selected = quickSel ? String(quickSel.value || '') : '';
+    if (!selected) {
+        showToast('Selecione Entrega ou Recebimento antes de usar Custódia (QR).', true);
+        if (quickSel) quickSel.focus();
+        return;
+    }
+    if (quickSel) quickSel.value = '';
+    syncProteseEventButtons();
+
     if (!currentProteseOrder) {
         await saveProteseOrder();
     }
@@ -3887,12 +5830,11 @@ async function openProteseCustodiaModal() {
 
     const defaults = (() => {
         const fromClinic = 'Clínica';
-        const toExec = exec === 'EXTERNA' ? `Laboratório: ${executor}` : `Protético: ${executor}`;
-        return {
-            acao: 'ENTREGA',
-            de_local: fromClinic,
-            para_local: toExec
-        };
+        const toExec = String(executor || 'Protético');
+        const a = selected === 'RECEBIMENTO' ? 'RECEBIMENTO' : 'ENTREGA';
+        return a === 'ENTREGA'
+            ? { acao: 'ENTREGA', de_local: fromClinic, para_local: toExec }
+            : { acao: 'RECEBIMENTO', de_local: toExec, para_local: fromClinic };
     })();
 
     const baseUrl = getProteseCustodiaBaseUrl();
@@ -3941,7 +5883,7 @@ async function openProteseCustodiaModal() {
     const syncDePara = () => {
         const a = acaoEl ? String(acaoEl.value || 'ENTREGA') : 'ENTREGA';
         const fromClinic = 'Clínica';
-        const toExec = exec === 'EXTERNA' ? `Laboratório: ${executor}` : `Protético: ${executor}`;
+        const toExec = String(executor || 'Protético');
         if (a === 'ENTREGA') {
             if (deEl) deEl.value = fromClinic;
             if (paraEl) paraEl.value = toExec;
@@ -3966,6 +5908,50 @@ async function openProteseCustodiaModal() {
         btnGerar.style.opacity = '0.6';
 
         try {
+            try {
+                const { data: lastRows, error: lastErr } = await withTimeout(
+                    db.from('ordens_proteticas_custodia_eventos')
+                        .select('acao,confirmed_at')
+                        .eq('empresa_id', currentEmpresaId)
+                        .eq('ordem_id', o.id)
+                        .order('confirmed_at', { ascending: false })
+                        .limit(1),
+                    10000,
+                    'custodia:check_last'
+                );
+                if (!lastErr && Array.isArray(lastRows) && lastRows.length) {
+                    const last = lastRows[0];
+                    const lastA = String(last.acao || '').toUpperCase();
+                    const curA = String(acao || '').toUpperCase();
+                    if (lastA === curA) {
+                        const opp = curA === 'ENTREGA' ? 'RECEBIMENTO' : 'ENTREGA';
+                        let hasOppAfter = false;
+                        try {
+                            const { data: oppRows, error: oppErr } = await withTimeout(
+                                db.from('ordens_proteticas_custodia_eventos')
+                                    .select('id')
+                                    .eq('empresa_id', currentEmpresaId)
+                                    .eq('ordem_id', o.id)
+                                    .eq('acao', opp)
+                                    .gt('confirmed_at', last.confirmed_at || '')
+                                    .limit(1),
+                                8000,
+                                'custodia:check_opp'
+                            );
+                            hasOppAfter = !oppErr && Array.isArray(oppRows) && oppRows.length > 0;
+                        } catch {}
+                        if (!hasOppAfter) {
+                            const proceed = window.confirm(`A última custódia registrada foi ${curA}. Não encontramos ${opp} posterior.\nDeseja mesmo gerar uma nova ${curA} para conserto?`);
+                            if (!proceed) {
+                                btnGerar.disabled = false;
+                                btnGerar.style.opacity = '1';
+                                return;
+                            }
+                        }
+                    }
+                }
+            } catch { /* se checagem falhar, prossegue */ }
+
             const { data, error } = await withTimeout(
                 db.rpc('rpc_protese_custodia_issue_token', {
                     p_empresa_id: currentEmpresaId,
@@ -3990,6 +5976,14 @@ async function openProteseCustodiaModal() {
             const exp = row.expires_at ? String(row.expires_at) : '';
             const link = `${base.replace(/\/$/, '')}/protese_custodia.html?t=${encodeURIComponent(token)}&v=${encodeURIComponent(APP_BUILD)}`;
             const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
+            try {
+                window.__custAckShown = false;
+                window.__custPollIssuedAt = new Date().toISOString();
+                window.__custPollToken = token;
+                window.__custPollTokenId = null;
+                const prev = document.getElementById('custAckOverlay');
+                if (prev) prev.remove();
+            } catch { }
 
             const out = document.getElementById('custOut');
             if (out) {
@@ -4023,11 +6017,48 @@ async function openProteseCustodiaModal() {
 
                 const btnCopy = document.getElementById('btnCustCopy');
                 if (btnCopy) btnCopy.addEventListener('click', async () => {
-                    try {
+                    const tryClipboardApi = async () => {
+                        if (!navigator.clipboard || !window.isSecureContext) return false;
                         await navigator.clipboard.writeText(link);
-                        showToast('Link copiado.');
+                        return true;
+                    };
+                    const tryExecCommand = () => {
+                        const input = document.getElementById('custLink');
+                        if (input && typeof input.select === 'function') {
+                            input.focus();
+                            input.select();
+                            try { input.setSelectionRange(0, 99999); } catch { }
+                            try {
+                                return document.execCommand && document.execCommand('copy');
+                            } catch {
+                                return false;
+                            }
+                        }
+                        try {
+                            const ta = document.createElement('textarea');
+                            ta.value = link;
+                            ta.setAttribute('readonly', '');
+                            ta.style.position = 'fixed';
+                            ta.style.left = '-9999px';
+                            ta.style.top = '0';
+                            document.body.appendChild(ta);
+                            ta.focus();
+                            ta.select();
+                            const ok = document.execCommand && document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            return ok;
+                        } catch {
+                            return false;
+                        }
+                    };
+                    try {
+                        const ok = (await tryClipboardApi()) || tryExecCommand();
+                        if (ok) showToast('Link copiado.');
+                        else showToast('Falha ao copiar. Selecione e copie manualmente.', true);
                     } catch {
-                        showToast('Falha ao copiar. Selecione e copie manualmente.', true);
+                        const ok = tryExecCommand();
+                        if (ok) showToast('Link copiado.');
+                        else showToast('Falha ao copiar. Selecione e copie manualmente.', true);
                     }
                 });
 
@@ -4055,6 +6086,49 @@ async function openProteseCustodiaModal() {
                 if (btnVerify) btnVerify.addEventListener('click', async () => {
                     await refreshProteseCustodiaEvents(o.id, true);
                 });
+
+                try {
+                    if (window.__custPollTimer) {
+                        clearInterval(window.__custPollTimer);
+                        window.__custPollTimer = null;
+                    }
+                    window.__custPollUntil = Date.now() + 15 * 60 * 1000;
+                    window.__custPollTimer = setInterval(async () => {
+                        if (Date.now() > (window.__custPollUntil || 0)) {
+                            clearInterval(window.__custPollTimer);
+                            window.__custPollTimer = null;
+                            window.__custPollUntil = 0;
+                            return;
+                        }
+                        try {
+                            const { data: trows, error: terr } = await withTimeout(
+                                db.from('ordens_proteticas_custodia_tokens')
+                                    .select('id, status, confirmed_at')
+                                    .eq('empresa_id', currentEmpresaId)
+                                    .eq('token', token)
+                                    .limit(1),
+                                10000,
+                                'custodia:poll_token'
+                            );
+                            if (!terr && Array.isArray(trows) && trows.length) {
+                                try { window.__custPollTokenId = trows[0].id || null; } catch {}
+                                const st = String(trows[0].status || '');
+                                const confirmedAt = trows[0].confirmed_at ? String(trows[0].confirmed_at) : '';
+                                if (st === 'CONFIRMADO' || confirmedAt) {
+                                    try { await refreshProteseCustodiaEvents(o.id, true); } catch {}
+                                    try {
+                                        if (!document.getElementById('custAckOverlay')) {
+                                            showCustodiaAck('Assinatura registrada no histórico da OP.');
+                                        }
+                                    } catch {}
+                                    clearInterval(window.__custPollTimer);
+                                    window.__custPollTimer = null;
+                                    window.__custPollUntil = 0;
+                                }
+                            }
+                        } catch { /* ignore */ }
+                    }, 3000);
+                } catch { /* ignore */ }
             }
 
             await refreshProteseCustodiaEvents(o.id, false);
@@ -4069,6 +6143,67 @@ async function openProteseCustodiaModal() {
 
     modal.classList.remove('hidden');
     await refreshProteseCustodiaEvents(o.id, false);
+}
+
+function closeProteseCustodiaModal() {
+    const modal = document.getElementById('proteseCustodiaModal');
+    if (modal) modal.classList.add('hidden');
+    const ack = document.getElementById('custAckOverlay');
+    if (ack) ack.remove();
+    if (window.__custPollTimer) {
+        clearInterval(window.__custPollTimer);
+        window.__custPollTimer = null;
+        window.__custPollUntil = 0;
+    }
+    if (window.__custAckKeyHandler) {
+        document.removeEventListener('keydown', window.__custAckKeyHandler, true);
+        window.__custAckKeyHandler = null;
+    }
+}
+
+function showCustodiaAck(message) {
+    const modal = document.getElementById('proteseCustodiaModal');
+    if (!modal) { showToast(message); return; }
+    if (window.__custPollTimer) {
+        clearInterval(window.__custPollTimer);
+        window.__custPollTimer = null;
+        window.__custPollUntil = 0;
+    }
+    const prev = document.getElementById('custAckOverlay');
+    if (prev) prev.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'custAckOverlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.45)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = '20000';
+    overlay.innerHTML = `
+        <div style="background:#ffffff; color:#111827; border-radius: 14px; border: 1px solid #e5e7eb; padding: 18px 18px; max-width: 640px; width: 92%; text-align:center;">
+            <div style="font-weight: 900; font-size: 16px;">${escapeHtml(String(message || ''))}</div>
+            <div style="margin-top: 10px; color:#6b7280;">Pressione ENTER para fechar</div>
+            <div style="margin-top: 14px; display:flex; justify-content:center;">
+                <button id="custAckCloseBtn" class="btn btn-primary" type="button" style="min-width: 200px;">Fechar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => closeProteseCustodiaModal();
+    const btn = document.getElementById('custAckCloseBtn');
+    if (btn) btn.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    if (window.__custAckKeyHandler) document.removeEventListener('keydown', window.__custAckKeyHandler, true);
+    window.__custAckKeyHandler = (e) => {
+        if (!e) return;
+        if (e.key === 'Enter' || e.key === 'Escape') {
+            e.preventDefault();
+            close();
+        }
+    };
+    document.addEventListener('keydown', window.__custAckKeyHandler, true);
+    try { setTimeout(() => { try { (btn || overlay).focus(); } catch { } }, 50); } catch { }
 }
 
 async function refreshProteseCustodiaEvents(ordemId, tryMirrorToTimeline) {
@@ -4128,7 +6263,7 @@ async function refreshProteseCustodiaEvents(ordemId, tryMirrorToTimeline) {
                     'ordens_proteticas_eventos:mirror_check'
                 );
                 if (!exErr && Array.isArray(existing) && existing.length) {
-                    showToast('Assinatura já registrada no histórico da OP.');
+                    showCustodiaAck('Assinatura já registrada no histórico da OP.');
                     await loadProteseTimeline(String(ordemId));
                     return;
                 }
@@ -4158,7 +6293,7 @@ async function refreshProteseCustodiaEvents(ordemId, tryMirrorToTimeline) {
                     'ordens_proteticas_eventos:mirror_insert'
                 );
                 if (insErr) throw insErr;
-                showToast('Assinatura registrada no histórico da OP.');
+                showCustodiaAck('Assinatura registrada no histórico da OP.');
                 await loadProteseTimeline(String(ordemId));
             }
         }
@@ -4368,6 +6503,7 @@ async function fetchProtesePayables({ statusVal, destVal, q }) {
             });
         }
 
+        protesePayablesFilteredRows = rows.slice();
         renderProtesePayablesTable({ rows, ordersById, budgetById, patientById, labById, profById });
     } catch (err) {
         console.error('Erro ao carregar contas a pagar protética:', err);
@@ -4433,6 +6569,114 @@ function renderProtesePayablesTable({ rows, ordersById, budgetById, patientById,
     });
 }
 
+function printProtesePayablesReport() {
+    const rows = Array.isArray(protesePayablesFilteredRows) ? protesePayablesFilteredRows : [];
+    const ordersById = new Map((proteseOrders || []).map(o => [String(o.id), o]));
+    const budgetById = new Map((budgets || []).map(b => [String(b.id), b]));
+    const patientById = new Map((patients || []).map(p => [String(p.id), p]));
+    const labById = new Map((proteseLabs || []).map(l => [String(l.id), l]));
+    const profById = new Map((professionals || []).map(p => [String(p.id), p]));
+
+    const statusVal = String((document.getElementById('protesePayablesStatusFilter') || {}).value || '');
+    const destVal = String((document.getElementById('protesePayablesDestFilter') || {}).value || '');
+    const q = String((document.getElementById('protesePayablesSearch') || {}).value || '').trim();
+
+    const total = rows.reduce((acc, r) => acc + Number(r.valor || 0), 0);
+    const byStatus = {};
+    rows.forEach(r => {
+        const st = String(r.status || '—');
+        byStatus[st] = (byStatus[st] || 0) + 1;
+    });
+    const statusSummary = Object.entries(byStatus).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}: ${v}`).join(' | ') || '—';
+
+    const tableRows = rows.length ? rows.map(r => {
+        const ord = ordersById.get(String(r.ordem_id || ''));
+        const opSeq = ord ? `#${ord.seqid}` : '—';
+        const bud = ord ? budgetById.get(String(ord.orcamento_id || '')) : null;
+        const orcSeq = bud && bud.seqid != null ? `#${bud.seqid}` : '—';
+        const pac = ord ? patientById.get(String(ord.paciente_id || '')) : null;
+        const pacNome = pac ? String(pac.nome || '') : '—';
+        const destNome = getProtesePayableDestName(r, labById, profById);
+        const venc = r.vencimento ? String(r.vencimento) : '—';
+        const val = formatCurrencyBRL(Number(r.valor || 0));
+        const st = String(r.status || '—');
+        return `
+            <tr>
+                <td>${escapeHtml(opSeq)}</td>
+                <td style="text-align:center;">${escapeHtml(orcSeq)}</td>
+                <td>${escapeHtml(pacNome)}</td>
+                <td>${escapeHtml(String(destNome || '—'))}</td>
+                <td style="text-align:center;">${escapeHtml(venc)}</td>
+                <td style="text-align:right; font-weight: 900;">${escapeHtml(val)}</td>
+                <td>${escapeHtml(st)}</td>
+            </tr>
+        `;
+    }).join('') : `<tr><td colspan="7" style="text-align:center; padding: 14px; color:#6b7280;">Nenhum registro para os filtros.</td></tr>`;
+
+    const destLabel = destVal === 'LABORATORIO' ? 'Laboratório' : (destVal === 'PROTETICO_INTERNO' ? 'Protético interno' : 'Todos');
+    const statusLabel = statusVal || 'Todos';
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Contas a Pagar Protética</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color:#111827; padding: 18px; }
+    .header { border-bottom: 2px solid #0066cc; padding-bottom: 10px; margin-bottom: 10px; }
+    .title { font-size: 16px; font-weight: 900; color:#0066cc; }
+    .sub { color:#6b7280; margin-top: 6px; font-size: 12px; }
+    .kpis { display:flex; gap: 14px; flex-wrap: wrap; margin: 10px 0; }
+    .kpi { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; min-width: 180px; }
+    .kpi label { display:block; font-size: 10px; color:#6b7280; text-transform: uppercase; letter-spacing: .04em; }
+    .kpi div { font-weight: 900; margin-top: 4px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border: 1px solid #e5e7eb; padding: 7px; }
+    th { background: #f9fafb; text-align:left; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color:#374151; }
+    @media print { @page { size: A4 portrait; margin: 10mm; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">Contas a Pagar Protética</div>
+    <div class="sub">Unidade: <strong>${escapeHtml(String(currentEmpresaId || '—'))}</strong> • Gerado em: ${escapeHtml(new Date().toLocaleString('pt-BR'))}</div>
+    <div class="sub">Filtros • Status: <strong>${escapeHtml(statusLabel)}</strong> • Destinatário: <strong>${escapeHtml(destLabel)}</strong> • Busca: <strong>${escapeHtml(q || '—')}</strong></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><label>Registros</label><div>${rows.length}</div></div>
+    <div class="kpi"><label>Total</label><div>${escapeHtml(formatCurrencyBRL(total))}</div></div>
+    <div class="kpi"><label>Status</label><div style="font-size: 12px; font-weight: 700;">${escapeHtml(statusSummary)}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 90px;">OP</th>
+        <th style="width: 80px; text-align:center;">Orç.</th>
+        <th>Paciente</th>
+        <th>Destinatário</th>
+        <th style="width: 90px; text-align:center;">Venc.</th>
+        <th style="width: 120px; text-align:right;">Valor</th>
+        <th style="width: 100px;">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank', 'width=980,height=720');
+    if (!w) { showToast('Habilite pop-ups para imprimir.', true); return; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 350);
+}
+
 window.openProtesePayablePay = function (payableId) {
     const r = (protesePayables || []).find(x => String(x.id) === String(payableId));
     if (!r) {
@@ -4445,6 +6689,7 @@ window.openProtesePayablePay = function (payableId) {
     const idEl = document.getElementById('protesePayablePayId');
     const dtEl = document.getElementById('protesePayablePayData');
     const obsEl = document.getElementById('protesePayablePayObs');
+    const refBox = document.getElementById('protesePayablePayRefContent');
     if (idEl) idEl.value = String(r.id);
     if (obsEl) obsEl.value = '';
     if (dtEl && !dtEl.value) {
@@ -4454,6 +6699,45 @@ window.openProtesePayablePay = function (payableId) {
         const dd = String(today.getDate()).padStart(2, '0');
         dtEl.value = `${yyyy}-${mm}-${dd}`;
     }
+    if (refBox) refBox.textContent = 'Carregando referência...';
+
+    (async () => {
+        try {
+            const ord = (proteseOrders || []).find(o => String(o.id) === String(r.ordem_id || ''));
+            const bud = ord ? (budgets || []).find(b => String(b.id) === String(ord.orcamento_id || '')) : null;
+            const pac = ord ? (patients || []).find(p => String(p.id) === String(ord.paciente_id || '')) : null;
+            const opLabel = ord && ord.seqid != null ? `OP #${ord.seqid}` : 'OP —';
+            const orcLabel = bud && bud.seqid != null ? `Orçamento #${bud.seqid}` : 'Orçamento —';
+            const pacLabel = pac ? `Paciente: ${pac.nome}` : 'Paciente: —';
+
+            let itemDesc = 'Item: —';
+            const itemId = String(r.orcamento_item_id || (ord ? (ord.orcamento_item_id || '') : '') || '');
+            if (itemId) {
+                const { data: it, error: itErr } = await withTimeout(
+                    db.from('orcamento_itens')
+                        .select('id, servico_id')
+                        .eq('empresa_id', currentEmpresaId)
+                        .eq('id', itemId)
+                        .limit(1),
+                    15000,
+                    'orcamento_itens:payref_item'
+                );
+                if (!itErr && Array.isArray(it) && it.length) {
+                    const serv = (services || []).find(s => String(s.id) === String(it[0].servico_id || ''));
+                    const name = serv ? String(serv.descricao || serv.nome || `Serviço ${serv.seqid || ''}`) : `Serviço ${it[0].servico_id || ''}`;
+                    itemDesc = `Item: ${name}`;
+                }
+            }
+
+            if (refBox) refBox.innerHTML = `
+                <div>${opLabel} • ${orcLabel}</div>
+                <div>${pacLabel}</div>
+                <div>${itemDesc}</div>
+            `;
+        } catch (e) {
+            if (refBox) refBox.textContent = 'Referência indisponível.';
+        }
+    })();
     modal.classList.remove('hidden');
 };
 
@@ -4578,6 +6862,7 @@ function getProfessionalNameBySeqId(seqId) {
 function getCommissionStatusesForFilter(v) {
     if (v === 'A_PAGAR') return ['PENDENTE', 'GERADA'];
     if (v === 'PAGAS') return ['PAGA'];
+    if (v === 'TRANSFERIDAS') return ['ESTORNADA', 'TRANSFERIDA'];
     return null;
 }
 
@@ -4588,6 +6873,13 @@ function getCommissionItemLabel(r) {
     if (r.servico_descricao) return String(r.servico_descricao);
     if (r.item_id) return `#${r.item_id}`;
     return '-';
+}
+
+function getCommissionDateForFilter(r, statusVal) {
+    if (!r) return null;
+    if (statusVal === 'PAGAS') return r.data_pagamento || r.data_geracao || r.created_at || null;
+    if (statusVal === 'TRANSFERIDAS') return r.estornado_em || r.data_geracao || r.created_at || null;
+    return r.data_geracao || r.created_at || null;
 }
 
 async function enrichCommissionsItems(rows) {
@@ -4643,7 +6935,7 @@ async function fetchCommissions({ statuses, start, end, profId, statusVal }) {
         if (commissionsTable) commissionsTable.style.display = 'table';
 
         let query = db.from('financeiro_comissoes').select('*').order('data_geracao', { ascending: false });
-        if (!isSuperAdmin && currentEmpresaId) {
+        if (currentEmpresaId) {
             query = query.eq('empresa_id', currentEmpresaId);
         }
         if (profId) {
@@ -4661,7 +6953,11 @@ async function fetchCommissions({ statuses, start, end, profId, statusVal }) {
             const startMs = start ? new Date(`${start}T00:00:00`).getTime() : null;
             const endMs = end ? new Date(`${end}T23:59:59`).getTime() : null;
             commissionsList = commissionsList.filter(r => {
-                const raw = r && (r.data_geracao || r.created_at);
+                const raw = (statusVal === 'PAGAS')
+                    ? (r && (r.data_pagamento || r.data_geracao || r.created_at))
+                    : (statusVal === 'TRANSFERIDAS')
+                        ? (r && (r.estornado_em || r.data_geracao || r.created_at))
+                        : (r && (r.data_geracao || r.created_at));
                 if (!raw) return false;
                 const t = new Date(raw).getTime();
                 if (!Number.isFinite(t)) return false;
@@ -4898,9 +7194,153 @@ function printCommissionReceipt() {
     openPrintWindow(parts.join(''), 'Recibo de Comissão');
 }
 
+async function printCommissionsReportFromUI() {
+    if (!(isSuperAdmin || isAdminRole() || can('comissoes', 'select'))) {
+        showToast('Você não possui permissão para acessar Comissões.', true);
+        return;
+    }
+
+    await fetchCommissionsFromUI();
+
+    const statusVal = commStatus ? String(commStatus.value || '') : '';
+    const statusLabel = (commStatus && commStatus.options && commStatus.selectedIndex >= 0)
+        ? String(commStatus.options[commStatus.selectedIndex].text || statusVal || '—')
+        : (statusVal || '—');
+    const start = commStart ? String(commStart.value || '') : '';
+    const end = commEnd ? String(commEnd.value || '') : '';
+    const profId = commProfessional ? String(commProfessional.value || '') : '';
+    const profLabel = profId ? getProfessionalNameBySeqId(profId) : 'Todos os profissionais';
+
+    const list = (commissionsList || []).slice();
+    const total = list.reduce((acc, r) => acc + Number(r.valor_comissao || 0), 0);
+
+    const grouped = new Map();
+    list.forEach(r => {
+        const profName = getProfessionalNameBySeqId(r.profissional_id);
+        if (!grouped.has(profName)) grouped.set(profName, []);
+        grouped.get(profName).push(r);
+    });
+
+    const groups = Array.from(grouped.entries())
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'pt-BR'));
+
+    const dateColLabel = statusVal === 'PAGAS' ? 'Data de Pagamento' : (statusVal === 'TRANSFERIDAS' ? 'Data do Estorno' : 'Data de Geração');
+    const humanStart = start ? start.split('-').reverse().join('/') : '—';
+    const humanEnd = end ? end.split('-').reverse().join('/') : '—';
+
+    const sections = groups.map(([profName, rows]) => {
+        const sorted = rows.slice().sort((a, b) => {
+            const da = new Date(getCommissionDateForFilter(a, statusVal) || 0).getTime();
+            const dbb = new Date(getCommissionDateForFilter(b, statusVal) || 0).getTime();
+            return (Number.isFinite(da) ? da : 0) - (Number.isFinite(dbb) ? dbb : 0);
+        });
+        const subTotal = sorted.reduce((acc, r) => acc + Number(r.valor_comissao || 0), 0);
+
+        const trs = sorted.map(r => {
+            const dt = getCommissionDateForFilter(r, statusVal);
+            const dtLabel = dt ? formatDateTime(dt) : '-';
+            const orcSeq = (r._orcamentoSeqid != null) ? String(r._orcamentoSeqid) : (r.orcamento_seqid != null ? String(r.orcamento_seqid) : '');
+            const item = getCommissionItemLabel(r);
+            const val = formatCurrencyBRL(Number(r.valor_comissao || 0));
+            const st = String(r.status || '-');
+            return `
+                <tr>
+                    <td style="width: 140px;">${escapeHtml(dtLabel)}</td>
+                    <td style="width: 90px; text-align:center;">${orcSeq ? `#${escapeHtml(orcSeq)}` : '-'}</td>
+                    <td>${escapeHtml(item)}</td>
+                    <td style="width: 130px;">${escapeHtml(st)}</td>
+                    <td style="width: 140px; text-align:right; font-weight: 900;">${escapeHtml(val)}</td>
+                </tr>
+            `;
+        }).join('') + `
+            <tr>
+                <td colspan="4" style="text-align:right; font-weight: 900;">SUBTOTAL (${sorted.length})</td>
+                <td style="text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(subTotal))}</td>
+            </tr>
+        `;
+
+        return `
+            <div style="margin-top: 14px;">
+                <div style="font-weight: 900; font-size: 13px; margin: 10px 0 6px;">${escapeHtml(profName)}</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 140px;">${escapeHtml(dateColLabel)}</th>
+                            <th style="width: 90px; text-align:center;">Orc. #</th>
+                            <th>Item</th>
+                            <th style="width: 130px;">Status</th>
+                            <th style="width: 140px; text-align:right;">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>${trs}</tbody>
+                </table>
+            </div>
+        `;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Comissões - ${humanStart} a ${humanEnd}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color:#111827; padding: 24px; }
+    .header { border-bottom: 2px solid #0066cc; padding-bottom: 12px; margin-bottom: 14px; }
+    .title { font-size: 16px; font-weight: 900; color:#0066cc; }
+    .sub { color:#6b7280; margin-top: 4px; font-size: 11px; }
+    .kpis { display:flex; gap: 14px; flex-wrap: wrap; margin: 12px 0 14px; }
+    .kpi { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; min-width: 170px; }
+    .kpi label { display:block; font-size: 10px; color:#6b7280; text-transform: uppercase; letter-spacing: .04em; }
+    .kpi div { font-weight: 900; margin-top: 4px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border: 1px solid #e5e7eb; padding: 7px; }
+    th { background: #f9fafb; text-align:left; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color:#374151; }
+    .footer { margin-top: 16px; font-size: 10px; color:#9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">Comissões</div>
+    <div class="sub">Status: <strong>${escapeHtml(statusLabel)}</strong> • Período: <strong>${escapeHtml(humanStart)}</strong> a <strong>${escapeHtml(humanEnd)}</strong></div>
+    <div class="sub">Profissional: <strong>${escapeHtml(profLabel)}</strong> • Unidade: ${escapeHtml(String(currentEmpresaId || '—'))}</div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><label>Registros</label><div>${list.length}</div></div>
+    <div class="kpi"><label>Total</label><div>${escapeHtml(formatCurrencyBRL(total))}</div></div>
+    <div class="kpi"><label>Profissionais</label><div>${groups.length}</div></div>
+  </div>
+
+  ${sections}
+
+  <div style="margin-top: 14px;">
+    <table>
+      <tbody>
+        <tr>
+          <td style="text-align:right; font-weight: 900;">TOTAL GERAL (${list.length})</td>
+          <td style="width: 160px; text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(total))}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">Documento interno • Comissões</div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=980,height=720');
+    if (!win) { showToast('Habilite pop-ups para imprimir.', true); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 600);
+}
+
 if (btnCommSearch) btnCommSearch.addEventListener('click', () => fetchCommissionsFromUI());
 if (btnCommPay) btnCommPay.addEventListener('click', () => markSelectedCommissionsPaid());
 if (btnCommPrint) btnCommPrint.addEventListener('click', () => printCommissionReceipt());
+if (btnCommPrintReport) btnCommPrintReport.addEventListener('click', () => printCommissionsReportFromUI());
 if (commStatus) commStatus.addEventListener('change', () => { resetCommissionSelection(); fetchCommissionsFromUI(); });
 if (commProfessional) commProfessional.addEventListener('change', () => { resetCommissionSelection(); fetchCommissionsFromUI(); });
 if (commStart) commStart.addEventListener('change', () => { resetCommissionSelection(); fetchCommissionsFromUI(); });
@@ -5699,10 +8139,11 @@ patientForm.addEventListener('submit', async e => {
     inputCpf.classList.remove('input-error');
     cpfError.style.display = 'none';
 
+    const dataNascimentoValue = document.getElementById('dataNascimento').value;
     const patientData = {
         nome: document.getElementById('nome').value,
         cpf: cpfValue,
-        datanascimento: document.getElementById('dataNascimento').value,
+        datanascimento: dataNascimentoValue ? dataNascimentoValue : null,
         sexo: document.getElementById('sexo').value,
         profissao: document.getElementById('profissao').value,
         telefone: document.getElementById('telefone').value,
@@ -5756,7 +8197,20 @@ patientForm.addEventListener('submit', async e => {
         showList('patients');
     } catch (error) {
         console.error("Error saving patient:", error);
-        showToast("Erro ao salvar paciente no banco de dados.", true);
+        const code = error && error.code ? String(error.code) : '';
+        const msg = error && error.message ? String(error.message) : 'Erro ao salvar paciente no banco de dados.';
+        const details = error && error.details ? String(error.details) : '';
+        const hint = error && error.hint ? String(error.hint) : '';
+        const full = [msg, details, hint].filter(Boolean).join(' ');
+        if (code === '23505' && /pacientes_seqid_unique/i.test(full)) {
+            showToast('Erro ao salvar paciente: seqid duplicado. Aplique o SQL de correção de seqid por empresa.', true);
+            return;
+        }
+        if (code === '42501' || /row-level security|rls/i.test(full)) {
+            showToast('Erro ao salvar paciente: sem permissão (RLS) na empresa atual. Verifique o vínculo do usuário na empresa.', true);
+            return;
+        }
+        showToast(code ? `Erro ao salvar paciente (${code}): ${full}` : `Erro ao salvar paciente: ${full}`, true);
     }
 });
 
@@ -5917,7 +8371,7 @@ professionalForm.addEventListener('submit', async e => {
         tipo: tipo,
         especialidadeid: tipo === 'Especialista' ? document.getElementById('profEspecialidade').value : null,
         status: document.getElementById('profStatus').value,
-        photo: photoBase64.value, // Base64 image
+        photo: photoBase64.value,
         empresa_id: currentEmpresaId,
         comissions: {
             ce: tipo === 'Clinico' ? (document.getElementById('comissionCE').value || 0) : null,
@@ -6133,9 +8587,10 @@ window.editProfessional = function (id) {
     document.getElementById('profStatus').value = p.status || 'Ativo';
 
     // Photo
-    if (p.photo) {
-        photoPreview.innerHTML = `<img src="${p.photo}" alt="Foto Profil">`;
-        photoBase64.value = p.photo;
+    const pPhoto = getProfessionalPhotoValue(p);
+    if (pPhoto) {
+        photoPreview.innerHTML = `<img src="${escapeHtml(pPhoto)}" alt="Foto Profil">`;
+        photoBase64.value = pPhoto;
         btnRemovePhoto.style.display = 'block';
     } else {
         resetPhotoPreview();
@@ -6221,7 +8676,10 @@ if (specialtyForm) {
 
             // Synchronize subdivisions: Delete old ones and insert new ones
             // This is a simple approach; for large data, a more granular diff would be better
-            const { error: delError } = await db.from('especialidade_subdivisoes').delete().eq('especialidade_id', targetId);
+            const { error: delError } = await db.from('especialidade_subdivisoes')
+                .delete()
+                .eq('empresa_id', currentEmpresaId)
+                .eq('especialidade_id', targetId);
             if (delError) throw delError;
 
             const newSubs = [];
@@ -6270,18 +8728,61 @@ window.deleteSpecialty = async function (id) {
         showToast("Você não tem permissão para excluir especialidades.", true);
         return;
     }
-    if (confirm('Tem certeza que deseja excluir esta especialidade? Profissionais podem perder a referência.')) {
-        try {
-            const { error } = await db.from('especialidades').delete().eq('id', id);
-            if (error) throw error;
+    try {
+        const spec = (specialties || []).find(s => String(s.id) === String(id));
+        const specName = spec ? String(spec.nome || '') : '';
 
-            specialties = specialties.filter(s => s.id !== id);
-            renderTable(specialties, 'specialties');
-            showToast('Especialidade removida com sucesso!');
-        } catch (error) {
-            console.error("Error deleting specialty:", error);
-            showToast("Erro ao remover especialidade.", true);
+        const { count: profCount, error: profErr } = await withTimeout(
+            db.from('profissionais')
+                .select('id', { count: 'exact', head: true })
+                .eq('empresa_id', currentEmpresaId)
+                .eq('especialidadeid', id),
+            15000,
+            'especialidades:check_profissionais'
+        );
+        if (profErr) throw profErr;
+        if (Number(profCount || 0) > 0) {
+            showToast(`Não é possível excluir: ${profCount} profissional(is) vinculado(s) a esta especialidade.`, true);
+            return;
         }
+
+        const { count: subCount, error: subErr } = await withTimeout(
+            db.from('especialidade_subdivisoes')
+                .select('id', { count: 'exact', head: true })
+                .eq('empresa_id', currentEmpresaId)
+                .eq('especialidade_id', id),
+            15000,
+            'especialidades:check_subdivisoes'
+        );
+        if (subErr) throw subErr;
+
+        const msg = `Tem certeza que deseja excluir esta especialidade${specName ? ` (${specName})` : ''}?` +
+            (Number(subCount || 0) > 0 ? ` Isso removerá ${subCount} subdivisão(ões).` : '');
+        if (!confirm(msg)) return;
+
+        const { error: delSubsErr } = await db.from('especialidade_subdivisoes')
+            .delete()
+            .eq('empresa_id', currentEmpresaId)
+            .eq('especialidade_id', id);
+        if (delSubsErr) throw delSubsErr;
+
+        const { error } = await db.from('especialidades')
+            .delete()
+            .eq('empresa_id', currentEmpresaId)
+            .eq('id', id);
+        if (error) throw error;
+
+        specialties = specialties.filter(s => s.id !== id);
+        renderTable(specialties, 'specialties');
+        showToast('Especialidade removida com sucesso!');
+    } catch (error) {
+        console.error("Error deleting specialty:", error);
+        const code = error && error.code ? String(error.code) : '';
+        if (code === '23503') {
+            showToast("Não é possível excluir: esta especialidade está em uso em outras tabelas.", true);
+            return;
+        }
+        showToast("Erro ao remover especialidade.", true);
     }
 };
 
@@ -6614,6 +9115,7 @@ if (serviceForm) {
         };
 
         try {
+            let targetId = id || '';
             if (id) {
                 const { error } = await db.from('servicos').update(servData).eq('id', id);
                 if (error) throw error;
@@ -6624,6 +9126,7 @@ if (serviceForm) {
             } else {
                 servData.id = generateId();
                 servData.seqid = getNextSeqId(services);
+                targetId = servData.id;
 
                 const { data, error } = await db.from('servicos').insert(servData).select().single();
                 if (error) throw error;
@@ -6632,6 +9135,7 @@ if (serviceForm) {
                 showToast('Item cadastrado com sucesso!');
             }
 
+            window.__afterListScrollToServiceId = targetId;
             showList('services');
         } catch (error) {
             console.error("Error saving service:", error);
@@ -7968,7 +10472,7 @@ window.printProfessional = function (id) {
 
                                             <div class="main-info">
                                                 <div class="photo-box">
-                                                    ${p.photo ? `<img src="${p.photo}">` : '<span style="color:#9ca3af;font-size:10px">Sem Foto</span>'}
+                                                    ${getProfessionalPhotoValue(p) ? `<img src="${escapeHtml(getProfessionalPhotoValue(p))}">` : '<span style="color:#9ca3af;font-size:10px">Sem Foto</span>'}
                                                 </div>
                                                 <div class="info-grid">
                                                     <div class="info-item"><label>Nome</label><span>${p.nome}</span></div>
@@ -9592,12 +12096,164 @@ async function fetchTransactions(patientId = null) {
             return;
         }
 
-        // Flatten patient name for rendering (sem depender de FK name do Supabase)
+        const replaceObsBudgetTag = (obs) => {
+            if (!obs) return obs;
+            try {
+                const v = String(obs);
+                const replBudgetNum = (match, seq) => {
+                    return String(match)
+                        .replace(/Orç\.?\s*#/i, 'Orçamento ')
+                        .replace(/Orçamento\s*#/i, 'Orçamento ')
+                        .replace('#', '')
+                        .replace(String(seq), String(seq));
+                };
+                return v
+                    .replace(/\[(Orçamento|Orcamento|Orç\.?|Orc\.?)\s*#\s*(\d+)\]/gi, (m, _lbl, seq) => `[Orçamento ${seq}]`)
+                    .replace(/\((Orçamento|Orcamento|Orç\.?|Orc\.?)\s*#\s*(\d+)\)/gi, (m, _lbl, seq) => `(Orçamento ${seq})`)
+                    .replace(/(Orçamento|Orcamento|Orç\.?|Orc\.?)\s*#\s*(\d+)/gi, (m, _lbl, seq) => replBudgetNum(m, seq));
+            } catch { /* ignore */ }
+            return obs;
+        };
+
+        const extractBudgetSeqFromObs = (obs) => {
+            if (!obs) return '';
+            const s = String(obs);
+            const m = s.match(/(?:Orç\.?\s*#|Orc\.?\s*#|Orçamento\s*#|Orcamento\s*#)\s*(\d{1,})/i);
+            return m && m[1] ? String(m[1]) : '';
+        };
+
+        const needsBudgetSeq = [];
+        (data || []).forEach(t => {
+            const pid = t && t.paciente_id != null ? String(t.paciente_id) : '';
+            const hasPat = !!patients.find(p => String(p.seqid) === pid || String(p.id) === pid);
+            if (hasPat) return;
+            const seq = extractBudgetSeqFromObs(t && t.observacoes ? t.observacoes : '');
+            if (seq) needsBudgetSeq.push(seq);
+        });
+
+        const budgetSeqInfo = new Map();
+        if (needsBudgetSeq.length && currentEmpresaId) {
+            const uniq = Array.from(new Set(needsBudgetSeq)).slice(0, 200);
+            try {
+                const { data: orcs, error: oErr } = await withTimeout(
+                    db.from('orcamentos')
+                        .select('seqid,paciente_id,pacienteid,pacientenome')
+                        .eq('empresa_id', currentEmpresaId)
+                        .in('seqid', uniq.map(n => Number(n))),
+                    15000,
+                    'financeiro:orcamentos:seqid'
+                );
+                if (!oErr && Array.isArray(orcs)) {
+                    orcs.forEach(o => {
+                        if (o && o.seqid != null) {
+                            budgetSeqInfo.set(String(o.seqid), {
+                                pacienteUuid: String(o.pacienteid || o.paciente_id || ''),
+                                pacienteNome: String(o.pacientenome || '')
+                            });
+                        }
+                    });
+                }
+            } catch { }
+            try {
+                const { data: canc, error: cErr } = await withTimeout(
+                    db.from('orcamento_cancelados')
+                        .select('orcamento_seqid,paciente_nome')
+                        .eq('empresa_id', currentEmpresaId)
+                        .in('orcamento_seqid', uniq.map(n => Number(n))),
+                    15000,
+                    'financeiro:orcamento_cancelados'
+                );
+                if (!cErr && Array.isArray(canc)) {
+                    canc.forEach(r => {
+                        if (r && r.orcamento_seqid != null) {
+                            const k = String(r.orcamento_seqid);
+                            const prev = budgetSeqInfo.get(k) || { pacienteUuid: '', pacienteNome: '' };
+                            budgetSeqInfo.set(k, { ...prev, pacienteNome: prev.pacienteNome || String(r.paciente_nome || '') });
+                        }
+                    });
+                }
+            } catch { }
+        }
+
+        // Fallback adicional: extrair OP #<seqid> da observação e resolver paciente via ordens_proteticas
+        const extractOpSeqFromObs = (obs) => {
+            if (!obs) return '';
+            const s = String(obs);
+            const m = s.match(/OP\s*#\s*(\d{1,})/i);
+            return m && m[1] ? String(m[1]) : '';
+        };
+        const needsOpSeq = [];
+        (data || []).forEach(t => {
+            const pid = t && t.paciente_id != null ? String(t.paciente_id) : '';
+            const hasPat = !!patients.find(p => String(p.seqid) === pid || String(p.id) === pid);
+            if (hasPat) return;
+            const op = extractOpSeqFromObs(t && t.observacoes ? t.observacoes : '');
+            if (op) needsOpSeq.push(op);
+        });
+        const opSeqInfo = new Map();
+        if (needsOpSeq.length && currentEmpresaId) {
+            const uniqOps = Array.from(new Set(needsOpSeq)).slice(0, 200);
+            try {
+                const { data: ops, error: opErr } = await withTimeout(
+                    db.from('ordens_proteticas')
+                        .select('seqid,paciente_id,orcamento_id')
+                        .eq('empresa_id', currentEmpresaId)
+                        .in('seqid', uniqOps.map(n => Number(n))),
+                    15000,
+                    'financeiro:ordens_proteticas:seqid'
+                );
+                if (!opErr && Array.isArray(ops)) {
+                    ops.forEach(o => {
+                        if (o && o.seqid != null) {
+                            opSeqInfo.set(String(o.seqid), {
+                                pacienteUuid: String(o.paciente_id || ''),
+                                orcamentoId: String(o.orcamento_id || '')
+                            });
+                        }
+                    });
+                }
+            } catch { }
+        }
+
         transactions = (data || []).map(t => {
-            const pat = patients.find(p => String(p.seqid) === String(t.paciente_id));
+            let pat = patients.find(p => String(p.seqid) === String(t.paciente_id));
+            if (!pat) pat = patients.find(p => String(p.id) === String(t.paciente_id));
+            let obsDisplay = replaceObsBudgetTag(t.observacoes || '');
+            if (!pat) {
+                try {
+                    const mId = String(t.observacoes || '').match(/\[Orçamento\s+([0-9a-f\-]{8,})\]/i);
+                    const mSeq = String(t.observacoes || '').match(/\[Orçamento\s*#(\d+)\]/i);
+                    let b = null;
+                    if (mId && mId[1]) b = (budgets || []).find(x => String(x.id) === String(mId[1]));
+                    if (!b && mSeq && mSeq[1]) b = (budgets || []).find(x => String(x.seqid) === String(mSeq[1]));
+                    if (b) {
+                        pat = patients.find(p => String(p.id) === String(b.pacienteid || b.paciente_id));
+                        obsDisplay = replaceObsBudgetTag(t.observacoes || '');
+                    }
+                } catch { /* ignore */ }
+            }
+            let pacienteNomeFallback = '';
+            if (!pat) {
+                const seq = extractBudgetSeqFromObs(t.observacoes || '');
+                if (seq) {
+                    const info = budgetSeqInfo.get(String(seq));
+                    const uuid = info && info.pacienteUuid ? String(info.pacienteUuid) : '';
+                    if (uuid) pat = patients.find(p => String(p.id) === uuid) || patients.find(p => String(p.seqid) === uuid);
+                    pacienteNomeFallback = info && info.pacienteNome ? String(info.pacienteNome) : '';
+                }
+            }
+            if (!pat) {
+                const op = extractOpSeqFromObs(t.observacoes || '');
+                if (op) {
+                    const info = opSeqInfo.get(String(op));
+                    const uuid = info && info.pacienteUuid ? String(info.pacienteUuid) : '';
+                    if (uuid) pat = patients.find(p => String(p.id) === uuid) || patients.find(p => String(p.seqid) === uuid);
+                }
+            }
             return {
                 ...t,
-                paciente_nome: pat ? pat.nome : '—'
+                paciente_nome: pat ? pat.nome : (pacienteNomeFallback || '—'),
+                observacoes_display: obsDisplay
             };
         });
 
@@ -9688,6 +12344,13 @@ async function deleteTransaction(id) {
 
 // Hook up Financeiro search and listeners
 (function () {
+    if (!window.__financeiroHeaderBound) {
+        window.__financeiroHeaderBound = true;
+        if (btnMovDiaria) btnMovDiaria.addEventListener('click', () => openMovDiariaModal());
+        if (btnPagamentosPacientes) btnPagamentosPacientes.addEventListener('click', () => openPagamentosPacientesModal());
+        if (btnFechamentoDiarioFull) btnFechamentoDiarioFull.addEventListener('click', () => openFechamentoDiarioFullModal());
+    }
+
     if (btnFinBuscar) {
         btnFinBuscar.addEventListener('click', () => {
             const term = finPacienteSearch.value.toLowerCase();

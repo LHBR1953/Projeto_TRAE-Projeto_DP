@@ -793,11 +793,15 @@ tbody tr:nth-child(even) {
     border-radius: 50%;
     object-fit: cover;
     background-color: var(--border-color);
+    display: block;
+    color: var(--text-muted);
+    font-size: 1.25rem;
+}
+
+.photo-thumb.photo-thumb--placeholder {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-muted);
-    font-size: 1.25rem;
 }
 
 /* Empty State */
