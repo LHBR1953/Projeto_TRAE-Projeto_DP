@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260324-1420';
+const APP_BUILD = '20260324-1505';
 
 const AUTO_SEED_SPECIALTIES = false;
 
@@ -3441,6 +3441,178 @@ function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId }) {
 
     rows.sort((a, b) => String(a.hora || '').localeCompare(String(b.hora || '')) || String(a.pacienteNome || '').localeCompare(String(b.pacienteNome || ''), 'pt-BR'));
     return rows;
+}
+
+async function printAgendaDayFromUI() {
+    if (!agendaDate || !agendaProfessional || !agendaSlotsBody) { showToast('Agenda indisponível.', true); return; }
+    const dateStr = String(agendaDate.value || '');
+    const profSeqId = String(agendaProfessional.value || '');
+    if (!dateStr || !profSeqId) { showToast('Selecione Data e Profissional.', true); return; }
+    const profName = getProfessionalNameBySeqId(Number(profSeqId));
+    const humanDate = dateStr.split('-').reverse().join('/');
+    const titulo = `Agenda do Dia - ${profName} - ${humanDate}`;
+
+    const rows = Array.from(agendaSlotsBody.querySelectorAll('tr')).map(tr => {
+        const tds = Array.from(tr.querySelectorAll('td'));
+        const hora = tds[0] ? tds[0].textContent.trim() : '';
+        const paciente = tds[1] ? tds[1].textContent.trim() : '';
+        const status = tds[2] ? tds[2].textContent.trim() : '';
+        if (!hora) return null;
+        return { hora, paciente, status };
+    }).filter(Boolean);
+
+    const itens = rows.map(r => `<tr><td>${escapeHtml(r.hora)}</td><td>${escapeHtml(r.paciente || '-')}</td><td>${escapeHtml(r.status || '-')}</td></tr>`).join('')
+        || `<tr><td colspan="3" style="text-align:center;color:#6b7280;padding:12px;">Sem agendamentos</td></tr>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { showToast('Habilite pop-ups para imprimir.', true); return; }
+    w.document.write(`
+        <html><head><title>${escapeHtml(titulo)}</title>
+        <style>
+        body { font-family: Inter, Arial, sans-serif; padding: 16px; color: #111827; }
+        h2 { margin: 0 0 10px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th, td { padding: 8px; border: 1px solid #e5e7eb; text-align: left; }
+        th { background: #f3f4f6; font-size: 12px; color: #6b7280; }
+        </style>
+        </head><body>
+        <h2>${escapeHtml(titulo)}</h2>
+        <table>
+            <thead><tr><th>Horário</th><th>Paciente/Título</th><th>Status</th></tr></thead>
+            <tbody>${itens}</tbody>
+        </table>
+        </body></html>
+    `);
+    setTimeout(() => w.print(), 400);
+}
+
+async function printAgendaWeekFromUI(compact = false) {
+    if (!agendaProfessional) { showToast('Selecione o profissional.', true); return; }
+    const profSeqId = Number(agendaProfessional.value || 0);
+    if (!profSeqId) { showToast('Selecione o profissional.', true); return; }
+    try {
+        const q = db.from('agenda_disponibilidade')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('profissional_id', profSeqId)
+            .eq('ativo', true)
+            .order('dia_semana', { ascending: true })
+            .order('hora_inicio', { ascending: true });
+        const { data, error } = await withTimeout(q, 15000, 'agenda_disponibilidade:print_week');
+        if (error) throw error;
+        const rows = Array.isArray(data) ? data : [];
+        const byDay = new Map();
+        rows.forEach(r => {
+            const d = Number(r.dia_semana || 0);
+            if (!byDay.has(d)) byDay.set(d, []);
+            byDay.get(d).push(r);
+        });
+        const dayNames = { 1: 'Segunda', 2: 'Terça', 3: 'Quarta', 4: 'Quinta', 5: 'Sexta', 6: 'Sábado', 7: 'Domingo' };
+        const profName = getProfessionalNameBySeqId(profSeqId);
+        const titulo = compact ? `Agenda Semanal Reduzida - ${profName}` : `Agenda Semanal - ${profName}`;
+
+        const content = [1, 2, 3, 4, 5, 6, 7].map(d => {
+            const arr = (byDay.get(d) || []).slice();
+            const items = arr.map(r => {
+                const ini = String(r.hora_inicio || '');
+                const fim = String(r.hora_fim || '');
+                const slot = Number(r.slot_minutos || 30);
+                return compact
+                    ? `<div>${escapeHtml(ini)}-${escapeHtml(fim)} • ${slot}min</div>`
+                    : `<tr><td>${escapeHtml(ini)}</td><td>${escapeHtml(fim)}</td><td>${escapeHtml(String(slot))}</td></tr>`;
+            }).join('') || (compact ? `<div style="color:#6b7280;">Sem disponibilidade</div>` : `<tr><td colspan="3" style="text-align:center;color:#6b7280;padding:12px;">Sem disponibilidade</td></tr>`);
+
+            return compact
+                ? `<div style="margin-bottom:10px;"><div style="font-weight:700;margin:6px 0;">${dayNames[d]}</div>${items}</div>`
+                : `<h3 style="margin:12px 0 6px 0;">${dayNames[d]}</h3>
+                   <table><thead><tr><th>Início</th><th>Fim</th><th>Slot (min)</th></tr></thead><tbody>${items}</tbody></table>`;
+        }).join('');
+
+        const w = window.open('', '_blank');
+        if (!w) { showToast('Habilite pop-ups para imprimir.', true); return; }
+        w.document.write(`
+            <html><head><title>${escapeHtml(titulo)}</title>
+            <style>
+            body { font-family: Inter, Arial, sans-serif; padding: 16px; color: #111827; }
+            h2 { margin: 0 0 10px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            th, td { padding: 8px; border: 1px solid #e5e7eb; text-align: left; }
+            th { background: #f3f4f6; font-size: 12px; color: #6b7280; }
+            </style>
+            </head><body>
+            <h2>${escapeHtml(titulo)}</h2>
+            ${content}
+            </body></html>
+        `);
+        setTimeout(() => w.print(), 500);
+    } catch (e) {
+        showToast('Falha ao gerar impressão da agenda semanal.', true);
+    }
+}
+
+async function printAgendaWeekAppointmentsFromUI() {
+    if (!agendaProfessional || !agendaDate) { showToast('Agenda indisponível.', true); return; }
+    const profSeqId = Number(agendaProfessional.value || 0);
+    const dateStr = String(agendaDate.value || '');
+    if (!profSeqId || !dateStr) { showToast('Selecione Data e Profissional.', true); return; }
+    const base = new Date(`${dateStr}T00:00:00`);
+    const day = base.getDay() || 7;
+    const monday = new Date(base);
+    monday.setDate(base.getDate() - (day - 1));
+    const days = Array.from({ length: 7 }).map((_, i) => {
+        const x = new Date(monday);
+        x.setDate(monday.getDate() + i);
+        const yyyy = x.getFullYear();
+        const mm = String(x.getMonth() + 1).padStart(2, '0');
+        const dd = String(x.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    });
+    try {
+        const profName = getProfessionalNameBySeqId(profSeqId);
+        const titulo = `Agenda Semanal (Agendamentos) - ${profName}`;
+        const sections = [];
+        for (const d of days) {
+            const rows = await fetchAgendaRowsForFechamento({ dateStr: d, profSeqId });
+            const valid = rows.filter(a => String(a.status || '') !== 'CANCELADO');
+            const itens = valid.map(a => {
+                const dt = new Date(a.inicio);
+                const hh = String(dt.getHours()).padStart(2, '0');
+                const mi = String(dt.getMinutes()).padStart(2, '0');
+                const ini = `${hh}:${mi}`;
+                const st = a.status || '—';
+                const pacienteId = a.paciente_id != null ? String(a.paciente_id) : '';
+                const pacienteNome = pacienteId ? getPacienteNameBySeqId(pacienteId) : '';
+                const tit = String(a.titulo || '').trim();
+                const label = pacienteNome
+                    ? (tit && normalizeKey(tit) !== normalizeKey(pacienteNome) ? `${pacienteNome} — ${tit}` : pacienteNome)
+                    : (tit || '-');
+                return `<tr><td>${ini}</td><td>${escapeHtml(label)}</td><td>${escapeHtml(st)}</td></tr>`;
+            }).join('') || `<tr><td colspan="3" style="text-align:center;color:#6b7280;padding:12px;">Sem agendamentos</td></tr>`;
+            sections.push(`
+                <h3 style="margin:12px 0 6px 0;">${d}</h3>
+                <table><thead><tr><th>Início</th><th>Paciente/Título</th><th>Status</th></tr></thead><tbody>${itens}</tbody></table>
+            `);
+        }
+        const w = window.open('', '_blank');
+        if (!w) { showToast('Habilite pop-ups para imprimir.', true); return; }
+        w.document.write(`
+            <html><head><title>${escapeHtml(titulo)}</title>
+            <style>
+            body { font-family: Inter, Arial, sans-serif; padding: 16px; color: #111827; }
+            h2 { margin: 0 0 10px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            th, td { padding: 8px; border: 1px solid #e5e7eb; text-align: left; }
+            th { background: #f3f4f6; font-size: 12px; color: #6b7280; }
+            </style>
+            </head><body>
+            <h2>${escapeHtml(titulo)}</h2>
+            ${sections.join('')}
+            </body></html>
+        `);
+        setTimeout(() => w.print(), 500);
+    } catch (e) {
+        showToast('Falha ao gerar impressão semanal com agendamentos.', true);
+    }
 }
 
 async function printFechamentoDiario({ dateStr, profSeqId }) {
@@ -7553,7 +7725,7 @@ function initAgendaFilters() {
             .slice()
             .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
             .forEach(p => {
-                opts.push(`<option value="${p.seqid}">${p.nome}</option>`);
+                opts.push(`<option value="${p.seqid}">${escapeHtml(p.nome || '')}</option>`);
             });
         agendaProfessional.innerHTML = opts.join('');
     }
@@ -7577,6 +7749,15 @@ function initAgendaFilters() {
         const dd = String(today.getDate()).padStart(2, '0');
         agendaDate.value = `${yyyy}-${mm}-${dd}`;
     }
+
+    const bDay = document.getElementById('btnAgendaPrintDay');
+    const bWeek = document.getElementById('btnAgendaPrintWeek');
+    const bWeekAppts = document.getElementById('btnAgendaPrintWeekAppts');
+    const bWeekC = document.getElementById('btnAgendaPrintWeekCompact');
+    if (bDay && !bDay.__agendaBound) { bDay.addEventListener('click', printAgendaDayFromUI); bDay.disabled = false; bDay.__agendaBound = true; }
+    if (bWeekAppts && !bWeekAppts.__agendaBound) { bWeekAppts.addEventListener('click', printAgendaWeekAppointmentsFromUI); bWeekAppts.disabled = false; bWeekAppts.__agendaBound = true; }
+    if (bWeek && !bWeek.__agendaBound) { bWeek.addEventListener('click', () => printAgendaWeekFromUI(false)); bWeek.disabled = false; bWeek.__agendaBound = true; }
+    if (bWeekC && !bWeekC.__agendaBound) { bWeekC.addEventListener('click', () => printAgendaWeekFromUI(true)); bWeekC.disabled = false; bWeekC.__agendaBound = true; }
 }
 
 function renderAgendaPlaceholder(msg = 'Selecione a data e o profissional.') {
@@ -9402,7 +9583,7 @@ function syncBudgetProteseExecucaoGroups() {
 function populateBudgetItemSubdivisaoDropdown() {
     const subSelect = document.getElementById('budItemSubdivisao');
     if (!subSelect) return;
-    subSelect.innerHTML = '<option value="">Selecione...</option>';
+    subSelect.innerHTML = '<option value="">Selecione...</option><option value="-">Nenhuma / Geral</option>';
 
     specialties.forEach(spec => {
         if (spec.subdivisoes && spec.subdivisoes.length > 0) {
@@ -9482,7 +9663,8 @@ function updateBudgetItemFromService(serviceId) {
     if (!serviceId) {
         // Se deselecionar, limpa os campos
         document.getElementById('budItemDescricao').value = '';
-        document.getElementById('budItemSubdivisao').value = '-';
+        const subSelect = document.getElementById('budItemSubdivisao');
+        if (subSelect) subSelect.value = '';
         document.getElementById('budItemValor').value = '';
         return false;
     }
@@ -9492,12 +9674,29 @@ function updateBudgetItemFromService(serviceId) {
 
         const subSelect = document.getElementById('budItemSubdivisao');
         if (subSelect) {
-            const raw = serv.subdivisao || '';
-            subSelect.value = raw;
-            if (raw && subSelect.value !== raw) {
-                const rawTrim = String(raw).trim();
-                const opt = Array.from(subSelect.options).find(o => String(o.value || '').trim() === rawTrim);
-                if (opt) subSelect.value = opt.value;
+            const raw = String(serv.subdivisao || '').trim();
+            if (!subSelect.options || subSelect.options.length <= 1) {
+                populateBudgetItemSubdivisaoDropdown();
+            }
+            if (!raw) {
+                subSelect.value = '-';
+            } else {
+                const rawTrim = raw;
+                subSelect.value = rawTrim;
+                if (subSelect.value !== rawTrim) {
+                    const optExact = Array.from(subSelect.options).find(o => String(o.value || '').trim() === rawTrim);
+                    if (optExact) {
+                        subSelect.value = optExact.value;
+                    } else {
+                        const rawKey = normalizeKey(rawTrim);
+                        const optByName = Array.from(subSelect.options).find(o => {
+                            const v = String(o.value || '');
+                            const tail = v.includes('-') ? v.split('-').slice(1).join('-') : v;
+                            return normalizeKey(tail) === rawKey || normalizeKey(v) === rawKey;
+                        });
+                        if (optByName) subSelect.value = optByName.value;
+                    }
+                }
             }
         }
 
