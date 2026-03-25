@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260325-0430';
+const APP_BUILD = '20260325-0500';
 
 const AUTO_SEED_SPECIALTIES = false;
 
@@ -4440,6 +4440,38 @@ async function fetchDashboard({ dateStr, profSeqId }) {
         if (agErr) throw agErr;
         const agendaRows = Array.isArray(ags) ? ags : [];
 
+        const patientNameBySeqid = new Map();
+        (patients || []).forEach(p => {
+            const seq = Number(p && p.seqid);
+            if (!Number.isFinite(seq)) return;
+            const nm = String((p && (p.nome || p.pacientenome)) || '').trim();
+            if (!nm) return;
+            patientNameBySeqid.set(seq, nm);
+        });
+        try {
+            const needed = Array.from(new Set(
+                agendaRows
+                    .map(a => Number(a && a.paciente_id))
+                    .filter(n => Number.isFinite(n) && n > 0 && !patientNameBySeqid.has(n))
+            ));
+            if (needed.length) {
+                let pQ = db.from('pacientes')
+                    .select('seqid,nome')
+                    .eq('empresa_id', currentEmpresaId)
+                    .in('seqid', needed);
+                const { data: ps, error: pErr } = await withTimeout(pQ, 15000, 'dashboard:pacientes_by_seqid');
+                if (!pErr) {
+                    (ps || []).forEach(pr => {
+                        const seq = Number(pr && pr.seqid);
+                        if (!Number.isFinite(seq)) return;
+                        const nm = String((pr && pr.nome) || '').trim();
+                        if (!nm) return;
+                        patientNameBySeqid.set(seq, nm);
+                    });
+                }
+            }
+        } catch { }
+
         const statusCount = {};
         agendaRows.forEach(a => {
             const st = String(a.status || a.status_agendamento || '—');
@@ -4461,7 +4493,8 @@ async function fetchDashboard({ dateStr, profSeqId }) {
                     const tr = document.createElement('tr');
                     const inicio = a.inicio ? new Date(a.inicio) : null;
                     const hora = inicio ? formatTimeHHMM(inicio) : '—';
-                    const pacNome = a.paciente_nome || a.paciente || a.pacientenome || '—';
+                    const pid = Number(a && a.paciente_id);
+                    const pacNome = a.paciente_nome || a.paciente || a.pacientenome || (Number.isFinite(pid) ? (patientNameBySeqid.get(pid) || '') : '') || '—';
                     const profNome = a.profissional_nome || getProfessionalNameBySeqId(a.profissional_id) || '—';
                     const st = a.status || a.status_agendamento || '—';
                     tr.innerHTML = `
