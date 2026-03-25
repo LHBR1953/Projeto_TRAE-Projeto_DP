@@ -62,7 +62,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260324-1505';
+const APP_BUILD = '20260325-0430';
 
 const AUTO_SEED_SPECIALTIES = false;
 
@@ -1566,10 +1566,19 @@ const commEnd = document.getElementById('commEnd');
 const commProfessional = document.getElementById('commProfessional');
 const btnCommSearch = document.getElementById('btnCommSearch');
 const btnCommPay = document.getElementById('btnCommPay');
+const btnCommAdvance = document.getElementById('btnCommAdvance');
+const btnCommTransfer = document.getElementById('btnCommTransfer');
 const btnCommPrint = document.getElementById('btnCommPrint');
 const btnCommPrintReport = document.getElementById('btnCommPrintReport');
 const commSelectAll = document.getElementById('commSelectAll');
 const commSelectedTotal = document.getElementById('commSelectedTotal');
+
+const commTransferModal = document.getElementById('commTransferModal');
+const commTransferSummary = document.getElementById('commTransferSummary');
+const commTransferNewProfessional = document.getElementById('commTransferNewProfessional');
+const commTransferObs = document.getElementById('commTransferObs');
+const btnCommTransferCancel = document.getElementById('btnCommTransferCancel');
+const btnCommTransferConfirm = document.getElementById('btnCommTransferConfirm');
 
 const modalSuperAdmin = document.getElementById('modalSuperAdmin');
 const btnCloseModalSuperAdmin = document.getElementById('btnCloseModalSuperAdmin');
@@ -2126,6 +2135,7 @@ function renderTable(data = [], type = 'patients') {
 
             const totalPago = b.total_pago || 0;
             const saldoDevedor = total - totalPago;
+            const criadoEm = b.created_at ? formatDateTime(b.created_at) : '—';
 
             tr.innerHTML = `
                 <td>${b.seqid}</td>
@@ -2133,6 +2143,7 @@ function renderTable(data = [], type = 'patients') {
                     <strong>${b.pacientenome}</strong><br>
                     <small style="color:var(--text-muted)">${b.pacientecelular}</small>
                 </td>
+                <td>${criadoEm}</td>
                 <td>${qtdItens} itens</td>
                 <td><strong style="color: var(--primary-color)">R$ ${total.toFixed(2)}</strong></td>
                 <td><strong style="color: ${saldoDevedor > 0 ? '#dc3545' : 'var(--success-color)'}">R$ ${totalPago.toFixed(2)}</strong></td>
@@ -2232,25 +2243,23 @@ function renderTable(data = [], type = 'patients') {
         data.forEach(p => {
             const tr = document.createElement('tr');
             const photoSrc = getProfessionalPhotoValue(p);
-            const photoEl = photoSrc
-                ? `<img src="${escapeHtml(photoSrc)}" class="photo-thumb" alt="Foto">`
-                : `<div class="photo-thumb photo-thumb--placeholder"><i class="ri-user-line"></i></div>`;
+            const hasRawPhoto = !!(p && (p.photo || p.foto || p.foto_base64 || p.photo_base64 || p.imagem || p.imagem_base64));
 
             const statusColor = p.status === 'Ativo' ? 'var(--success-color)' : 'var(--text-muted)';
 
             tr.innerHTML = `
                 <td>${p.seqid}</td>
-                <td>${photoEl}</td>
+                <td class="js-prof-photo"></td>
                 <td>
-                    <strong>${p.nome}</strong><br>
-                    <small style="color:var(--text-muted)">${p.email}</small>
+                    <strong>${escapeHtml(p.nome)}</strong><br>
+                    <small style="color:var(--text-muted)">${escapeHtml(p.email || '')}</small>
                 </td>
-                <td>${p.celular}</td>
+                <td>${escapeHtml(p.celular || '')}</td>
                 <td>
-                    ${p.tipo}
-                    ${p.especialidadeid ? `<br><small style="color:var(--primary-color)">${getSpecialtyName(p.especialidadeid)}</small>` : ''}
+                    ${escapeHtml(p.tipo || '')}
+                    ${p.especialidadeid ? `<br><small style="color:var(--primary-color)">${escapeHtml(getSpecialtyName(p.especialidadeid))}</small>` : ''}
                 </td>
-                <td><strong style="color: ${statusColor}">${p.status}</strong></td>
+                <td><strong style="color: ${statusColor}">${escapeHtml(p.status || '')}</strong></td>
                 <td class="actions-cell">
                     <button class="btn-icon" onclick="printProfessional('${p.id}')" title="Imprimir Ficha">
                         <i class="ri-printer-line"></i>
@@ -2265,6 +2274,44 @@ function renderTable(data = [], type = 'patients') {
                     </button>` : ''}
                 </td>
             `;
+
+            const photoCell = tr.querySelector('.js-prof-photo');
+            if (photoCell) {
+                if (photoSrc) {
+                    const img = document.createElement('img');
+                    img.className = 'photo-thumb';
+                    img.alt = 'Foto';
+                    img.decoding = 'async';
+                    img.loading = 'lazy';
+                    let objectUrl = '';
+                    img.onerror = () => {
+                        try {
+                            if (objectUrl) URL.revokeObjectURL(objectUrl);
+                            photoCell.innerHTML = '';
+                            const div = document.createElement('div');
+                            div.className = 'photo-thumb photo-thumb--placeholder';
+                            div.title = 'Foto inválida';
+                            div.innerHTML = '<i class="ri-alert-line"></i>';
+                            photoCell.appendChild(div);
+                        } catch { }
+                    };
+                    img.onload = () => {
+                        try { if (objectUrl) URL.revokeObjectURL(objectUrl); } catch { }
+                    };
+                    if (photoSrc.startsWith('data:image/') && photoSrc.length > 200000) {
+                        objectUrl = dataUrlToObjectUrl(photoSrc);
+                    }
+                    img.src = objectUrl || photoSrc;
+                    photoCell.appendChild(img);
+                } else {
+                    const div = document.createElement('div');
+                    div.className = 'photo-thumb photo-thumb--placeholder';
+                    div.title = hasRawPhoto ? 'Foto inválida' : 'Sem foto';
+                    div.innerHTML = hasRawPhoto ? '<i class="ri-alert-line"></i>' : '<i class="ri-user-line"></i>';
+                    photoCell.appendChild(div);
+                }
+            }
+
             professionalsTableBody.appendChild(tr);
         });
     }
@@ -3971,10 +4018,22 @@ function escapeHtml(str) {
 
 function normalizeImageSrc(src) {
     const s0 = String(src || '');
-    const s = s0.trim();
+    let s = s0.trim();
     if (!s) return '';
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+        s = s.slice(1, -1).trim();
+        if (!s) return '';
+    }
+    s = s.replace(/^\uFEFF/, '').trim();
+    if (!s) return '';
+    s = s.replace(/\\r\\n|\\n|\\r/g, '');
     const lower = s.toLowerCase();
-    if (lower.startsWith('data:')) return s;
+    if (lower.includes('data:image/')) {
+        const idx = lower.indexOf('data:image/');
+        const sub = s.slice(idx);
+        return sub.replace(/\s+/g, '');
+    }
+    if (lower.startsWith('data:')) return s.replace(/\s+/g, '');
     if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('blob:')) return s;
     if (s.startsWith('/')) return s;
     const compact = s.replace(/\s+/g, '');
@@ -3983,6 +4042,27 @@ function normalizeImageSrc(src) {
         return `data:${mime};base64,${compact}`;
     }
     return '';
+}
+
+function dataUrlToObjectUrl(dataUrl) {
+    try {
+        const s = String(dataUrl || '');
+        const idx = s.indexOf(',');
+        if (idx <= 0) return '';
+        const header = s.slice(0, idx);
+        const data = s.slice(idx + 1);
+        const m = header.match(/^data:([^;]+);base64$/i);
+        if (!m) return '';
+        const mime = m[1] || 'application/octet-stream';
+        const binStr = atob(data);
+        const len = binStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binStr.charCodeAt(i);
+        const blob = new Blob([bytes], { type: mime });
+        return URL.createObjectURL(blob);
+    } catch {
+        return '';
+    }
 }
 
 function getProfessionalPhotoValue(p) {
@@ -5160,46 +5240,125 @@ function syncProteseExecucaoGroups() {
     if (protGroup) protGroup.style.display = v === 'INTERNA' ? 'block' : 'none';
 }
 
-function syncProteseOrcamentoItens() {
-    const orcSeqRaw = (document.getElementById('proteseOrcamentoSeqid') || {}).value || '';
+let __proteseOrcFetchToken = 0;
+let __proteseOrcDebounceTimer = null;
+async function syncProteseOrcamentoItens() {
+    const orcSeqRaw = String((document.getElementById('proteseOrcamentoSeqid') || {}).value || '').trim();
     const orcItemSel = document.getElementById('proteseOrcamentoItemId');
     if (!orcItemSel) return;
 
+    const normId = (v) => String(v == null ? '' : v).trim();
+
     const prev = String(orcItemSel.value || '');
     const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
-    const b = (orcSeq && Number.isFinite(orcSeq)) ? (budgets || []).find(x => Number(x.seqid) === Number(orcSeq)) : null;
+    const token = ++__proteseOrcFetchToken;
+
+    if (__proteseOrcDebounceTimer) clearTimeout(__proteseOrcDebounceTimer);
+    await new Promise(resolve => {
+        __proteseOrcDebounceTimer = setTimeout(resolve, 250);
+    });
+    if (token !== __proteseOrcFetchToken) return;
+
+    let b = (orcSeq && Number.isFinite(orcSeq)) ? (budgets || []).find(x => Number(x.seqid) === Number(orcSeq)) : null;
+    if (!b && orcSeq && Number.isFinite(orcSeq) && currentEmpresaId) {
+        try {
+            const q = db.from('orcamentos')
+                .select('*')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('seqid', orcSeq)
+                .limit(1);
+            const { data, error } = await withTimeout(q, 15000, 'protese:orcamentos:by_seqid');
+            if (error) throw error;
+            if (token !== __proteseOrcFetchToken) return;
+            const row = Array.isArray(data) ? data[0] : null;
+            if (row) {
+                try {
+                    let itQ = db.from('orcamento_itens')
+                        .select('*')
+                        .eq('empresa_id', currentEmpresaId)
+                        .eq('orcamento_id', row.id);
+                    const { data: itData, error: itErr } = await withTimeout(itQ, 15000, 'protese:orcamento_itens:by_orc_id');
+                    if (!itErr) row.orcamento_itens = Array.isArray(itData) ? itData : [];
+                } catch { }
+
+                budgets = Array.isArray(budgets) ? budgets : [];
+                const exists = budgets.some(x => String(x.id) === String(row.id));
+                if (!exists) budgets.push(row);
+                b = row;
+            }
+        } catch (err) {
+            const code = err && err.code ? String(err.code) : '';
+            const msg = err && err.message ? String(err.message) : 'Erro desconhecido';
+            const details = err && err.details ? String(err.details) : '';
+            const hint = err && err.hint ? String(err.hint) : '';
+            const full = [msg, details, hint].filter(Boolean).join(' ');
+            showToast(code ? `Falha ao buscar orçamento (${code}): ${full}` : `Falha ao buscar orçamento: ${full}`, true);
+        }
+    }
     const itens = b ? (b.orcamento_itens || []) : [];
 
     const pacienteSel = document.getElementById('protesePaciente');
     if (pacienteSel) {
-        const budgetPatientUuid = (() => {
-            const rawUuid = b ? (b.pacienteid || b.paciente_id) : null;
-            if (rawUuid && String(rawUuid).includes('-')) return String(rawUuid);
-            const rawSeq = b ? (b.pacienteseqid || b.paciente_id) : null;
-            const seq = Number(rawSeq);
-            if (!Number.isFinite(seq)) return '';
-            const p = (patients || []).find(pp => Number(pp.seqid) === seq);
-            return p && p.id ? String(p.id) : '';
-        })();
+        const raw = b ? (b.pacienteid || b.paciente_id) : null;
+        let budgetPatientUuid = '';
+        let budgetPatientName = b && b.pacientenome ? String(b.pacientenome) : '';
+
+        if (raw != null && String(raw).trim() !== '') {
+            const s = String(raw).trim();
+            if (!/^\d+$/.test(s)) {
+                budgetPatientUuid = s;
+            } else {
+                const seq = Number(s);
+                if (Number.isFinite(seq)) {
+                    const pLocal = (patients || []).find(pp => Number(pp.seqid) === seq);
+                    if (pLocal && pLocal.id) {
+                        budgetPatientUuid = String(pLocal.id);
+                        budgetPatientName = budgetPatientName || String(pLocal.nome || '');
+                    } else if (currentEmpresaId) {
+                        try {
+                            let pq = db.from('pacientes').select('id,nome').eq('empresa_id', currentEmpresaId).eq('seqid', seq).limit(1);
+                            const { data: pData, error: pErr } = await withTimeout(pq, 15000, 'protese:pacientes:by_seqid');
+                            if (pErr) throw pErr;
+                            if (token !== __proteseOrcFetchToken) return;
+                            const pRow = Array.isArray(pData) ? pData[0] : null;
+                            if (pRow && pRow.id) {
+                                budgetPatientUuid = String(pRow.id);
+                                budgetPatientName = budgetPatientName || String(pRow.nome || '');
+                                patients = Array.isArray(patients) ? patients : [];
+                                const exists = patients.some(x => String(x.id) === String(pRow.id));
+                                if (!exists) patients.push({ id: pRow.id, nome: pRow.nome, seqid: seq });
+                            }
+                        } catch { }
+                    }
+                }
+            }
+        }
 
         if (budgetPatientUuid) {
-            const currentVal = String(pacienteSel.value || '');
-            const lastAuto = String(pacienteSel.dataset.lastAuto || '');
-            if (!currentVal || currentVal === lastAuto) {
-                pacienteSel.value = budgetPatientUuid;
-                pacienteSel.dataset.lastAuto = budgetPatientUuid;
+            const hasOpt = Array.from(pacienteSel.options).some(o => String(o.value) === budgetPatientUuid);
+            if (!hasOpt) {
+                const label = budgetPatientName || 'Paciente';
+                const opt = document.createElement('option');
+                opt.value = budgetPatientUuid;
+                opt.textContent = label;
+                pacienteSel.appendChild(opt);
             }
+            pacienteSel.value = budgetPatientUuid;
+            pacienteSel.dataset.lastAuto = budgetPatientUuid;
         }
     }
 
-    const opts = ['<option value="">Selecione...</option>'];
+    const notFound = Boolean(orcSeqRaw && orcSeq && Number.isFinite(orcSeq) && !b);
+    if (notFound) showToast('Orçamento não encontrado para este número.', true);
+    const opts = ['<option value="">' + (notFound ? 'Orçamento não encontrado' : 'Selecione...') + '</option>'];
     itens.forEach((it, idx) => {
-        const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
+        const servId = normId(it.servico_id || it.servicoId || '');
+        const serv = (services || []).find(s => normId(s.id) === servId);
         const desc = serv ? serv.descricao : (it.descricao || `Item ${idx + 1}`);
         const valorItem = Number(it.valor || it.valorUnit || 0);
         const valorProt = Number(it.valor_protetico || it.valorProtetico || 0);
         const label = `${desc} — ${formatCurrencyBRL(valorItem)} | Prot: ${formatCurrencyBRL(valorProt)}`;
-        opts.push(`<option value="${it.id}">${label}</option>`);
+        opts.push(`<option value="${normId(it.id)}">${label}</option>`);
     });
     orcItemSel.innerHTML = opts.join('');
 
@@ -5207,7 +5366,7 @@ function syncProteseOrcamentoItens() {
         orcItemSel.value = prev;
     }
     if (!prev && itens.length === 1) {
-        orcItemSel.value = String(itens[0].id || '');
+        orcItemSel.value = normId(itens[0].id || '');
     }
 
     updateProteseItemInfo();
@@ -5217,8 +5376,8 @@ function updateProteseItemInfo() {
     const descEl = document.getElementById('proteseItemDescricao');
     const valEl = document.getElementById('proteseItemValor');
     const protEl = document.getElementById('proteseItemValorProtetico');
-    const orcSeqRaw = (document.getElementById('proteseOrcamentoSeqid') || {}).value || '';
-    const itemId = (document.getElementById('proteseOrcamentoItemId') || {}).value || '';
+    const orcSeqRaw = String((document.getElementById('proteseOrcamentoSeqid') || {}).value || '').trim();
+    const itemId = String((document.getElementById('proteseOrcamentoItemId') || {}).value || '').trim();
     const execSel = document.getElementById('proteseTipoExecucao');
     const labSel = document.getElementById('proteseLaboratorio');
     const protSel = document.getElementById('proteseProtetico');
@@ -5229,7 +5388,7 @@ function updateProteseItemInfo() {
     const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
     const b = (orcSeq && Number.isFinite(orcSeq)) ? (budgets || []).find(x => Number(x.seqid) === Number(orcSeq)) : null;
     const itens = b ? (b.orcamento_itens || []) : [];
-    const it = itemId ? itens.find(x => String(x.id) === String(itemId)) : null;
+    const it = itemId ? itens.find(x => String(x.id || '').trim() === itemId) : null;
     if (!it) {
         if (descEl) descEl.value = '';
         if (valEl) valEl.value = '';
@@ -5237,7 +5396,8 @@ function updateProteseItemInfo() {
         return;
     }
 
-    const serv = (services || []).find(s => String(s.id) === String(it.servico_id || it.servicoId || ''));
+    const servId = String(it.servico_id || it.servicoId || '').trim();
+    const serv = (services || []).find(s => String(s.id || '').trim() === servId);
     const desc = serv ? serv.descricao : (it.descricao || '—');
     const valorItem = Number(it.valor || it.valorUnit || 0);
     const valorProt = Number(it.valor_protetico || it.valorProtetico || 0);
@@ -7024,6 +7184,40 @@ function updateCommissionSelectedTotal() {
     if (commSelectedTotal) {
         commSelectedTotal.textContent = `Total selecionado: ${Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
     }
+    updateCommTransferButtonState();
+    updateCommAdvanceButtonState();
+}
+
+function getSelectedCommissionRows() {
+    const ids = Array.from(selectedCommissionIds || []);
+    return (commissionsList || []).filter(r => ids.includes(String(r.id)));
+}
+
+function updateCommTransferButtonState() {
+    if (!btnCommTransfer) return;
+    const rows = getSelectedCommissionRows();
+    const hasPerm = isSuperAdmin || isAdminRole() || can('comissoes', 'update');
+    if (!hasPerm) {
+        btnCommTransfer.disabled = true;
+        return;
+    }
+    if (!rows.length) {
+        btnCommTransfer.disabled = true;
+        return;
+    }
+    btnCommTransfer.disabled = false;
+}
+
+function updateCommAdvanceButtonState() {
+    if (!btnCommAdvance) return;
+    const rows = getSelectedCommissionRows();
+    const hasPerm = isSuperAdmin || isAdminRole() || can('comissoes', 'update');
+    if (!hasPerm || !rows.length) {
+        btnCommAdvance.disabled = true;
+        return;
+    }
+    const hasPaid = rows.some(r => String(r.status || '').toUpperCase() === 'PAGA');
+    btnCommAdvance.disabled = hasPaid;
 }
 
 function getProfessionalNameBySeqId(seqId) {
@@ -7033,6 +7227,7 @@ function getProfessionalNameBySeqId(seqId) {
 
 function getCommissionStatusesForFilter(v) {
     if (v === 'A_PAGAR') return ['PENDENTE', 'GERADA'];
+    if (v === 'ANTECIPADAS') return ['ANTECIPADA'];
     if (v === 'PAGAS') return ['PAGA'];
     if (v === 'TRANSFERIDAS') return ['ESTORNADA', 'TRANSFERIDA'];
     return null;
@@ -7172,6 +7367,7 @@ function renderCommissionsTable(rows, statusVal) {
 
     const showPayActions = statusVal !== 'PAGAS';
     if (btnCommPay) btnCommPay.disabled = !showPayActions;
+    updateCommTransferButtonState();
 
     rows.forEach(r => {
         const id = String(r.id);
@@ -7273,9 +7469,244 @@ async function markSelectedCommissionsPaid() {
     }
 }
 
-function printCommissionReceipt() {
-    const ids = Array.from(selectedCommissionIds);
-    const rows = (commissionsList || []).filter(r => ids.includes(String(r.id)));
+async function markSelectedCommissionsAdvanced() {
+    if (!can('comissoes', 'update')) {
+        showToast('Você não possui permissão para antecipar comissões.', true);
+        return;
+    }
+
+    const rows = getSelectedCommissionRows();
+    if (!rows.length) {
+        showToast('Selecione pelo menos uma comissão.', true);
+        return;
+    }
+
+    const toAdvance = rows.filter(r => String(r.status || '').toUpperCase() !== 'PAGA' && String(r.status || '').toUpperCase() !== 'TRANSFERIDA' && String(r.status || '').toUpperCase() !== 'ESTORNADA');
+    if (!toAdvance.length) {
+        showToast('Nenhuma comissão selecionada pode ser antecipada.', true);
+        return;
+    }
+
+    try {
+        const itemIds = Array.from(new Set(toAdvance.map(r => r.item_id).filter(Boolean).map(String)));
+        if (itemIds.length) {
+            let q = db.from('orcamento_itens').select('id,status').in('id', itemIds);
+            if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+            const { data, error } = await withTimeout(q, 15000, 'orcamento_itens:status_for_comm_advance');
+            if (error) throw error;
+            const statusDone = new Set(['finalizado', 'executado', 'atendido']);
+            const doneIds = (data || [])
+                .filter(it => statusDone.has(String(it.status || '').trim().toLowerCase()))
+                .map(it => String(it.id));
+            if (doneIds.length) {
+                showToast('Existem comissões de serviços já realizados. Use "Marcar como Pago" (não antecipar).', true);
+                return;
+            }
+        }
+    } catch (e) {
+        showToast('Não foi possível validar se o serviço foi realizado. Use "Marcar como Pago" se já foi feito.', true);
+        return;
+    }
+
+    const obsRaw = prompt('Observação da antecipação (opcional):', '') || '';
+    const nowIso = new Date().toISOString();
+    const receiptId = genUuid();
+    const payloadFull = {
+        status: 'ANTECIPADA',
+        data_pagamento: nowIso,
+        pago_por: currentUser?.id || null,
+        recibo_id: receiptId,
+        observacoes: obsRaw
+    };
+    const payloadFallback = { status: 'ANTECIPADA', data_pagamento: nowIso, pago_por: currentUser?.id || null };
+
+    const ids = toAdvance.map(r => r.id);
+    if (!confirm(`Confirmar antecipação de ${ids.length} comissão(ões)?`)) return;
+
+    if (btnCommAdvance) btnCommAdvance.disabled = true;
+    try {
+        try {
+            let q = db.from('financeiro_comissoes').update(payloadFull).in('id', ids);
+            if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+            const { error } = await withTimeout(q, 15000, 'financeiro_comissoes:advance');
+            if (error) throw error;
+        } catch (e1) {
+            let q2 = db.from('financeiro_comissoes').update(payloadFallback).in('id', ids);
+            if (!isSuperAdmin && currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
+            const { error: e2 } = await withTimeout(q2, 15000, 'financeiro_comissoes:advance2');
+            if (e2) throw e2;
+        }
+
+        showToast('Comissões antecipadas.');
+        resetCommissionSelection();
+        await fetchCommissionsFromUI();
+
+        const printed = (commissionsList || []).filter(r => ids.includes(String(r.id)));
+        printCommissionReceipt({ rows: printed, mode: 'ANTECIPACAO' });
+    } catch (err) {
+        console.error('Erro ao antecipar comissões:', err);
+        showToast('Erro ao antecipar comissões.', true);
+    } finally {
+        if (btnCommAdvance) btnCommAdvance.disabled = false;
+        updateCommAdvanceButtonState();
+    }
+}
+
+function openCommTransferModalFromSelection() {
+    if (!commTransferModal || !commTransferNewProfessional || !commTransferObs) return;
+    if (!(isSuperAdmin || isAdminRole() || can('comissoes', 'update'))) {
+        showToast('Você não possui permissão para transferir comissões.', true);
+        return;
+    }
+    const rows = getSelectedCommissionRows();
+    if (!rows.length) {
+        showToast('Selecione pelo menos uma comissão.', true);
+        return;
+    }
+    const allNotPaid = rows.every(r => String(r.status || '').toUpperCase() !== 'PAGA');
+    if (!allNotPaid) {
+        showToast('Não é possível transferir comissões já pagas.', true);
+        return;
+    }
+    const firstProf = String(rows[0].profissional_id || '');
+    const sameProf = rows.every(r => String(r.profissional_id || '') === firstProf);
+    if (!sameProf) {
+        showToast('Selecione comissões do mesmo profissional para transferir.', true);
+        return;
+    }
+
+    const total = rows.reduce((acc, r) => acc + Number(r.valor_comissao || 0), 0);
+    const profName = getProfessionalNameBySeqId(firstProf);
+    if (commTransferSummary) {
+        commTransferSummary.textContent = `${rows.length} comissão(ões) • ${profName} • ${Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
+    }
+
+    const opts = ['<option value="">Selecione...</option>'];
+    (professionals || [])
+        .slice()
+        .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+        .forEach(p => {
+            if (String(p.seqid) === String(firstProf)) return;
+            opts.push(`<option value="${p.seqid}">${escapeHtml(p.nome || '')}</option>`);
+        });
+    commTransferNewProfessional.innerHTML = opts.join('');
+    commTransferNewProfessional.value = '';
+    commTransferObs.value = '';
+
+    commTransferModal.classList.remove('hidden');
+}
+
+function closeCommTransferModal() {
+    if (commTransferModal) commTransferModal.classList.add('hidden');
+}
+
+function genUuid() {
+    try {
+        if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    } catch {}
+    const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).slice(1);
+    return `${s4()}${s4()}-${s4()}-${s4()}-${s4()}-${s4()}${s4()}${s4()}`;
+}
+
+async function transferSelectedCommissionsToProfessional() {
+    if (!(isSuperAdmin || isAdminRole() || can('comissoes', 'update'))) {
+        showToast('Você não possui permissão para transferir comissões.', true);
+        return;
+    }
+    const rows = getSelectedCommissionRows();
+    if (!rows.length) { showToast('Selecione pelo menos uma comissão.', true); return; }
+    const firstProf = String(rows[0].profissional_id || '');
+    const sameProf = rows.every(r => String(r.profissional_id || '') === firstProf);
+    if (!sameProf) { showToast('Selecione comissões do mesmo profissional para transferir.', true); return; }
+    const allNotPaid = rows.every(r => String(r.status || '').toUpperCase() !== 'PAGA');
+    if (!allNotPaid) { showToast('Não é possível transferir comissões já pagas.', true); return; }
+
+    const newProf = commTransferNewProfessional ? String(commTransferNewProfessional.value || '') : '';
+    const obs = commTransferObs ? String(commTransferObs.value || '').trim() : '';
+    if (!newProf) { showToast('Selecione o novo profissional.', true); return; }
+    if (!obs) { showToast('Informe uma observação.', true); return; }
+
+    const oldProfName = getProfessionalNameBySeqId(firstProf);
+    const newProfName = getProfessionalNameBySeqId(newProf);
+    const note = `TRANSFERÊNCIA: ${oldProfName} -> ${newProfName}. ${obs}`;
+    const nowIso = new Date().toISOString();
+    const groupId = genUuid();
+    const ids = rows.map(r => r.id);
+
+    if (btnCommTransferConfirm) btnCommTransferConfirm.disabled = true;
+    try {
+        const payloadFull = { status: 'TRANSFERIDA', observacoes: note, estornado_em: nowIso, estornado_por: currentUser?.id || null, transfer_group_id: groupId };
+        const payloadFallback = { status: 'TRANSFERIDA', observacoes: note };
+        const payloadMin = { status: 'TRANSFERIDA' };
+
+        try {
+            let q = db.from('financeiro_comissoes').update(payloadFull).in('id', ids);
+            if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+            const { error } = await withTimeout(q, 15000, 'financeiro_comissoes:transfer:update');
+            if (error) throw error;
+        } catch (e1) {
+            try {
+                let q2 = db.from('financeiro_comissoes').update(payloadFallback).in('id', ids);
+                if (!isSuperAdmin && currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
+                const { error: e2 } = await withTimeout(q2, 15000, 'financeiro_comissoes:transfer:update2');
+                if (e2) throw e2;
+            } catch (e2) {
+                let q3 = db.from('financeiro_comissoes').update(payloadMin).in('id', ids);
+                if (!isSuperAdmin && currentEmpresaId) q3 = q3.eq('empresa_id', currentEmpresaId);
+                const { error: e3 } = await withTimeout(q3, 15000, 'financeiro_comissoes:transfer:update3');
+                if (e3) throw e3;
+            }
+        }
+
+        const insertFull = rows.map(r => ({
+            empresa_id: currentEmpresaId,
+            profissional_id: Number(newProf),
+            item_id: r.item_id || null,
+            valor_comissao: Number(r.valor_comissao || 0),
+            status: 'GERADA',
+            data_geracao: r.data_geracao || nowIso,
+            observacoes: note,
+            criado_por: currentUser?.id || null,
+            transfer_group_id: groupId
+        }));
+        const insertFallback = rows.map(r => ({
+            empresa_id: currentEmpresaId,
+            profissional_id: Number(newProf),
+            item_id: r.item_id || null,
+            valor_comissao: Number(r.valor_comissao || 0),
+            status: 'GERADA'
+        }));
+
+        try {
+            const { error } = await withTimeout(db.from('financeiro_comissoes').insert(insertFull), 15000, 'financeiro_comissoes:transfer:insert');
+            if (error) throw error;
+        } catch (eIns) {
+            const { error: e2 } = await withTimeout(db.from('financeiro_comissoes').insert(insertFallback), 15000, 'financeiro_comissoes:transfer:insert2');
+            if (e2) throw e2;
+        }
+
+        showToast('Transferência de comissão registrada.');
+        closeCommTransferModal();
+        resetCommissionSelection();
+        await fetchCommissionsFromUI();
+    } catch (err) {
+        console.error('Erro ao transferir comissões:', err);
+        const code = err && err.code ? String(err.code) : '';
+        const msg = err && err.message ? String(err.message) : 'Falha ao transferir comissões.';
+        const details = err && err.details ? String(err.details) : '';
+        const hint = err && err.hint ? String(err.hint) : '';
+        const full = [msg, details, hint].filter(Boolean).join(' ');
+        showToast(code ? `Falha ao transferir comissões (${code}): ${full}` : `Falha ao transferir comissões: ${full}`, true);
+    } finally {
+        if (btnCommTransferConfirm) btnCommTransferConfirm.disabled = false;
+    }
+}
+
+function printCommissionReceipt(opts = null) {
+    const mode = opts && typeof opts === 'object' ? String(opts.mode || '') : '';
+    const rows = (opts && typeof opts === 'object' && Array.isArray(opts.rows))
+        ? opts.rows
+        : (commissionsList || []).filter(r => Array.from(selectedCommissionIds).includes(String(r.id)));
     if (!rows.length) {
         showToast('Selecione pelo menos uma comissão para imprimir.', true);
         return;
@@ -7314,10 +7745,18 @@ function printCommissionReceipt() {
             </tr>`;
         }).join('');
 
+        const isAdvance = mode === 'ANTECIPACAO' || list.every(r => String(r.status || '').toUpperCase() === 'ANTECIPADA');
+        const headerTitle = isAdvance ? 'RECIBO DE ANTECIPAÇÃO DE COMISSÃO' : 'RECIBO DE COMISSÃO';
+        const payLabel = isAdvance ? 'Antecipado em' : 'Pago em';
+        const payDtRaw = list.find(r => r.data_pagamento)?.data_pagamento || null;
+        const payDt = payDtRaw ? formatDateTime(payDtRaw) : formatDateTime(new Date().toISOString());
+        const receiptId = String(list.find(r => r.recibo_id)?.recibo_id || '');
+        const operatorName = currentUser?.email ? String(currentUser.email) : '';
+
         parts.push(`
             <div class="term-print-container" style="${pageBreak}">
                 <div class="term-header">
-                    <div style="font-size: 22px; font-weight: bold; color: #000;">RECIBO DE COMISSÃO</div>
+                    <div style="font-size: 22px; font-weight: bold; color: #000;">${headerTitle}</div>
                     <div style="margin-top: 6px; text-align:center; line-height:1.05;">
                         <div style="font-weight:800;">${empresaLabel}</div>
                         <div style="font-size:12px; font-weight:600; color:#6b7280; margin-top:2px;">Emitido via OCC - Odonto Connect Cloud</div>
@@ -7327,6 +7766,9 @@ function printCommissionReceipt() {
                 <div style="margin: 18px 0;">
                     <p><strong>Profissional:</strong> ${profName}</p>
                     ${periodLabel ? `<p><strong>Período:</strong> ${periodLabel}</p>` : ''}
+                    <p><strong>${payLabel}:</strong> ${payDt}</p>
+                    ${receiptId ? `<p><strong>Recibo:</strong> ${escapeHtml(receiptId)}</p>` : ''}
+                    ${operatorName ? `<p><strong>Operador:</strong> ${escapeHtml(operatorName)}</p>` : ''}
                 </div>
 
                 <table style="width: 100%; border-collapse: collapse; border: 1px solid #000;">
@@ -7511,6 +7953,8 @@ async function printCommissionsReportFromUI() {
 
 if (btnCommSearch) btnCommSearch.addEventListener('click', () => fetchCommissionsFromUI());
 if (btnCommPay) btnCommPay.addEventListener('click', () => markSelectedCommissionsPaid());
+if (btnCommAdvance) btnCommAdvance.addEventListener('click', () => markSelectedCommissionsAdvanced());
+if (btnCommTransfer) btnCommTransfer.addEventListener('click', () => openCommTransferModalFromSelection());
 if (btnCommPrint) btnCommPrint.addEventListener('click', () => printCommissionReceipt());
 if (btnCommPrintReport) btnCommPrintReport.addEventListener('click', () => printCommissionsReportFromUI());
 if (commStatus) commStatus.addEventListener('change', () => { resetCommissionSelection(); fetchCommissionsFromUI(); });
@@ -7526,6 +7970,9 @@ if (commSelectAll) commSelectAll.addEventListener('change', (e) => {
     (commissionsList || []).forEach(r => selectedCommissionIds.add(String(r.id)));
     renderCommissionsTable(commissionsList, commStatus ? commStatus.value : 'A_PAGAR');
 });
+
+if (btnCommTransferCancel) btnCommTransferCancel.addEventListener('click', closeCommTransferModal);
+if (btnCommTransferConfirm) btnCommTransferConfirm.addEventListener('click', transferSelectedCommissionsToProfessional);
 
 // Global action to delete user mapping
 window.removeTenantUser = async function (usuario_id) {
@@ -7786,6 +8233,19 @@ function buildDayDateRangeUTC(localDateStr) {
     const start = new Date(`${localDateStr}T00:00:00`);
     const end = new Date(`${localDateStr}T23:59:59`);
     return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
+async function getNextOrcamentoSeqIdForEmpresa(empresaId) {
+    if (!empresaId) return getNextSeqId(budgets);
+    const q = db.from('orcamentos')
+        .select('seqid')
+        .eq('empresa_id', empresaId)
+        .order('seqid', { ascending: false })
+        .limit(1);
+    const { data, error } = await withTimeout(q, 15000, 'orcamentos:max_seqid');
+    if (error) throw error;
+    const maxSeq = data && data[0] && data[0].seqid != null ? Number(data[0].seqid) : 0;
+    return (Number.isFinite(maxSeq) ? maxSeq : 0) + 1;
 }
 
 async function fetchAgendaForUI() {
@@ -8433,14 +8893,47 @@ let mediaStream = null;
 
 if (btnOpenModalCamera) {
     btnOpenModalCamera.addEventListener('click', async () => {
+        if (!window.isSecureContext) {
+            showToast('A câmera exige HTTPS ou http://localhost. Abra o OCC em localhost/HTTPS e tente novamente.', true);
+            return;
+        }
+        const hasMediaDevices = !!(navigator.mediaDevices);
+        const hasGetUserMedia = hasMediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function';
+        const hasLegacyGetUserMedia = typeof navigator.getUserMedia === 'function'
+            || typeof navigator.webkitGetUserMedia === 'function'
+            || typeof navigator.mozGetUserMedia === 'function';
+        if (!hasGetUserMedia && !hasLegacyGetUserMedia) {
+            showToast('Captura por câmera indisponível neste navegador/dispositivo.', true);
+            return;
+        }
+
         cameraModal.classList.remove('hidden');
         try {
-            mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+            const constraints = { video: { facingMode: 'user' }, audio: false };
+            if (hasGetUserMedia) {
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+            } else {
+                const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+                mediaStream = await new Promise((resolve, reject) => legacy.call(navigator, constraints, resolve, reject));
+            }
             cameraVideo.srcObject = mediaStream;
-            cameraVideo.play();
+            await new Promise(resolve => {
+                if (cameraVideo.readyState >= 1) return resolve();
+                cameraVideo.onloadedmetadata = () => resolve();
+            });
+            try { await cameraVideo.play(); } catch { }
         } catch (err) {
             console.error("Erro ao acessar câmera: ", err);
-            alert("Não foi possível acessar a câmera do seu dispositivo. Verifique as permissões de privacidade.");
+            const name = err && err.name ? String(err.name) : '';
+            if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+                showToast('Permissão de câmera negada. Habilite a câmera no navegador e tente novamente.', true);
+            } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                showToast('Nenhuma câmera foi encontrada neste dispositivo.', true);
+            } else if (!window.isSecureContext) {
+                showToast('Câmera exige HTTPS/localhost. Use "Escolher" para enviar uma foto.', true);
+            } else {
+                showToast('Não foi possível acessar a câmera. Use "Escolher" para enviar uma foto.', true);
+            }
             closeCameraModal();
         }
     });
@@ -8452,6 +8945,7 @@ function closeCameraModal() {
         mediaStream.getTracks().forEach(track => track.stop());
         mediaStream = null;
     }
+    if (cameraVideo) cameraVideo.srcObject = null;
 }
 
 if (btnCloseCameraModal) btnCloseCameraModal.addEventListener('click', closeCameraModal);
@@ -8460,6 +8954,10 @@ if (btnCancelCamera) btnCancelCamera.addEventListener('click', closeCameraModal)
 if (btnTakePhoto) {
     btnTakePhoto.addEventListener('click', () => {
         if (!mediaStream) return;
+        if (!cameraVideo || !cameraVideo.videoWidth || !cameraVideo.videoHeight) {
+            showToast('Aguarde a câmera iniciar antes de gravar a foto.', true);
+            return;
+        }
         const context = cameraCanvas.getContext('2d');
         cameraCanvas.width = cameraVideo.videoWidth;
         cameraCanvas.height = cameraVideo.videoHeight;
@@ -9150,12 +9648,29 @@ window.renderTable = function (data, type) {
                 </td>
             `;
         } else if (type === 'professionals') {
+            const table = document.getElementById('professionalsTable');
+            const headRow = table ? table.querySelector('thead tr') : null;
+            if (headRow) {
+                const ths = Array.from(headRow.querySelectorAll('th'));
+                const hasFoto = ths.some(th => String(th.textContent || '').trim().toLowerCase() === 'foto');
+                if (!hasFoto) {
+                    const th = document.createElement('th');
+                    th.textContent = 'Foto';
+                    th.style.width = '70px';
+                    th.style.textAlign = 'center';
+                    if (ths.length >= 2) headRow.insertBefore(th, ths[1]);
+                    else headRow.appendChild(th);
+                }
+            }
+
+            const photoSrc = getProfessionalPhotoValue(item);
             tr.innerHTML = `
                 <td>${item.seqid}</td>
-                <td style="font-weight: 600;">${item.nome}</td>
-                <td>${item.tipo}</td>
-                <td>${item.especialidadeid ? getSpecialtyName(item.especialidadeid) : '-'}</td>
-                <td><span class="badge badge-${(item.status || 'Ativo').toLowerCase()}">${item.status || 'Ativo'}</span></td>
+                <td class="js-prof-photo" style="text-align:center;"></td>
+                <td style="font-weight: 600;">${escapeHtml(item.nome || '')}</td>
+                <td>${escapeHtml(item.tipo || '')}</td>
+                <td>${item.especialidadeid ? escapeHtml(getSpecialtyName(item.especialidadeid)) : '-'}</td>
+                <td><span class="badge badge-${escapeHtml(String(item.status || 'Ativo').toLowerCase())}">${escapeHtml(item.status || 'Ativo')}</span></td>
                 <td>
                     <div class="actions">
                         <button onclick="printProfessional('${item.id}')" class="btn-icon" title="Imprimir Ficha"><i class="ri-printer-line"></i></button>
@@ -9164,6 +9679,30 @@ window.renderTable = function (data, type) {
                     </div>
                 </td>
             `;
+
+            const photoCell = tr.querySelector('.js-prof-photo');
+            if (photoCell) {
+                if (photoSrc) {
+                    const img = document.createElement('img');
+                    img.className = 'photo-thumb';
+                    img.alt = 'Foto';
+                    let objectUrl = '';
+                    img.onerror = () => {
+                        try { if (objectUrl) URL.revokeObjectURL(objectUrl); } catch { }
+                        try {
+                            photoCell.innerHTML = '<i class="ri-user-line"></i>';
+                        } catch { }
+                    };
+                    img.onload = () => { try { if (objectUrl) URL.revokeObjectURL(objectUrl); } catch { } };
+                    if (photoSrc.startsWith('data:image/') && photoSrc.length > 200000) {
+                        objectUrl = dataUrlToObjectUrl(photoSrc);
+                    }
+                    img.src = objectUrl || photoSrc;
+                    photoCell.appendChild(img);
+                } else {
+                    photoCell.innerHTML = '<i class="ri-user-line"></i>';
+                }
+            }
         } else if (type === 'specialties') {
             tr.innerHTML = `
                 <td>${item.seqid}</td>
@@ -10135,10 +10674,21 @@ if (budgetForm) {
             } else {
                 const newId = generateId();
                 budgetData.id = newId;
-                budgetData.seqid = getNextSeqId(budgets);
-
-                const { data: inserted, error } = await db.from('orcamentos').insert(budgetData).select().single();
-                if (error) throw error;
+                let inserted = null;
+                let lastErr = null;
+                for (let attempt = 0; attempt < 5; attempt++) {
+                    budgetData.seqid = await getNextOrcamentoSeqIdForEmpresa(currentEmpresaId);
+                    const res = await db.from('orcamentos').insert(budgetData).select().single();
+                    if (!res.error) {
+                        inserted = res.data;
+                        lastErr = null;
+                        break;
+                    }
+                    lastErr = res.error;
+                    if (String(res.error.code || '') === '23505') continue;
+                    break;
+                }
+                if (lastErr) throw lastErr;
 
                 orcamentoId = inserted.id;
                 budgets.push(inserted);
