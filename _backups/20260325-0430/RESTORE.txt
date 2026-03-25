@@ -1,0 +1,11 @@
+Backup criado em 2026-03-25.
+
+Arquivos:
+- app_v20.js
+- index.html
+- 20260325_orcamentos_seqid_unique_by_empresa.sql
+
+Para restaurar manualmente:
+1) Copie app_v20.js para c:\Projeto_TRAE\Projeto_DP\app_v20.js
+2) Copie index.html para c:\Projeto_TRAE\Projeto_DP\index.html
+3) Se necessário, reaplique a migration no Supabase (SQL Editor).
