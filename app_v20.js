@@ -2845,18 +2845,44 @@ function initMarketingModule() {
         if (marketingPatientsSummary) marketingPatientsSummary.textContent = `${list.length} pacientes`;
     };
 
-    const loadActiveCampaign = async () => {
+    const loadActiveCampaign = async (statusKey) => {
         if (!marketingActiveCampaign || !currentEmpresaId) return;
         try {
+            const sk = statusKey != null ? String(statusKey).trim().toUpperCase() : '';
             let q = db.from('marketing_campanhas')
                 .select('id,nome,limite_dia')
                 .eq('empresa_id', currentEmpresaId)
                 .eq('ativo', true)
+                ;
+            if (sk) q = q.eq('target_status', sk);
+            q = q
                 .order('updated_at', { ascending: false })
                 .limit(1);
             const { data, error } = await withTimeout(q, 15000, 'marketing:campanha_ativa');
             if (error) throw error;
-            const row = Array.isArray(data) ? data[0] : null;
+            let row = Array.isArray(data) ? data[0] : null;
+            if (!row && sk) {
+                const range = (() => {
+                    if (sk === 'ATIVOS') return { min: 0, max: 6 };
+                    if (sk === 'ATENCAO') return { min: 7, max: 8 };
+                    if (sk === 'REATIVACAO') return { min: 9, max: 11 };
+                    if (sk === 'ALTO_RISCO') return { min: 12, max: 17 };
+                    if (sk === 'PERDIDOS') return { min: 18, max: null };
+                    return { min: 0, max: 6 };
+                })();
+                let q2 = db.from('marketing_campanhas')
+                    .select('id,nome,limite_dia')
+                    .eq('empresa_id', currentEmpresaId)
+                    .eq('ativo', true)
+                    .eq('target_min_meses', range.min);
+                q2 = (range.max == null) ? q2.is('target_max_meses', null) : q2.eq('target_max_meses', range.max);
+                q2 = q2.order('updated_at', { ascending: false }).limit(1);
+                const r2 = await withTimeout(q2, 15000, 'marketing:campanha_ativa:minmax');
+                if (r2 && !r2.error) {
+                    const d2 = r2.data;
+                    row = Array.isArray(d2) ? d2[0] : null;
+                }
+            }
             activeCampaignRow = row || null;
             marketingActiveCampaign.textContent = row && row.nome ? String(row.nome) : '—';
         } catch {
@@ -3159,11 +3185,33 @@ function initMarketingModule() {
         }
     };
 
+    const loadRecentEnvios = async (campaignId) => {
+        if (!currentEmpresaId || !campaignId) return [];
+        try {
+            const sinceIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+            const q = db.from('marketing_envios')
+                .select('status,paciente_nome,paciente_email,enviado_em,created_at,smtp_message_id,smtp_response,erro')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('campanha_id', campaignId)
+                .gte('created_at', sinceIso)
+                .order('created_at', { ascending: false })
+                .limit(20);
+            const { data, error } = await withTimeout(q, 20000, 'marketing:envios:recent');
+            if (error) throw error;
+            return Array.isArray(data) ? data : [];
+        } catch {
+            return [];
+        }
+    };
+
     const dispararAgoraDoFiltro = async () => {
         if (!currentEmpresaId) return;
-        await loadActiveCampaign();
-
         const statusKey = bucketToStatusKey(marketingBucket ? marketingBucket.value : '0-6');
+        await loadActiveCampaign(statusKey);
+        if (!activeCampaignRow || !activeCampaignRow.id) {
+            showToast('Nenhuma campanha ativa para este Status (meses sem pagamento).', true);
+            return;
+        }
         const recipientsAll = (lastFidelidadeRows || []).filter(r => {
             const email = String(r && r.email || '').trim();
             return email && email.includes('@');
@@ -3176,12 +3224,23 @@ function initMarketingModule() {
 
         if (marketingSendResult) marketingSendResult.textContent = 'Disparando...';
         if (btnMarketingSend) btnMarketingSend.disabled = true;
-        const res = await runCampaignNow({ campaignId: activeCampaignRow && activeCampaignRow.id ? String(activeCampaignRow.id) : '', statusKey });
+        const res = await runCampaignNow({ statusKey });
         if (res) {
             const sent = Number(res.sent) || 0;
             const failed = Number(res.failed) || 0;
             const remaining = Number(res.remaining_estimate) || 0;
             if (marketingSendResult) marketingSendResult.textContent = `Enviados: ${sent} | Falhas: ${failed} | Restantes estimados: ${remaining}`;
+            const campId = res.campaign_id ? String(res.campaign_id) : '';
+            const logs = await loadRecentEnvios(campId);
+            if (marketingSendResult && logs.length) {
+                const lines = logs.map(x => {
+                    const st = String(x.status || '').toUpperCase();
+                    const em = String(x.paciente_email || '—');
+                    const mid = x.smtp_message_id ? String(x.smtp_message_id) : '';
+                    return mid ? `${st}: ${em} (id: ${mid})` : `${st}: ${em}`;
+                });
+                marketingSendResult.textContent = `${marketingSendResult.textContent}\n\nÚltimos registros (15 min):\n${lines.join('\n')}`;
+            }
             showToast('Disparo concluído.');
         }
         if (btnMarketingSend) btnMarketingSend.disabled = false;
@@ -3189,11 +3248,9 @@ function initMarketingModule() {
 
     const enviarAgoraDaCampanha = async () => {
         if (!currentEmpresaId) return;
-        await loadActiveCampaign();
-
         const statusKey = mkStatusAlvo ? String(mkStatusAlvo.value || '').trim() : 'ATIVOS';
         const campaignId = (mkCampaignIdEl && mkCampaignIdEl.value) ? String(mkCampaignIdEl.value).trim() : '';
-        const campNome = activeCampaignRow && activeCampaignRow.nome ? String(activeCampaignRow.nome) : 'campanha';
+        const campNome = mkCampaignNome && mkCampaignNome.value ? String(mkCampaignNome.value) : 'campanha';
         if (!confirm(`Disparar e-mails agora?\nCampanha: ${campNome}`)) return;
 
         if (mkCampaignResult) mkCampaignResult.textContent = 'Disparando...';
@@ -3204,6 +3261,17 @@ function initMarketingModule() {
             const failed = Number(res.failed) || 0;
             const remaining = Number(res.remaining_estimate) || 0;
             if (mkCampaignResult) mkCampaignResult.textContent = `Enviados: ${sent} | Falhas: ${failed} | Restantes estimados: ${remaining}`;
+            const campId = res.campaign_id ? String(res.campaign_id) : '';
+            const logs = await loadRecentEnvios(campId);
+            if (mkCampaignResult && logs.length) {
+                const lines = logs.map(x => {
+                    const st = String(x.status || '').toUpperCase();
+                    const em = String(x.paciente_email || '—');
+                    const mid = x.smtp_message_id ? String(x.smtp_message_id) : '';
+                    return mid ? `${st}: ${em} (id: ${mid})` : `${st}: ${em}`;
+                });
+                mkCampaignResult.textContent = `${mkCampaignResult.textContent}\n\nÚltimos registros (15 min):\n${lines.join('\n')}`;
+            }
             showToast('Disparo concluído.');
         }
         if (btnMkSend) btnMkSend.disabled = false;
@@ -3301,7 +3369,7 @@ function initMarketingModule() {
         setBtnActive(btnSmtp, t === 'smtp');
 
         if (t === 'fidelidade') {
-            loadActiveCampaign();
+            loadActiveCampaign(bucketToStatusKey(marketingBucket ? marketingBucket.value : '0-6'));
             loadFidelidadeKpis();
             loadFidelidade();
         }
@@ -3317,7 +3385,7 @@ function initMarketingModule() {
     if (btnCamp) btnCamp.addEventListener('click', () => setTab('campanhas'));
     if (btnSmtp) btnSmtp.addEventListener('click', () => setTab('smtp'));
     if (btnMarketingRefresh) btnMarketingRefresh.addEventListener('click', () => { loadFidelidadeKpis(); loadFidelidade(); });
-    if (marketingBucket) marketingBucket.addEventListener('change', () => loadFidelidade());
+    if (marketingBucket) marketingBucket.addEventListener('change', () => { loadActiveCampaign(bucketToStatusKey(marketingBucket.value)); loadFidelidade(); });
     if (btnMarketingSend) btnMarketingSend.addEventListener('click', () => dispararAgoraDoFiltro());
     if (btnMkReloadSmtp) btnMkReloadSmtp.addEventListener('click', () => loadSmtpConfig());
     if (btnMkSaveSmtp) btnMkSaveSmtp.addEventListener('click', () => saveSmtpConfig());

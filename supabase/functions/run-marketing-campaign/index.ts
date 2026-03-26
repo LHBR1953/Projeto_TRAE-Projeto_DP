@@ -173,19 +173,20 @@ Deno.serve(async (req) => {
     } else {
       const r = statusToRange(statusKey);
       let data: any = null;
-      try {
-        const resp = await supabaseAdmin
-          .from("marketing_campanhas")
-          .select("*")
-          .eq("empresa_id", empresaId)
-          .eq("ativo", true)
-          .eq("target_status", statusKey)
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .single();
-        if (resp.error) throw resp.error;
-        data = resp.data;
-      } catch {
+
+      const resp1 = await supabaseAdmin
+        .from("marketing_campanhas")
+        .select("*")
+        .eq("empresa_id", empresaId)
+        .eq("ativo", true)
+        .eq("target_status", statusKey)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (!resp1.error && resp1.data) {
+        data = resp1.data;
+      } else {
         let q2 = supabaseAdmin
           .from("marketing_campanhas")
           .select("*")
@@ -193,14 +194,19 @@ Deno.serve(async (req) => {
           .eq("ativo", true)
           .eq("target_min_meses", r.min);
         q2 = r.max === null ? q2.is("target_max_meses", null) : q2.eq("target_max_meses", r.max);
+        q2 = q2.eq("target_status", statusKey);
+
         const resp2 = await q2
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-        if (resp2.error) throw resp2.error;
-        data = resp2.data;
+        
+        if (!resp2.error && resp2.data) {
+          data = resp2.data;
+        }
       }
-      if (!data) throw new Error(`No active campaign found for status_key=${statusKey}`);
+      
+      if (!data) throw new Error(`Nenhuma campanha ativa encontrada para status_key=${statusKey}`);
       campaign = data;
     }
 
@@ -226,8 +232,9 @@ Deno.serve(async (req) => {
     const empresaCelular = String((empresa as any)?.celular || "").trim();
     const empresaEmail = String((empresa as any)?.email || "").trim();
 
-    const minMeses = Number(campaign.target_min_meses ?? 0);
-    const maxMeses = campaign.target_max_meses == null ? null : Number(campaign.target_max_meses);
+    const filterRange = statusToRange(statusKey);
+    const minMeses = filterRange.min;
+    const maxMeses = filterRange.max;
     const limiteDia = Math.max(1, Number(campaign.limite_dia ?? 50));
     const diasReenvio = Math.max(0, Number(campaign.dias_reenvio ?? 0));
     const janelaConv = Math.max(1, Number(campaign.janela_conversao_dias ?? 30));
