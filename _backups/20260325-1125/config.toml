@@ -1,0 +1,3 @@
+[functions.run-marketing-campaign]
+verify_jwt = false
+

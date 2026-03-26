@@ -1,0 +1,26 @@
+Backup criado em 2026-03-25 (build 20260325-1125).
+
+Arquivos principais:
+- app_v20.js
+- index.html
+- styles.css
+
+Marketing (SQL / Function):
+- 20260319_marketing_apply.sql
+- 20260319_pacientes_optout_campanhas_apply.sql
+- 20260319_marketing_brevo_api_key_apply.sql
+- 20260319_marketing_envios_smtp_log_apply.sql
+- 20260319_marketing_status_alvo_apply.sql
+- 20260319_marketing_require_from_email_apply.sql
+- index.ts (supabase/functions/run-marketing-campaign)
+- config.toml (supabase/config.toml)
+
+Outros:
+- 20260325_orcamentos_seqid_unique_by_empresa.sql
+- MANIFEST_SHA256.txt (hash SHA256 dos arquivos desta pasta)
+
+Para restaurar manualmente:
+1) Copie app_v20.js para C:\Projeto_TRAE\Projeto_DP\app_v20.js
+2) Copie index.html para C:\Projeto_TRAE\Projeto_DP\index.html
+3) Copie styles.css para C:\Projeto_TRAE\Projeto_DP\styles.css
+4) Se necessário, reaplique os SQL no Supabase (SQL Editor).
