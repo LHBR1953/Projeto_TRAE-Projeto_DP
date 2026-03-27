@@ -347,135 +347,6 @@ function withTimeout(promiseLike, ms, label = '') {
     });
 }
 
-async function existsAnyRow(query, label) {
-    const { data, error } = await withTimeout(query.limit(1), 15000, label);
-    if (error) throw error;
-    if (Array.isArray(data)) return data.length > 0;
-    return !!data;
-}
-
-async function getPatientDeleteBlockers(patient) {
-    const blocks = [];
-    const patId = patient && patient.id ? String(patient.id) : '';
-    const patSeq = patient && patient.seqid != null ? Number(patient.seqid) : NaN;
-
-    if (patId) {
-        const hasBudget = (budgets || []).some(b => String(b && (b.pacienteid || b.paciente_id) || '') === patId);
-        if (hasBudget) blocks.push('Orçamentos');
-        const hasProtese = (proteseOrders || []).some(o => String(o && o.paciente_id || '') === patId);
-        if (hasProtese) blocks.push('Prótese');
-        const hasEvo = await existsAnyRow(
-            db.from('paciente_evolucao').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_id', patId),
-            'paciente_evolucao'
-        );
-        if (hasEvo) blocks.push('Prontuário');
-        const hasDocs = await existsAnyRow(
-            db.from('paciente_documentos').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_id', patId),
-            'paciente_documentos'
-        );
-        if (hasDocs) blocks.push('Documentos');
-    }
-
-    if (Number.isFinite(patSeq)) {
-        const hasAgenda = await existsAnyRow(
-            db.from('agenda_agendamentos').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_id', patSeq),
-            'agenda_agendamentos'
-        );
-        if (hasAgenda) blocks.push('Agenda');
-        const hasFin = await existsAnyRow(
-            db.from('financeiro_transacoes').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_id', patSeq),
-            'financeiro_transacoes'
-        );
-        if (hasFin) blocks.push('Financeiro');
-        const hasFinDest = await existsAnyRow(
-            db.from('financeiro_transacoes').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_destino_id', patSeq),
-            'financeiro_transacoes:destino'
-        );
-        if (hasFinDest) blocks.push('Financeiro');
-    }
-
-    return Array.from(new Set(blocks));
-}
-
-async function getProfessionalDeleteBlockers(prof) {
-    const blocks = [];
-    const profId = prof && prof.id ? String(prof.id) : '';
-    const profSeq = prof && prof.seqid != null ? Number(prof.seqid) : NaN;
-
-    if (Number.isFinite(profSeq)) {
-        const usedInBudgetHeader = (budgets || []).some(b => Number(b && b.profissional_id) === profSeq);
-        if (usedInBudgetHeader) blocks.push('Orçamentos');
-        const usedInBudgetItemsLocal = (budgets || []).some(b => {
-            const itens = (b && (b.orcamento_itens || b.itens)) || [];
-            return Array.isArray(itens) && itens.some(it => Number(it && it.profissional_id) === profSeq || Number(it && it.protetico_id) === profSeq);
-        });
-        if (usedInBudgetItemsLocal) blocks.push('Itens de Orçamento');
-
-        const hasAgenda = await existsAnyRow(
-            db.from('agenda_agendamentos').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
-            'agenda_agendamentos:prof'
-        );
-        if (hasAgenda) blocks.push('Agenda');
-        const hasDisp = await existsAnyRow(
-            db.from('agenda_disponibilidade').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
-            'agenda_disponibilidade'
-        );
-        if (hasDisp) blocks.push('Agenda');
-        const hasCom = await existsAnyRow(
-            db.from('financeiro_comissoes').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
-            'financeiro_comissoes'
-        );
-        if (hasCom) blocks.push('Comissões');
-        const hasItemsExec = await existsAnyRow(
-            db.from('orcamento_itens').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
-            'orcamento_itens:prof'
-        );
-        if (hasItemsExec) blocks.push('Itens de Orçamento');
-        const hasItemsProt = await existsAnyRow(
-            db.from('orcamento_itens').select('id').eq('empresa_id', currentEmpresaId).eq('protetico_id', profSeq),
-            'orcamento_itens:prot'
-        );
-        if (hasItemsProt) blocks.push('Itens de Orçamento');
-    }
-
-    if (profId) {
-        const hasProtese = (proteseOrders || []).some(o => String(o && o.protetico_id || '') === profId);
-        if (hasProtese) blocks.push('Prótese');
-        const hasProteseDb = await existsAnyRow(
-            db.from('ordens_proteticas').select('id').eq('empresa_id', currentEmpresaId).eq('protetico_id', profId),
-            'ordens_proteticas'
-        );
-        if (hasProteseDb) blocks.push('Prótese');
-        const hasEvo = await existsAnyRow(
-            db.from('paciente_evolucao').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profId),
-            'paciente_evolucao:prof'
-        );
-        if (hasEvo) blocks.push('Prontuário');
-    }
-
-    return Array.from(new Set(blocks));
-}
-
-async function getServiceDeleteBlockers(service) {
-    const blocks = [];
-    const servId = service && service.id ? String(service.id) : '';
-    if (!servId) return blocks;
-
-    const usedLocal = (budgets || []).some(b => {
-        const itens = (b && (b.orcamento_itens || b.itens)) || [];
-        return Array.isArray(itens) && itens.some(it => String(it && (it.servico_id || it.servicoId) || '') === servId);
-    });
-    if (usedLocal) blocks.push('Orçamentos');
-
-    const hasItems = await existsAnyRow(
-        db.from('orcamento_itens').select('id').eq('empresa_id', currentEmpresaId).eq('servico_id', servId),
-        'orcamento_itens:servico'
-    );
-    if (hasItems) blocks.push('Orçamentos');
-
-    return Array.from(new Set(blocks));
-}
-
 function isMissingEmbeddedRelationshipError(err) {
     const code = err && err.code ? String(err.code) : '';
     const msg = err && err.message ? String(err.message) : '';
@@ -2377,11 +2248,7 @@ function renderTable(data = [], type = 'patients') {
             const photoSrc = getProfessionalPhotoValue(p);
             const hasRawPhoto = !!(p && (p.photo || p.foto || p.foto_base64 || p.photo_base64 || p.imagem || p.imagem_base64));
 
-            const isIncomplete = String(p.nome || '').startsWith('[INCOMPLETO]');
-            const statusColor = isIncomplete
-                ? 'var(--danger-color)'
-                : (p.status === 'Ativo' ? 'var(--success-color)' : 'var(--text-muted)');
-            if (isIncomplete) tr.style.background = 'rgba(220, 38, 38, 0.08)';
+            const statusColor = p.status === 'Ativo' ? 'var(--success-color)' : 'var(--text-muted)';
 
             tr.innerHTML = `
                 <td>${p.seqid}</td>
@@ -2529,7 +2396,7 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
                         const subId = `${spec.seqid}.${i + 1} `;
                         const displayStr = `${subId} - ${sub.nome} `;
                         const opt = document.createElement('option');
-                        opt.value = String(sub.id || '');
+                        opt.value = displayStr;
                         opt.textContent = displayStr;
                         optgroup.appendChild(opt);
                     });
@@ -9055,21 +8922,9 @@ function initAgendaFilters() {
 
     if (agendaProfessional) {
         const norm = (s) => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const applyLock = (prof) => {
-            const tipo = prof ? norm(prof.tipo) : '';
-            const allowed = tipo.startsWith('clinico') || tipo.startsWith('especialista') || tipo.startsWith('protetico');
-            if (prof && allowed && prof.seqid != null) {
-                agendaProfessional.value = String(prof.seqid);
-                agendaProfessional.disabled = true;
-                return true;
-            }
-            return false;
-        };
-
         const uEmail = norm(currentUser && currentUser.email ? currentUser.email : '');
         const uId = String(currentUser && currentUser.id ? currentUser.id : '').trim();
-
-        const localProf = (professionals || []).find(p => {
+        const prof = (professionals || []).find(p => {
             if (!p) return false;
             const candidates = [
                 norm(p.email),
@@ -9082,30 +8937,13 @@ function initAgendaFilters() {
             if (uId && pid && pid === uId) return true;
             return false;
         });
-
-        const lockedByLocal = applyLock(localProf);
-        if (!lockedByLocal) {
+        const tipo = prof ? norm(prof.tipo) : '';
+        const allowed = tipo.startsWith('clinico') || tipo.startsWith('especialista') || tipo.startsWith('protetico');
+        if (prof && allowed && prof.seqid != null) {
+            agendaProfessional.value = String(prof.seqid);
+            agendaProfessional.disabled = true;
+        } else {
             agendaProfessional.disabled = false;
-            if (currentEmpresaId && uId && db) {
-                (async () => {
-                    try {
-                        const q = db.from('profissional_usuarios')
-                            .select('profissional_id')
-                            .eq('empresa_id', currentEmpresaId)
-                            .eq('usuario_id', uId)
-                            .limit(1);
-                        const { data, error } = await withTimeout(q, 15000, 'agenda:profissional_usuarios');
-                        if (error) throw error;
-                        const row = Array.isArray(data) ? data[0] : null;
-                        const profId = row && row.profissional_id ? String(row.profissional_id) : '';
-                        if (!profId) return;
-                        const prof = (professionals || []).find(p => String(p && p.id || '') === profId) || null;
-                        if (applyLock(prof)) {
-                            try { await fetchAgendaForUI(); } catch { }
-                        }
-                    } catch { }
-                })();
-            }
         }
     }
 
@@ -10165,22 +10003,18 @@ window.deletePatient = async function (id) {
         showToast("Você não tem permissão para excluir pacientes.", true);
         return;
     }
-    try {
-        const p = patients.find(x => String(x && x.id || '') === String(id));
-        const blockers = await getPatientDeleteBlockers(p);
-        if (blockers.length) {
-            showToast(`Não é possível excluir: paciente em uso em ${blockers.join(', ')}.`, true);
-            return;
+    if (confirm('Tem certeza que deseja excluir as informações deste paciente? O paciente e atrelados serão apagados.')) {
+        try {
+            const { error } = await db.from('pacientes').delete().eq('id', id);
+            if (error) throw error;
+
+            patients = patients.filter(p => p.id !== id);
+            renderTable(patients, 'patients');
+            showToast('Paciente removido com sucesso!');
+        } catch (error) {
+            console.error("Error deleting patient:", error);
+            showToast("Erro ao remover paciente.", true);
         }
-        if (!confirm('Tem certeza que deseja excluir este paciente?')) return;
-        const { error } = await db.from('pacientes').delete().eq('id', id);
-        if (error) throw error;
-        patients = patients.filter(p2 => p2.id !== id);
-        renderTable(patients, 'patients');
-        showToast('Paciente removido com sucesso!');
-    } catch (error) {
-        console.error("Error deleting patient:", error);
-        showToast(error && error.message ? String(error.message) : "Erro ao remover paciente.", true);
     }
 };
 
@@ -10239,22 +10073,18 @@ window.deleteProfessional = async function (id) {
         showToast("Você não tem permissão para excluir profissionais.", true);
         return;
     }
-    try {
-        const p = professionals.find(x => String(x && x.id || '') === String(id));
-        const blockers = await getProfessionalDeleteBlockers(p);
-        if (blockers.length) {
-            showToast(`Não é possível excluir: profissional em uso em ${blockers.join(', ')}.`, true);
-            return;
+    if (confirm('Tem certeza que deseja excluir as informações deste profissional?')) {
+        try {
+            const { error } = await db.from('profissionais').delete().eq('id', id);
+            if (error) throw error;
+
+            professionals = professionals.filter(p => p.id !== id);
+            renderTable(professionals, 'professionals');
+            showToast('Profissional removido com sucesso!');
+        } catch (error) {
+            console.error("Error deleting professional:", error);
+            showToast("Erro ao remover profissional.", true);
         }
-        if (!confirm('Tem certeza que deseja excluir este profissional?')) return;
-        const { error } = await db.from('profissionais').delete().eq('id', id);
-        if (error) throw error;
-        professionals = professionals.filter(p2 => p2.id !== id);
-        renderTable(professionals, 'professionals');
-        showToast('Profissional removido com sucesso!');
-    } catch (error) {
-        console.error("Error deleting professional:", error);
-        showToast(error && error.message ? String(error.message) : "Erro ao remover profissional.", true);
     }
 };
 
@@ -10766,17 +10596,11 @@ if (serviceForm) {
             showToast("Você não tem permissão para esta ação.", true);
             return;
         }
-        const subEl = document.getElementById('servSubdivisao');
-        const subId = subEl && subEl.value ? String(subEl.value) : '';
-        const subLabel = subEl && subEl.selectedOptions && subEl.selectedOptions[0]
-            ? String(subEl.selectedOptions[0].textContent || '').trim()
-            : '';
         const servData = {
             descricao: document.getElementById('servDescricao').value.toUpperCase(),
             valor: parseFloat(document.getElementById('servValor').value) || 0,
             ie: document.getElementById('servTipoIE').value,
-            subdivisao: subId ? subLabel : '',
-            subdivisao_id: subId ? subId : null,
+            subdivisao: document.getElementById('servSubdivisao').value || '',
             empresa_id: currentEmpresaId
         };
 
@@ -10820,17 +10644,7 @@ window.editService = function (id) {
     document.getElementById('servDescricao').value = s.descricao;
     document.getElementById('servValor').value = s.valor;
     document.getElementById('servTipoIE').value = s.ie;
-    const subEl = document.getElementById('servSubdivisao');
-    if (subEl) {
-        const direct = s.subdivisao_id ? String(s.subdivisao_id) : '';
-        if (direct) {
-            subEl.value = direct;
-        } else {
-            const label = String(s.subdivisao || '').trim();
-            const opt = Array.from(subEl.options || []).find(o => String(o && o.textContent || '').trim() === label);
-            subEl.value = opt ? String(opt.value) : '';
-        }
-    }
+    document.getElementById('servSubdivisao').value = s.subdivisao || '';
 };
 
 window.deleteService = async function (id) {
@@ -10838,22 +10652,18 @@ window.deleteService = async function (id) {
         showToast("Você não tem permissão para excluir serviços.", true);
         return;
     }
-    try {
-        const s = services.find(x => String(x && x.id || '') === String(id));
-        const blockers = await getServiceDeleteBlockers(s);
-        if (blockers.length) {
-            showToast(`Não é possível excluir: serviço em uso em ${blockers.join(', ')}.`, true);
-            return;
+    if (confirm('Tem certeza que deseja excluir este item?')) {
+        try {
+            const { error } = await db.from('servicos').delete().eq('id', id);
+            if (error) throw error;
+
+            services = services.filter(s => s.id !== id);
+            renderTable(services, 'services');
+            showToast('Item removido com sucesso!');
+        } catch (error) {
+            console.error("Error deleting service:", error);
+            showToast("Erro ao remover serviço.", true);
         }
-        if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
-        const { error } = await db.from('servicos').delete().eq('id', id);
-        if (error) throw error;
-        services = services.filter(s2 => s2.id !== id);
-        renderTable(services, 'services');
-        showToast('Serviço removido com sucesso!');
-    } catch (error) {
-        console.error("Error deleting service:", error);
-        showToast(error && error.message ? String(error.message) : "Erro ao remover serviço.", true);
     }
 };
 
@@ -12647,130 +12457,6 @@ db.auth.onAuthStateChange(async (event, session) => {
         }
     }
 });
-
-async function createAndLinkProvisionalProfessional(ctx) {
-    const empresaId = ctx && ctx.empresaId ? String(ctx.empresaId) : '';
-    const usuarioId = ctx && ctx.usuarioId ? String(ctx.usuarioId) : '';
-    const role = ctx && ctx.role ? String(ctx.role) : '';
-    const email = ctx && ctx.email ? String(ctx.email) : '';
-    if (!empresaId || !usuarioId) throw new Error('Dados insuficientes para vínculo do profissional.');
-
-    const modal = document.getElementById('modalVinculoProfissional');
-    const form = document.getElementById('formVinculoProfissional');
-    const vpEmpresaId = document.getElementById('vpEmpresaId');
-    const vpUsuarioId = document.getElementById('vpUsuarioId');
-    const vpRole = document.getElementById('vpRole');
-    const vpEmailLogin = document.getElementById('vpEmailLogin');
-    const vpNome = document.getElementById('vpNomeProfissional');
-    const vpTipo = document.getElementById('vpTipoProfissional');
-    const btn = document.getElementById('btnVincularProfissional');
-
-    if (!modal || !form || !vpEmpresaId || !vpUsuarioId || !vpRole || !vpEmailLogin || !vpNome || !vpTipo || !btn) {
-        throw new Error('Tela de vínculo do profissional não disponível.');
-    }
-
-    vpEmpresaId.value = empresaId;
-    vpUsuarioId.value = usuarioId;
-    vpRole.value = role;
-    vpEmailLogin.value = email;
-    vpNome.value = '';
-
-    if (role === 'protetico') {
-        vpTipo.value = 'Protetico';
-        vpTipo.disabled = true;
-    } else {
-        vpTipo.disabled = false;
-        vpTipo.value = 'Especialista';
-    }
-
-    modal.classList.remove('hidden');
-
-    return new Promise((resolve) => {
-        form.__vpResolve = resolve;
-        if (form.__vpSubmitBound) return;
-        form.__vpSubmitBound = true;
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const nome = String(vpNome.value || '').trim();
-            const tipo = String(vpTipo.value || '').trim();
-            if (!nome) {
-                showToast('Informe o nome do profissional.', true);
-                return;
-            }
-            btn.disabled = true;
-            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Vinculando...';
-            try {
-                const empresaId2 = String(vpEmpresaId.value || '').trim();
-                const usuarioId2 = String(vpUsuarioId.value || '').trim();
-                const email2 = String(vpEmailLogin.value || '').trim();
-                if (!empresaId2 || !usuarioId2) throw new Error('Dados insuficientes para vínculo do profissional.');
-
-                let nextSeq = null;
-                if (empresaId2 === currentEmpresaId) {
-                    nextSeq = getNextSeqId(professionals);
-                } else {
-                    const q = db.from('profissionais')
-                        .select('seqid')
-                        .eq('empresa_id', empresaId2)
-                        .order('seqid', { ascending: false })
-                        .limit(1);
-                    const { data, error } = await withTimeout(q, 15000, 'profissionais:max_seqid');
-                    if (error) throw error;
-                    const maxSeq = data && data[0] && data[0].seqid != null ? Number(data[0].seqid) : 0;
-                    nextSeq = (Number.isFinite(maxSeq) ? maxSeq : 0) + 1;
-                }
-
-                const profData = {
-                    id: generateId(),
-                    seqid: nextSeq,
-                    nome: `[INCOMPLETO] ${nome}`,
-                    celular: '',
-                    email: null,
-                    tipo,
-                    especialidadeid: null,
-                    status: 'Ativo',
-                    empresa_id: empresaId2,
-                };
-                const { data: created, error: insErr } = await withTimeout(
-                    db.from('profissionais').insert(profData).select().single(),
-                    20000,
-                    'profissionais:provisorio:insert'
-                );
-                if (insErr) throw insErr;
-                const profId = String((created && created.id) ? created.id : profData.id);
-
-                const { error: linkErr } = await withTimeout(
-                    db.from('profissional_usuarios').upsert(
-                        { empresa_id: empresaId2, usuario_id: usuarioId2, profissional_id: profId },
-                        { onConflict: 'empresa_id,usuario_id' }
-                    ),
-                    20000,
-                    'profissional_usuarios:upsert'
-                );
-                if (linkErr) throw linkErr;
-
-                if (created && empresaId2 === currentEmpresaId) {
-                    professionals.push(created);
-                }
-
-                try {
-                    await saveAgendaDisponibilidade(Number((created && created.seqid) ? created.seqid : profData.seqid), empresaId2);
-                } catch { }
-
-                modal.classList.add('hidden');
-                const r = form.__vpResolve;
-                form.__vpResolve = null;
-                if (typeof r === 'function') r(true);
-            } catch (err) {
-                const msg = err && err.message ? String(err.message) : 'Erro desconhecido';
-                showToast(`Falha ao criar/vincular profissional: ${msg}`, true);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="ri-link"></i> Criar e Vincular';
-            }
-        });
-    });
-}
 // --- TENANT ADMIN LOGIC ---
 if (userAdminForm) {
     userAdminForm.addEventListener('submit', async (e) => {
@@ -12895,15 +12581,7 @@ if (userAdminForm) {
                     throw new Error(`Erro na nuvem: ${errorMsg}`);
                 }
 
-                const createdUserId = result && (result.userId || result.user_id || result.usuario_id)
-                    ? String(result.userId || result.user_id || result.usuario_id)
-                    : '';
-                if ((role === 'dentista' || role === 'protetico') && createdUserId) {
-                    await createAndLinkProvisionalProfessional({ empresaId: targetEmpresaId, usuarioId: createdUserId, role, email });
-                    showToast("Usuário, profissional e vínculo criados com sucesso!");
-                } else {
-                    showToast("Usuário criado e vinculado com sucesso!");
-                }
+                showToast("Usuário criado e vinculado com sucesso!");
             }
 
             showList('usersAdmin');

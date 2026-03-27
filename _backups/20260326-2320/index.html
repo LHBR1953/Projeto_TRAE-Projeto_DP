@@ -3009,43 +3009,6 @@
                 </div>
             </div>
 
-            <div id="modalVinculoProfissional" class="modal-overlay hidden">
-                <div class="modal-content" style="max-width: 560px;">
-                    <div class="modal-header">
-                        <h3><i class="ri-user-add-line"></i> Criar e Vincular Profissional</h3>
-                    </div>
-                    <div class="modal-body">
-                        <div style="border: 1px solid var(--danger-color); color: var(--danger-color); padding: 0.75rem; border-radius: 10px; margin-bottom: 1rem; font-weight: 700;">
-                            Cadastro provisório. Complete o cadastro do profissional depois.
-                        </div>
-                        <form id="formVinculoProfissional" style="display:flex; flex-direction: column; gap: 1rem;">
-                            <input type="hidden" id="vpEmpresaId">
-                            <input type="hidden" id="vpUsuarioId">
-                            <input type="hidden" id="vpRole">
-                            <div class="form-group">
-                                <label for="vpEmailLogin">E-mail do Login</label>
-                                <input id="vpEmailLogin" type="text" class="form-control" readonly>
-                            </div>
-                            <div class="form-group">
-                                <label for="vpNomeProfissional">Nome do Profissional *</label>
-                                <input id="vpNomeProfissional" type="text" class="form-control" placeholder="Ex: Juliana Silva" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="vpTipoProfissional">Tipo de Profissional *</label>
-                                <select id="vpTipoProfissional" class="form-control" required>
-                                    <option value="Clinico">Clínico</option>
-                                    <option value="Especialista">Especialista</option>
-                                    <option value="Protetico">Protético</option>
-                                </select>
-                            </div>
-                            <div style="display:flex; gap: 0.75rem; justify-content: flex-end;">
-                                <button type="submit" id="btnVincularProfissional" class="btn btn-primary"><i class="ri-link"></i> Criar e Vincular</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
             <!-- Modal: Transferência de Saldo -->
             <div id="modalTransferencia" class="modal-overlay hidden">
                 <div class="modal-content" style="max-width: 480px;">

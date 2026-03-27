@@ -347,135 +347,6 @@ function withTimeout(promiseLike, ms, label = '') {
     });
 }
 
-async function existsAnyRow(query, label) {
-    const { data, error } = await withTimeout(query.limit(1), 15000, label);
-    if (error) throw error;
-    if (Array.isArray(data)) return data.length > 0;
-    return !!data;
-}
-
-async function getPatientDeleteBlockers(patient) {
-    const blocks = [];
-    const patId = patient && patient.id ? String(patient.id) : '';
-    const patSeq = patient && patient.seqid != null ? Number(patient.seqid) : NaN;
-
-    if (patId) {
-        const hasBudget = (budgets || []).some(b => String(b && (b.pacienteid || b.paciente_id) || '') === patId);
-        if (hasBudget) blocks.push('Orçamentos');
-        const hasProtese = (proteseOrders || []).some(o => String(o && o.paciente_id || '') === patId);
-        if (hasProtese) blocks.push('Prótese');
-        const hasEvo = await existsAnyRow(
-            db.from('paciente_evolucao').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_id', patId),
-            'paciente_evolucao'
-        );
-        if (hasEvo) blocks.push('Prontuário');
-        const hasDocs = await existsAnyRow(
-            db.from('paciente_documentos').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_id', patId),
-            'paciente_documentos'
-        );
-        if (hasDocs) blocks.push('Documentos');
-    }
-
-    if (Number.isFinite(patSeq)) {
-        const hasAgenda = await existsAnyRow(
-            db.from('agenda_agendamentos').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_id', patSeq),
-            'agenda_agendamentos'
-        );
-        if (hasAgenda) blocks.push('Agenda');
-        const hasFin = await existsAnyRow(
-            db.from('financeiro_transacoes').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_id', patSeq),
-            'financeiro_transacoes'
-        );
-        if (hasFin) blocks.push('Financeiro');
-        const hasFinDest = await existsAnyRow(
-            db.from('financeiro_transacoes').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_destino_id', patSeq),
-            'financeiro_transacoes:destino'
-        );
-        if (hasFinDest) blocks.push('Financeiro');
-    }
-
-    return Array.from(new Set(blocks));
-}
-
-async function getProfessionalDeleteBlockers(prof) {
-    const blocks = [];
-    const profId = prof && prof.id ? String(prof.id) : '';
-    const profSeq = prof && prof.seqid != null ? Number(prof.seqid) : NaN;
-
-    if (Number.isFinite(profSeq)) {
-        const usedInBudgetHeader = (budgets || []).some(b => Number(b && b.profissional_id) === profSeq);
-        if (usedInBudgetHeader) blocks.push('Orçamentos');
-        const usedInBudgetItemsLocal = (budgets || []).some(b => {
-            const itens = (b && (b.orcamento_itens || b.itens)) || [];
-            return Array.isArray(itens) && itens.some(it => Number(it && it.profissional_id) === profSeq || Number(it && it.protetico_id) === profSeq);
-        });
-        if (usedInBudgetItemsLocal) blocks.push('Itens de Orçamento');
-
-        const hasAgenda = await existsAnyRow(
-            db.from('agenda_agendamentos').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
-            'agenda_agendamentos:prof'
-        );
-        if (hasAgenda) blocks.push('Agenda');
-        const hasDisp = await existsAnyRow(
-            db.from('agenda_disponibilidade').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
-            'agenda_disponibilidade'
-        );
-        if (hasDisp) blocks.push('Agenda');
-        const hasCom = await existsAnyRow(
-            db.from('financeiro_comissoes').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
-            'financeiro_comissoes'
-        );
-        if (hasCom) blocks.push('Comissões');
-        const hasItemsExec = await existsAnyRow(
-            db.from('orcamento_itens').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
-            'orcamento_itens:prof'
-        );
-        if (hasItemsExec) blocks.push('Itens de Orçamento');
-        const hasItemsProt = await existsAnyRow(
-            db.from('orcamento_itens').select('id').eq('empresa_id', currentEmpresaId).eq('protetico_id', profSeq),
-            'orcamento_itens:prot'
-        );
-        if (hasItemsProt) blocks.push('Itens de Orçamento');
-    }
-
-    if (profId) {
-        const hasProtese = (proteseOrders || []).some(o => String(o && o.protetico_id || '') === profId);
-        if (hasProtese) blocks.push('Prótese');
-        const hasProteseDb = await existsAnyRow(
-            db.from('ordens_proteticas').select('id').eq('empresa_id', currentEmpresaId).eq('protetico_id', profId),
-            'ordens_proteticas'
-        );
-        if (hasProteseDb) blocks.push('Prótese');
-        const hasEvo = await existsAnyRow(
-            db.from('paciente_evolucao').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profId),
-            'paciente_evolucao:prof'
-        );
-        if (hasEvo) blocks.push('Prontuário');
-    }
-
-    return Array.from(new Set(blocks));
-}
-
-async function getServiceDeleteBlockers(service) {
-    const blocks = [];
-    const servId = service && service.id ? String(service.id) : '';
-    if (!servId) return blocks;
-
-    const usedLocal = (budgets || []).some(b => {
-        const itens = (b && (b.orcamento_itens || b.itens)) || [];
-        return Array.isArray(itens) && itens.some(it => String(it && (it.servico_id || it.servicoId) || '') === servId);
-    });
-    if (usedLocal) blocks.push('Orçamentos');
-
-    const hasItems = await existsAnyRow(
-        db.from('orcamento_itens').select('id').eq('empresa_id', currentEmpresaId).eq('servico_id', servId),
-        'orcamento_itens:servico'
-    );
-    if (hasItems) blocks.push('Orçamentos');
-
-    return Array.from(new Set(blocks));
-}
-
 function isMissingEmbeddedRelationshipError(err) {
     const code = err && err.code ? String(err.code) : '';
     const msg = err && err.message ? String(err.message) : '';
@@ -2529,7 +2400,7 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
                         const subId = `${spec.seqid}.${i + 1} `;
                         const displayStr = `${subId} - ${sub.nome} `;
                         const opt = document.createElement('option');
-                        opt.value = String(sub.id || '');
+                        opt.value = displayStr;
                         opt.textContent = displayStr;
                         optgroup.appendChild(opt);
                     });
@@ -10165,22 +10036,18 @@ window.deletePatient = async function (id) {
         showToast("Você não tem permissão para excluir pacientes.", true);
         return;
     }
-    try {
-        const p = patients.find(x => String(x && x.id || '') === String(id));
-        const blockers = await getPatientDeleteBlockers(p);
-        if (blockers.length) {
-            showToast(`Não é possível excluir: paciente em uso em ${blockers.join(', ')}.`, true);
-            return;
+    if (confirm('Tem certeza que deseja excluir as informações deste paciente? O paciente e atrelados serão apagados.')) {
+        try {
+            const { error } = await db.from('pacientes').delete().eq('id', id);
+            if (error) throw error;
+
+            patients = patients.filter(p => p.id !== id);
+            renderTable(patients, 'patients');
+            showToast('Paciente removido com sucesso!');
+        } catch (error) {
+            console.error("Error deleting patient:", error);
+            showToast("Erro ao remover paciente.", true);
         }
-        if (!confirm('Tem certeza que deseja excluir este paciente?')) return;
-        const { error } = await db.from('pacientes').delete().eq('id', id);
-        if (error) throw error;
-        patients = patients.filter(p2 => p2.id !== id);
-        renderTable(patients, 'patients');
-        showToast('Paciente removido com sucesso!');
-    } catch (error) {
-        console.error("Error deleting patient:", error);
-        showToast(error && error.message ? String(error.message) : "Erro ao remover paciente.", true);
     }
 };
 
@@ -10239,22 +10106,18 @@ window.deleteProfessional = async function (id) {
         showToast("Você não tem permissão para excluir profissionais.", true);
         return;
     }
-    try {
-        const p = professionals.find(x => String(x && x.id || '') === String(id));
-        const blockers = await getProfessionalDeleteBlockers(p);
-        if (blockers.length) {
-            showToast(`Não é possível excluir: profissional em uso em ${blockers.join(', ')}.`, true);
-            return;
+    if (confirm('Tem certeza que deseja excluir as informações deste profissional?')) {
+        try {
+            const { error } = await db.from('profissionais').delete().eq('id', id);
+            if (error) throw error;
+
+            professionals = professionals.filter(p => p.id !== id);
+            renderTable(professionals, 'professionals');
+            showToast('Profissional removido com sucesso!');
+        } catch (error) {
+            console.error("Error deleting professional:", error);
+            showToast("Erro ao remover profissional.", true);
         }
-        if (!confirm('Tem certeza que deseja excluir este profissional?')) return;
-        const { error } = await db.from('profissionais').delete().eq('id', id);
-        if (error) throw error;
-        professionals = professionals.filter(p2 => p2.id !== id);
-        renderTable(professionals, 'professionals');
-        showToast('Profissional removido com sucesso!');
-    } catch (error) {
-        console.error("Error deleting professional:", error);
-        showToast(error && error.message ? String(error.message) : "Erro ao remover profissional.", true);
     }
 };
 
@@ -10766,17 +10629,11 @@ if (serviceForm) {
             showToast("Você não tem permissão para esta ação.", true);
             return;
         }
-        const subEl = document.getElementById('servSubdivisao');
-        const subId = subEl && subEl.value ? String(subEl.value) : '';
-        const subLabel = subEl && subEl.selectedOptions && subEl.selectedOptions[0]
-            ? String(subEl.selectedOptions[0].textContent || '').trim()
-            : '';
         const servData = {
             descricao: document.getElementById('servDescricao').value.toUpperCase(),
             valor: parseFloat(document.getElementById('servValor').value) || 0,
             ie: document.getElementById('servTipoIE').value,
-            subdivisao: subId ? subLabel : '',
-            subdivisao_id: subId ? subId : null,
+            subdivisao: document.getElementById('servSubdivisao').value || '',
             empresa_id: currentEmpresaId
         };
 
@@ -10820,17 +10677,7 @@ window.editService = function (id) {
     document.getElementById('servDescricao').value = s.descricao;
     document.getElementById('servValor').value = s.valor;
     document.getElementById('servTipoIE').value = s.ie;
-    const subEl = document.getElementById('servSubdivisao');
-    if (subEl) {
-        const direct = s.subdivisao_id ? String(s.subdivisao_id) : '';
-        if (direct) {
-            subEl.value = direct;
-        } else {
-            const label = String(s.subdivisao || '').trim();
-            const opt = Array.from(subEl.options || []).find(o => String(o && o.textContent || '').trim() === label);
-            subEl.value = opt ? String(opt.value) : '';
-        }
-    }
+    document.getElementById('servSubdivisao').value = s.subdivisao || '';
 };
 
 window.deleteService = async function (id) {
@@ -10838,22 +10685,18 @@ window.deleteService = async function (id) {
         showToast("Você não tem permissão para excluir serviços.", true);
         return;
     }
-    try {
-        const s = services.find(x => String(x && x.id || '') === String(id));
-        const blockers = await getServiceDeleteBlockers(s);
-        if (blockers.length) {
-            showToast(`Não é possível excluir: serviço em uso em ${blockers.join(', ')}.`, true);
-            return;
+    if (confirm('Tem certeza que deseja excluir este item?')) {
+        try {
+            const { error } = await db.from('servicos').delete().eq('id', id);
+            if (error) throw error;
+
+            services = services.filter(s => s.id !== id);
+            renderTable(services, 'services');
+            showToast('Item removido com sucesso!');
+        } catch (error) {
+            console.error("Error deleting service:", error);
+            showToast("Erro ao remover serviço.", true);
         }
-        if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
-        const { error } = await db.from('servicos').delete().eq('id', id);
-        if (error) throw error;
-        services = services.filter(s2 => s2.id !== id);
-        renderTable(services, 'services');
-        showToast('Serviço removido com sucesso!');
-    } catch (error) {
-        console.error("Error deleting service:", error);
-        showToast(error && error.message ? String(error.message) : "Erro ao remover serviço.", true);
     }
 };
 
