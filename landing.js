@@ -1,0 +1,203 @@
+const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
+const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
+const db = (window.supabase && typeof window.supabase.createClient === 'function')
+  ? window.supabase.createClient(supabaseUrl, supabaseKey)
+  : null;
+
+function maskCell(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 11);
+  const ddd = digits.slice(0, 2);
+  const part1 = digits.slice(2, 7);
+  const part2 = digits.slice(7, 11);
+  if (digits.length <= 2) return digits ? `(${digits}` : '';
+  if (digits.length <= 7) return `(${ddd}) ${part1}`;
+  return `(${ddd}) ${part1}-${part2}`;
+}
+
+function lazyLoadHeroVideo() {
+  const video = document.getElementById('heroVideo');
+  if (!video) return;
+  const src = String(video.getAttribute('data-src') || '').trim();
+  if (!src) return;
+
+  const load = () => {
+    if (video.__occLoaded) return;
+    video.__occLoaded = true;
+    video.src = src;
+    try { video.load(); } catch { }
+    try {
+      const p = video.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch { }
+  };
+
+  const start = () => {
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(load, { timeout: 1400 });
+    } else {
+      setTimeout(load, 260);
+    }
+  };
+
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) {
+        io.disconnect();
+        start();
+      }
+    }, { rootMargin: '200px' });
+    io.observe(video);
+  } else {
+    start();
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) load();
+  });
+}
+
+function initTrialModal() {
+  const backdrop = document.getElementById('trialModalBackdrop');
+  const btnOpen = document.getElementById('btnOpenTrial');
+  const btnOpen2 = document.getElementById('btnOpenTrial2');
+  const btnClose = document.getElementById('btnCloseTrial');
+  const form = document.getElementById('trialForm');
+  const inputCell = document.getElementById('trialCell');
+  const btnSubmit = document.getElementById('btnSubmitTrial');
+  const boxErr = document.getElementById('trialError');
+  const boxOk = document.getElementById('trialResult');
+
+  if (!backdrop || !btnOpen || !btnClose || !form) return;
+
+  const open = () => {
+    backdrop.style.display = 'flex';
+    if (boxErr) boxErr.style.display = 'none';
+    if (boxOk) boxOk.style.display = 'none';
+    const first = document.getElementById('trialClinicName');
+    if (first) first.focus();
+  };
+  const close = () => { backdrop.style.display = 'none'; };
+
+  btnOpen.addEventListener('click', open);
+  if (btnOpen2) btnOpen2.addEventListener('click', open);
+  btnClose.addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+
+  if (inputCell) {
+    inputCell.addEventListener('input', (e) => {
+      e.target.value = maskCell(e.target.value);
+    });
+  }
+
+  const setErr = (msg) => {
+    if (!boxErr) return;
+    boxErr.textContent = String(msg || 'Erro desconhecido');
+    boxErr.style.display = 'block';
+  };
+  const setOk = (msg) => {
+    if (!boxOk) return;
+    boxOk.textContent = String(msg || '');
+    boxOk.style.display = 'block';
+  };
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!db) {
+      setErr('Não foi possível conectar ao servidor. Verifique internet/bloqueio de CDN e tente novamente.');
+      return;
+    }
+    const prevBtnText = btnSubmit ? String(btnSubmit.textContent || '') : '';
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = 'Criando...';
+    }
+    if (boxErr) boxErr.style.display = 'none';
+    if (boxOk) boxOk.style.display = 'none';
+
+    const nome = String((document.getElementById('trialClinicName') || {}).value || '').trim();
+    const email = String((document.getElementById('trialEmail') || {}).value || '').trim().toLowerCase();
+    const celular = String((document.getElementById('trialCell') || {}).value || '').trim();
+    const password = String((document.getElementById('trialPassword') || {}).value || '');
+
+    if (!nome || !email || !password) {
+      setErr('Preencha os campos obrigatórios.');
+      if (btnSubmit) btnSubmit.disabled = false;
+      return;
+    }
+
+    try {
+      let signedIn = false;
+      const signUp = await db.auth.signUp({ email, password });
+      if (signUp.error) {
+        const signIn = await db.auth.signInWithPassword({ email, password });
+        if (signIn.error) throw signIn.error;
+        signedIn = true;
+      } else {
+        signedIn = Boolean(signUp.data && signUp.data.session);
+        if (!signedIn) {
+          const signIn = await db.auth.signInWithPassword({ email, password });
+          if (signIn.error) throw signIn.error;
+          signedIn = true;
+        }
+      }
+
+      if (!signedIn) throw new Error('Não foi possível iniciar sessão. Verifique o e-mail.');
+
+      const { data, error } = await db.functions.invoke('self-onboard-company', {
+        body: { nome, email, celular: celular || null }
+      });
+      if (error) throw error;
+      const empresaId = data && data.empresa_id ? String(data.empresa_id) : '';
+      setOk(`Clínica criada com sucesso.\nEmpresa: ${empresaId || '—'}\nEntrando no OCC...`);
+      if (btnSubmit) btnSubmit.textContent = 'Entrando...';
+      setTimeout(() => {
+        try { backdrop.style.display = 'none'; } catch { }
+        window.location.assign('/app.html');
+      }, 600);
+    } catch (err) {
+      let msg = err && err.message ? String(err.message) : 'Falha ao criar o trial.';
+      try {
+        const ctx = err && err.context ? err.context : null;
+        if (ctx && typeof ctx.json === 'function') {
+          const j = await ctx.json();
+          if (j && (j.error || j.message)) msg = String(j.error || j.message);
+        } else if (ctx && typeof ctx.text === 'function') {
+          const raw = await ctx.text();
+          if (raw) {
+            const j = JSON.parse(raw);
+            if (j && (j.error || j.message)) msg = String(j.error || j.message);
+          }
+        }
+      } catch { }
+      setErr(msg);
+    } finally {
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = prevBtnText || 'Criar e Entrar';
+      }
+    }
+  });
+}
+
+lazyLoadHeroVideo();
+initTrialModal();
+
+function initNavLinks() {
+  const anchors = Array.from(document.querySelectorAll('a[href^="#"]'));
+  anchors.forEach(a => {
+    a.addEventListener('click', (e) => {
+      const href = String(a.getAttribute('href') || '');
+      const id = href.replace(/^#/, '');
+      const target = document.getElementById(id);
+      if (!id || !target) return;
+      e.preventDefault();
+      try {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {
+        location.hash = href;
+      }
+    });
+  });
+}
+
+initNavLinks();

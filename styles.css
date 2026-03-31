@@ -889,6 +889,25 @@ textarea:focus {
     background: #ffffff;
 }
 
+.tooth path {
+    fill: #ffffff;
+    stroke: #64748b;
+    stroke-width: 2;
+    cursor: pointer;
+}
+
+.tooth text {
+    fill: #334155;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    pointer-events: none;
+}
+
+.tooth.selected path {
+    fill: rgba(0, 102, 204, 0.22);
+    stroke: var(--primary-color);
+    stroke-width: 3;
+}
+
 textarea {
     resize: vertical;
 }

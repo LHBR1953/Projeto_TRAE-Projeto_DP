@@ -1,3 +1,19 @@
+o número 3401-7530 foi substituído pelo número (21)99995-7530
+
+Permanecemos com 2 telefones de contato, o número (21)4144-2444 que é nosso número principal 
+e tem telefone e WhatsApp (seria bom colocar o símbolo do telefone e WhatsApp antes deste número) 
+e o número (21)99995-7530 que é só telefone (seria bom colocar só o símbolo do telefone antes do número)
+
+
+
+
+brevo Key SMTP: [REMOVIDA_POR_SEGURANCA]
+
+
+
+http://192.168.1.90:8282/protese_custodia.html?t=59962fe65ac230c514667c035fd5d731&v=20260322-1025
+
+
 -- 1) empresa
 insert into public.empresas (id, nome, supervisor_pin)
 values ('emp_nova', 'Empresa Nova', '123456')

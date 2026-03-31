@@ -167,8 +167,10 @@ Deno.serve(async (req) => {
         .select("*")
         .eq("empresa_id", empresaId)
         .eq("id", campaignId)
-        .single();
+        .limit(1)
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Campanha não encontrada para esta empresa.");
       campaign = data;
     } else {
       const r = statusToRange(statusKey);
@@ -214,7 +216,9 @@ Deno.serve(async (req) => {
       .from("marketing_smtp_config")
       .select("*")
       .eq("empresa_id", empresaId)
-      .single();
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     if (sErr) throw sErr;
     if (!smtp || !smtp.enabled) throw new Error("E-mail não configurado/habilitado para esta empresa.");
     const smtpUsername = String((smtp as any).username || "").trim();

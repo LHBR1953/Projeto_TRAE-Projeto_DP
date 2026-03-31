@@ -44,7 +44,7 @@
       .muted{color:#374151;}
     }
   </style>
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';"></script>
 </head>
 <body>
   <div class="wrap">
@@ -103,12 +103,14 @@
   <script>
     const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
     const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-    const db = supabase.createClient(supabaseUrl, supabaseKey);
+    const hasSupabase = typeof window.supabase !== 'undefined' && window.supabase && typeof window.supabase.createClient === 'function';
+    const db = hasSupabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
 
     const qs = new URLSearchParams(location.search);
     const hash = String(location.hash || '').replace(/^#/, '');
     const hs = new URLSearchParams(hash);
     const token = String(qs.get('t') || qs.get('token') || hs.get('t') || hs.get('token') || '').trim();
+    const prefillCode = String(qs.get('c') || qs.get('code') || hs.get('c') || hs.get('code') || '').trim();
 
     const statusLine = document.getElementById('statusLine');
     const meta = document.getElementById('meta');
@@ -216,6 +218,11 @@
     });
 
     async function loadToken() {
+      if (!db) {
+        statusLine.textContent = 'Não foi possível carregar a biblioteca de acesso ao servidor.';
+        showMsg('Sem acesso à internet ou bloqueio de CDN. Conecte o celular ao Wi‑Fi com internet e tente novamente.', false);
+        return;
+      }
       if (!token) {
         statusLine.textContent = 'Link inválido (token ausente).';
         showMsg('Peça para a clínica gerar um novo QR Code.', false);
@@ -244,6 +251,9 @@
         codeEl.readOnly = false;
         nameEl.readOnly = false;
         docEl.readOnly = false;
+        if (prefillCode && !String(codeEl.value || '').trim()) {
+          codeEl.value = prefillCode;
+        }
         setTimeout(() => { try { codeEl.focus(); } catch { } }, 150);
         resizeCanvas();
       } catch (err) {
