@@ -6335,6 +6335,30 @@ function renderSuperAdminRenewals() {
     }
     if (empty) empty.classList.add('hidden');
 
+    const statusBadgeHtml = (statusRaw) => {
+        const status = String(statusRaw || 'PENDENTE').toUpperCase();
+        if (status === 'ATIVO') return '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dcfce7; color:#166534; font-weight:700;">ATIVO</span>';
+        if (status === 'TRIAL') return '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dbeafe; color:#1d4ed8; font-weight:700;">TRIAL</span>';
+        return '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#ffedd5; color:#c2410c; font-weight:700;">PENDENTE</span>';
+    };
+    const updateRenewalStatus = async (empresaId, newStatus) => {
+        if (!isSuperAdmin) return;
+        const id = String(empresaId || '').trim();
+        const status = String(newStatus || '').trim().toUpperCase();
+        if (!id || !status) return;
+        try {
+            const { error } = await db.from('empresas').update({ assinatura_status: status }).eq('id', id);
+            if (error) throw error;
+            const idx = (activeEmpresasList || []).findIndex(x => String(x && x.id || '') === id);
+            if (idx >= 0) activeEmpresasList[idx] = { ...activeEmpresasList[idx], assinatura_status: status };
+            renderSuperAdminRenewals();
+            if (assinaturasView && !assinaturasView.classList.contains('hidden')) renderAssinaturas();
+            showToast('Status atualizado com sucesso.');
+        } catch (err) {
+            showToast(err && err.message ? String(err.message) : 'Falha ao atualizar status.', true);
+        }
+    };
+
     rows.forEach(r => {
         const tr = document.createElement('tr');
         const dd = String(r.vencDate.getDate()).padStart(2, '0');
@@ -6342,11 +6366,27 @@ function renderSuperAdminRenewals() {
         const yyyy = String(r.vencDate.getFullYear());
         const vencBr = `${dd}/${mm}/${yyyy}`;
         const diasLabel = r.diffDays < 0 ? `Vencida há ${Math.abs(r.diffDays)}d` : `Em ${r.diffDays}d`;
+        const emp = (activeEmpresasList || []).find(e => String(e && e.id || '') === String(r.id || '')) || null;
+        const statusVal = String(emp && emp.assinatura_status || 'PENDENTE').toUpperCase();
         tr.innerHTML = `
             <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);"><strong>${r.nome}</strong><br><small style="color: var(--text-muted);">${r.id}</small></td>
             <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${vencBr}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${statusBadgeHtml(statusVal)}</td>
             <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color); text-align:right; ${r.diffDays < 0 ? 'color: var(--danger-color); font-weight:700;' : ''}">${diasLabel}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color); text-align:center;">
+                <button class="btn-icon js-renewal-status" data-status="TRIAL" title="Definir TRIAL" style="color:#1d4ed8;"><i class="ri-flask-line"></i></button>
+                <button class="btn-icon js-renewal-status" data-status="ATIVO" title="Definir ATIVO" style="color:#166534;"><i class="ri-checkbox-circle-line"></i></button>
+                <button class="btn-icon js-renewal-status" data-status="PENDENTE" title="Definir PENDENTE" style="color:#c2410c;"><i class="ri-time-line"></i></button>
+            </td>
         `;
+        tr.querySelectorAll('.js-renewal-status').forEach(btn => {
+            btn.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const next = String(btn.getAttribute('data-status') || '');
+                updateRenewalStatus(r.id, next);
+            });
+        });
         body.appendChild(tr);
     });
 }

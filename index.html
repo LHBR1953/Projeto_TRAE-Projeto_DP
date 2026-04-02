@@ -75,8 +75,14 @@
     .lp-form { display: grid; grid-template-columns: 1fr; gap: 12px; }
     .lp-form .form-group { margin-bottom: 0; }
     .lp-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+    .lp-modal .lp-btn-secondary { background: #f3f4f6; border-color: #d1d5db; color: #334155; }
+    .lp-modal .lp-btn-secondary:hover { background: #e5e7eb; }
     .lp-result { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(16, 185, 129, 0.08); color: #065f46; border: 1px solid rgba(16, 185, 129, 0.20); display: none; white-space: pre-wrap; }
     .lp-error { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(220, 38, 38, 0.06); color: #7f1d1d; border: 1px solid rgba(220, 38, 38, 0.16); display: none; white-space: pre-wrap; }
+    .lp-progress-wrap { display: none; margin-top: 8px; }
+    .lp-progress-track { height: 10px; border-radius: 999px; background: #e5e7eb; overflow: hidden; border: 1px solid #d1d5db; }
+    .lp-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #4f46e5, #10b981); transition: width 220ms ease; }
+    .lp-progress-text { margin-top: 6px; color: #334155; font-size: 12px; }
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';"></script>
 </head>
@@ -384,6 +390,12 @@
           <div class="form-group">
             <label for="trialPassword">Senha *</label>
             <input id="trialPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" />
+          </div>
+          <div id="trialProgressWrap" class="lp-progress-wrap">
+            <div class="lp-progress-track">
+              <div id="trialProgressBar" class="lp-progress-bar"></div>
+            </div>
+            <div id="trialProgressText" class="lp-progress-text">Processando...</div>
           </div>
           <div class="lp-modal-actions">
             <button id="btnCloseTrial" type="button" class="lp-btn lp-btn-secondary">Cancelar</button>

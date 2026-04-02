@@ -79,18 +79,12 @@ async function seedSpecialtiesForEmpresa(
   if (existingErr) throw existingErr;
   if (existing && existing.length > 0) return;
 
-  const templateEmpresaId = String(Deno.env.get("SPECIALTIES_TEMPLATE_EMPRESA_ID") || "emp_master").trim();
-  const { data: templateSpecs, error: tplSpecErr } = await supabaseAdmin
-    .from("especialidades")
-    .select("id,seqid,nome")
-    .eq("empresa_id", templateEmpresaId)
-    .order("seqid", { ascending: true });
-  if (tplSpecErr) throw tplSpecErr;
-
-  const specs = Array.isArray(templateSpecs) ? templateSpecs : [];
-  if (specs.length > 0) {
+  const cloneFromSource = async (
+    sourceEmpresaId: string,
+    sourceSpecs: Array<{ id: string; seqid: number; nome: string }>,
+  ): Promise<void> => {
     const oldToNew = new Map<string, string>();
-    for (const s of specs) {
+    for (const s of sourceSpecs) {
       const newId = crypto.randomUUID();
       oldToNew.set(String(s.id || ""), newId);
       const { error } = await supabaseAdmin.from("especialidades").insert({
@@ -105,7 +99,7 @@ async function seedSpecialtiesForEmpresa(
     const { data: templateSubs, error: tplSubErr } = await supabaseAdmin
       .from("especialidade_subdivisoes")
       .select("especialidade_id,nome")
-      .eq("empresa_id", templateEmpresaId);
+      .eq("empresa_id", sourceEmpresaId);
     if (tplSubErr) throw tplSubErr;
 
     for (const sub of (templateSubs || [])) {
@@ -119,6 +113,65 @@ async function seedSpecialtiesForEmpresa(
       });
       if (error) throw error;
     }
+  };
+
+  const explicitTemplate = String(Deno.env.get("SPECIALTIES_TEMPLATE_EMPRESA_ID") || "").trim();
+  if (explicitTemplate) {
+    const { data: explicitSpecs, error: explicitErr } = await supabaseAdmin
+      .from("especialidades")
+      .select("id,seqid,nome")
+      .eq("empresa_id", explicitTemplate)
+      .order("seqid", { ascending: true });
+    if (explicitErr) throw explicitErr;
+    const specs = Array.isArray(explicitSpecs) ? explicitSpecs : [];
+    if (specs.length > 0) {
+      await cloneFromSource(explicitTemplate, specs as Array<{ id: string; seqid: number; nome: string }>);
+      return;
+    }
+  }
+
+  const { data: allSpecs, error: allSpecsErr } = await supabaseAdmin
+    .from("especialidades")
+    .select("id,empresa_id,seqid,nome")
+    .neq("empresa_id", target);
+  if (allSpecsErr) throw allSpecsErr;
+
+  const grouped = new Map<string, Array<{ id: string; seqid: number; nome: string }>>();
+  for (const row of (allSpecs || [])) {
+    const eid = String(row && row.empresa_id || "").trim();
+    if (!eid) continue;
+    if (!grouped.has(eid)) grouped.set(eid, []);
+    grouped.get(eid)!.push({
+      id: String(row && row.id || ""),
+      seqid: Number(row && row.seqid || 0),
+      nome: String(row && row.nome || "").trim(),
+    });
+  }
+
+  let bestEmpresaId = "";
+  let bestCount = 0;
+  grouped.forEach((list, eid) => {
+    if (list.length > bestCount) {
+      bestCount = list.length;
+      bestEmpresaId = eid;
+    }
+  });
+
+  if (bestEmpresaId && bestCount > 0) {
+    const bestSpecs = (grouped.get(bestEmpresaId) || []).sort((a, b) => Number(a.seqid || 0) - Number(b.seqid || 0));
+    await cloneFromSource(bestEmpresaId, bestSpecs);
+    return;
+  }
+
+  const { data: masterSpecs, error: masterErr } = await supabaseAdmin
+    .from("especialidades")
+    .select("id,seqid,nome")
+    .eq("empresa_id", "emp_master")
+    .order("seqid", { ascending: true });
+  if (masterErr) throw masterErr;
+  const specs = Array.isArray(masterSpecs) ? masterSpecs : [];
+  if (specs.length > 0) {
+    await cloneFromSource("emp_master", specs as Array<{ id: string; seqid: number; nome: string }>);
     return;
   }
 

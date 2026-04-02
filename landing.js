@@ -67,6 +67,10 @@ function initTrialModal() {
   const btnSubmit = document.getElementById('btnSubmitTrial');
   const boxErr = document.getElementById('trialError');
   const boxOk = document.getElementById('trialResult');
+  const progressWrap = document.getElementById('trialProgressWrap');
+  const progressBar = document.getElementById('trialProgressBar');
+  const progressText = document.getElementById('trialProgressText');
+  let progressTimer = null;
 
   if (!backdrop || !btnOpen || !btnClose || !form) return;
 
@@ -85,6 +89,9 @@ function initTrialModal() {
   if (btnOpen2) btnOpen2.addEventListener('click', () => open(''));
   btnClose.addEventListener('click', close);
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && backdrop.style.display === 'flex') close();
+  });
 
   if (inputCell) {
     inputCell.addEventListener('input', (e) => {
@@ -102,6 +109,12 @@ function initTrialModal() {
     boxOk.textContent = String(msg || '');
     boxOk.style.display = 'block';
   };
+  const setProgress = (pct, text) => {
+    const p = Math.max(0, Math.min(100, Number(pct) || 0));
+    if (progressWrap) progressWrap.style.display = 'block';
+    if (progressBar) progressBar.style.width = `${p}%`;
+    if (progressText) progressText.textContent = String(text || 'Processando...');
+  };
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -114,6 +127,13 @@ function initTrialModal() {
       btnSubmit.disabled = true;
       btnSubmit.textContent = 'Criando...';
     }
+    setProgress(6, 'Iniciando cadastro...');
+    if (progressTimer) clearInterval(progressTimer);
+    progressTimer = setInterval(() => {
+      const current = progressBar ? Number(String(progressBar.style.width || '0').replace('%', '')) : 0;
+      if (current >= 90) return;
+      setProgress(current + 2, 'Processando cadastro da clínica...');
+    }, 350);
     if (boxErr) boxErr.style.display = 'none';
     if (boxOk) boxOk.style.display = 'none';
 
@@ -131,6 +151,7 @@ function initTrialModal() {
 
     try {
       let signedIn = false;
+      setProgress(18, 'Validando acesso...');
       const signUp = await db.auth.signUp({ email, password });
       if (signUp.error) {
         const signIn = await db.auth.signInWithPassword({ email, password });
@@ -147,14 +168,17 @@ function initTrialModal() {
 
       if (!signedIn) throw new Error('Não foi possível iniciar sessão. Verifique o e-mail.');
 
+      setProgress(55, 'Configurando clínica e plano...');
       const { data, error } = await db.functions.invoke('self-onboard-company', {
         body: { nome, email, celular: celular || null, plano_tipo: planoTipo, tipo_assinatura: planoTipo }
       });
       if (error) throw error;
+      setProgress(95, 'Finalizando e liberando acesso...');
       const empresaId = data && data.empresa_id ? String(data.empresa_id) : '';
       setOk(`Clínica criada com sucesso.\nEmpresa: ${empresaId || '—'}\nEntrando no OCC...`);
       if (btnSubmit) btnSubmit.textContent = 'Entrando...';
       setTimeout(() => {
+        setProgress(100, 'Acesso liberado. Redirecionando...');
         try { backdrop.style.display = 'none'; } catch { }
         window.location.assign('/app.html');
       }, 600);
@@ -175,10 +199,15 @@ function initTrialModal() {
       } catch { }
       setErr(msg);
     } finally {
+      if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+      }
       if (btnSubmit) {
         btnSubmit.disabled = false;
         btnSubmit.textContent = prevBtnText || 'Criar e Entrar';
       }
+      if (progressWrap && (!boxOk || boxOk.style.display !== 'block')) progressWrap.style.display = 'none';
     }
   });
 
