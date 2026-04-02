@@ -3,6 +3,7 @@ const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
 const db = (window.supabase && typeof window.supabase.createClient === 'function')
   ? window.supabase.createClient(supabaseUrl, supabaseKey)
   : null;
+let cachedPlanos = [];
 
 function maskCell(value) {
   const digits = String(value || '').replace(/\D/g, '').slice(0, 11);
@@ -69,17 +70,19 @@ function initTrialModal() {
 
   if (!backdrop || !btnOpen || !btnClose || !form) return;
 
-  const open = () => {
+  const open = (selectedPlan = '') => {
     backdrop.style.display = 'flex';
     if (boxErr) boxErr.style.display = 'none';
     if (boxOk) boxOk.style.display = 'none';
+    const planEl = document.getElementById('trialPlan');
+    if (planEl && selectedPlan) planEl.value = String(selectedPlan);
     const first = document.getElementById('trialClinicName');
     if (first) first.focus();
   };
   const close = () => { backdrop.style.display = 'none'; };
 
-  btnOpen.addEventListener('click', open);
-  if (btnOpen2) btnOpen2.addEventListener('click', open);
+  btnOpen.addEventListener('click', () => open(''));
+  if (btnOpen2) btnOpen2.addEventListener('click', () => open(''));
   btnClose.addEventListener('click', close);
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 
@@ -117,9 +120,10 @@ function initTrialModal() {
     const nome = String((document.getElementById('trialClinicName') || {}).value || '').trim();
     const email = String((document.getElementById('trialEmail') || {}).value || '').trim().toLowerCase();
     const celular = String((document.getElementById('trialCell') || {}).value || '').trim();
+    const planoTipo = String((document.getElementById('trialPlan') || {}).value || '').trim();
     const password = String((document.getElementById('trialPassword') || {}).value || '');
 
-    if (!nome || !email || !password) {
+    if (!nome || !email || !password || !planoTipo) {
       setErr('Preencha os campos obrigatórios.');
       if (btnSubmit) btnSubmit.disabled = false;
       return;
@@ -144,7 +148,7 @@ function initTrialModal() {
       if (!signedIn) throw new Error('Não foi possível iniciar sessão. Verifique o e-mail.');
 
       const { data, error } = await db.functions.invoke('self-onboard-company', {
-        body: { nome, email, celular: celular || null }
+        body: { nome, email, celular: celular || null, plano_tipo: planoTipo, tipo_assinatura: planoTipo }
       });
       if (error) throw error;
       const empresaId = data && data.empresa_id ? String(data.empresa_id) : '';
@@ -177,10 +181,90 @@ function initTrialModal() {
       }
     }
   });
+
+  window.__openTrialModalWithPlan = (plan) => open(String(plan || ''));
+}
+
+function splitModulesText(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+  return raw
+    .split(/\r?\n|;|\||,/g)
+    .map(x => String(x || '').trim())
+    .filter(Boolean);
+}
+
+function renderPlanosCards(planos) {
+  const container = document.getElementById('plansContainer');
+  const trialPlan = document.getElementById('trialPlan');
+  if (!container || !trialPlan) return;
+  const list = Array.isArray(planos) ? planos : [];
+  trialPlan.innerHTML = '<option value="">Selecione um plano</option>';
+
+  if (!list.length) {
+    container.innerHTML = `
+      <div class="lp-plan">
+        <h3>Sem planos configurados</h3>
+        <div class="lp-price">--</div>
+        <ul><li>Consulte o administrador do sistema.</li></ul>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = list.map(p => {
+    const tipo = String(p && p.tipo_assinatura || '').trim() || 'Plano';
+    const valor = String(p && p.valor_plano || '').trim() || '-';
+    const modulos = splitModulesText(p && p.modulos_texto);
+    const itens = modulos.length ? modulos : ['Plano OCC'];
+    const destaque = !!(p && p.destaque);
+    const border = destaque ? 'border-color:#1d4ed8; box-shadow: 0 20px 72px rgba(29,78,216,0.20);' : '';
+    return `
+      <div class="lp-plan" style="${border}">
+        <h3>${tipo}</h3>
+        <div class="lp-price">${valor}</div>
+        <ul>${itens.map(i => `<li>${i}</li>`).join('')}</ul>
+        <div style="margin-top:14px;">
+          <button type="button" class="lp-btn lp-btn-primary js-plan-signup" data-plan="${tipo}" style="width:100%;">Assinar</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  trialPlan.innerHTML += list.map(p => {
+    const tipo = String(p && p.tipo_assinatura || '').trim();
+    return `<option value="${tipo}">${tipo}</option>`;
+  }).join('');
+
+  container.querySelectorAll('.js-plan-signup').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const plan = String(btn.getAttribute('data-plan') || '').trim();
+      if (typeof window.__openTrialModalWithPlan === 'function') {
+        window.__openTrialModalWithPlan(plan);
+      }
+    });
+  });
+}
+
+async function loadPlanosConfig() {
+  if (!db) return;
+  try {
+    const { data, error } = await db
+      .from('config_planos')
+      .select('id,tipo_assinatura,valor_plano,modulos_texto,destaque')
+      .order('destaque', { ascending: false })
+      .order('tipo_assinatura', { ascending: true });
+    if (error) throw error;
+    cachedPlanos = Array.isArray(data) ? data : [];
+    renderPlanosCards(cachedPlanos);
+  } catch {
+    renderPlanosCards([]);
+  }
 }
 
 lazyLoadHeroVideo();
 initTrialModal();
+loadPlanosConfig();
 
 function initNavLinks() {
   const anchors = Array.from(document.querySelectorAll('a[href^="#"]'));

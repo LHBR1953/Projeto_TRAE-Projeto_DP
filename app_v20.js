@@ -152,6 +152,7 @@ let specialties = [];
 let services = [];
 let budgets = [];
 let activeEmpresasList = []; // Store companies list for admins
+let configPlanosList = [];
 let transactions = []; // Global transactions state
 
 function normalizeRole(input) {
@@ -345,12 +346,16 @@ async function checkAuth() {
     if (isAdminRole()) {
         const navConfigSection = document.getElementById('navConfigSection');
         const navEmpresas = document.getElementById('navEmpresas');
+        const navAssinaturas = document.getElementById('navAssinaturas');
         const navUsersAdmin = document.getElementById('navUsersAdmin');
 
         if (navConfigSection) navConfigSection.style.display = 'block';
 
         if (navEmpresas) {
             navEmpresas.style.display = isSuperAdmin ? 'flex' : 'none';
+        }
+        if (navAssinaturas) {
+            navAssinaturas.style.display = isSuperAdmin ? 'flex' : 'none';
         }
 
         if (navUsersAdmin) navUsersAdmin.style.display = 'flex';
@@ -864,6 +869,7 @@ function openServiceImportModal() {
         if (btnCancelServiceImport) btnCancelServiceImport.addEventListener('click', () => serviceImportModal.classList.add('hidden'));
         if (btnServiceImportParse) btnServiceImportParse.addEventListener('click', () => parseServiceImportFile());
         if (btnConfirmServiceImport) btnConfirmServiceImport.addEventListener('click', () => confirmServiceImport());
+        if (btnExportServiceXlsx) btnExportServiceXlsx.addEventListener('click', () => exportServicesXlsx());
         serviceImportModal.addEventListener('click', (e) => { if (e.target === serviceImportModal) serviceImportModal.classList.add('hidden'); });
         serviceImportModal.dataset.bound = '1';
     }
@@ -885,19 +891,39 @@ async function parseServiceImportFile() {
         if (serviceImportStatus) serviceImportStatus.textContent = 'Lendo arquivo...';
         const rows = await readXlsxToRowArrays(file);
         const skipHeader = serviceImportSkipHeader ? Boolean(serviceImportSkipHeader.checked) : true;
+        const headers = skipHeader ? (Array.isArray(rows[0]) ? rows[0] : []) : [];
+        const norm = (v) => String(v || '').trim().toLowerCase();
+        const h = headers.map(norm);
+        const idx = (names, fallback) => {
+            const found = (names || []).map(n => h.indexOf(norm(n))).find(i => i >= 0);
+            return Number.isInteger(found) && found >= 0 ? found : fallback;
+        };
+        const colDescricao = idx(['descricao', 'descrição'], 1);
+        const colValor = idx(['valor'], 2);
+        const colIe = idx(['ie', 'tipo', 'tipo_ie'], 3);
+        const colTipoCalc = idx(['tipo_calculo', 'tipo cálculo', 'tipo_calc'], 5);
+        const colExigeEl = idx(['exige_elemento', 'exige elemento'], 6);
+        const colSubdiv = idx(['subdivisao', 'subdivisão', 'subdivisao_nome'], 4);
         const dataRows = skipHeader ? rows.slice(1) : rows.slice();
 
+        const parseBool = (v) => {
+            const t = String(v || '').trim().toUpperCase();
+            return t === '1' || t === 'TRUE' || t === 'SIM' || t === 'S' || t === 'X';
+        };
         const parsed = [];
         dataRows.forEach(r => {
             const arr = Array.isArray(r) ? r : [];
-            const descricao = String(arr[1] ?? '').trim().toUpperCase();
-            const valorRaw = String(arr[2] ?? '').replace(',', '.').trim();
+            const descricao = String(arr[colDescricao] ?? '').trim().toUpperCase();
+            const valorRaw = String(arr[colValor] ?? '').replace(',', '.').trim();
             const valor = parseFloat(valorRaw) || 0;
-            const ie = String(arr[3] ?? '').trim().toUpperCase();
-            const subdivisao = String(arr[4] ?? '').trim().toUpperCase();
+            const ie = String(arr[colIe] ?? '').trim().toUpperCase();
+            const tipoCalculoRaw = String(arr[colTipoCalc] ?? '').trim();
+            const tipoCalculo = tipoCalculoRaw ? tipoCalculoRaw : 'Fixo';
+            const exigeElemento = parseBool(arr[colExigeEl]);
+            const subdivisao = String(arr[colSubdiv] ?? '').trim().toUpperCase();
             if (!descricao) return;
             const ieVal = (ie === 'S' || ie === 'E') ? ie : 'S';
-            parsed.push({ descricao, valor, ie: ieVal, subdivisao });
+            parsed.push({ descricao, valor, ie: ieVal, tipo_calculo: tipoCalculo, exige_elemento: exigeElemento, subdivisao });
         });
 
         const uniqKeys = new Set(parsed.map(x => `${x.descricao}::${x.subdivisao}::${x.ie}`));
@@ -920,7 +946,7 @@ async function parseServiceImportFile() {
             serviceImportStatus.textContent = [
                 `Linhas válidas: ${parsed.length}`,
                 `Chaves (Desc/Subdiv/IE) únicas: ${uniqKeys.size}`,
-                'Colunas: B=Descrição, C=Valor, D=Tipo (IE), E=Subdivisão'
+                'Colunas usadas: descricao, valor, ie, tipo_calculo, exige_elemento, subdivisao'
             ].join('\n');
         }
     } catch (e) {
@@ -940,11 +966,41 @@ async function confirmServiceImport() {
 
     if (serviceImportStatus) serviceImportStatus.textContent = 'Carregando itens atuais...';
     const { data: existing, error } = await withTimeout(
-        db.from('servicos').select('id,descricao,subdivisao,ie,seqid,valor').eq('empresa_id', empresaId),
+        db.from('servicos').select('id,descricao,subdivisao,subdivisao_id,ie,tipo_calculo,exige_elemento,seqid,valor').eq('empresa_id', empresaId),
         20000,
         'srvImport:servicos'
     );
     if (error) { showToast('Falha ao carregar serviços.', true); return; }
+    const { data: allSubs, error: subErr } = await withTimeout(
+        db.from('especialidade_subdivisoes').select('id,nome').eq('empresa_id', empresaId),
+        20000,
+        'srvImport:subdivisoes'
+    );
+    if (subErr) { showToast('Falha ao carregar subdivisões.', true); return; }
+
+    const bySubName = new Map();
+    const bySubCode = new Map();
+    const extractSubCode = (text) => {
+        const s = String(text || '').trim();
+        const m = s.match(/^[^\d]*(\d+\.\d+)\s*[-.)]?\s*/);
+        return m ? String(m[1]) : '';
+    };
+    (allSubs || []).forEach(s => {
+        const nome = String(s && s.nome || '').trim().toUpperCase();
+        const id = String(s && s.id || '');
+        if (!nome || !id) return;
+        if (!bySubName.has(nome)) bySubName.set(nome, { id, nome });
+        const code = extractSubCode(nome);
+        if (code && !bySubCode.has(code)) bySubCode.set(code, { id, nome });
+    });
+    const resolveSubdivision = (raw) => {
+        const token = String(raw || '').trim().toUpperCase();
+        if (!token) return { nome: '', id: null };
+        if (bySubName.has(token)) return bySubName.get(token);
+        const code = extractSubCode(token);
+        if (code && bySubCode.has(code)) return bySubCode.get(code);
+        return { nome: token, id: null };
+    };
 
     const byKey = new Map();
     let maxSeq = 0;
@@ -956,11 +1012,19 @@ async function confirmServiceImport() {
 
     let created = 0, updated = 0, skipped = 0;
     for (const row of parsed) {
-        const key = `${row.descricao}::${row.subdivisao}::${row.ie}`;
+        const resolvedSub = resolveSubdivision(row.subdivisao);
+        const key = `${row.descricao}::${String(resolvedSub.nome || '').trim().toUpperCase()}::${row.ie}`;
         const found = byKey.get(key);
         if (found) {
             if (mode === 'update_dupes') {
-                const upd = { valor: Number(row.valor || 0), ie: row.ie, subdivisao: row.subdivisao };
+                const upd = {
+                    valor: Number(row.valor || 0),
+                    ie: row.ie,
+                    tipo_calculo: String(row.tipo_calculo || 'Fixo'),
+                    exige_elemento: !!row.exige_elemento,
+                    subdivisao: String(resolvedSub.nome || ''),
+                    subdivisao_id: resolvedSub.id || null
+                };
                 const { error: uErr } = await withTimeout(
                     db.from('servicos').update(upd).eq('id', found.id),
                     20000,
@@ -969,7 +1033,10 @@ async function confirmServiceImport() {
                 if (uErr) { showToast('Falha ao atualizar alguns itens.', true); continue; }
                 found.valor = upd.valor;
                 found.ie = upd.ie;
+                found.tipo_calculo = upd.tipo_calculo;
+                found.exige_elemento = upd.exige_elemento;
                 found.subdivisao = upd.subdivisao;
+                found.subdivisao_id = upd.subdivisao_id;
                 updated += 1;
             } else {
                 skipped += 1;
@@ -983,7 +1050,10 @@ async function confirmServiceImport() {
             descricao: row.descricao,
             valor: Number(row.valor || 0),
             ie: row.ie,
-            subdivisao: row.subdivisao,
+            tipo_calculo: String(row.tipo_calculo || 'Fixo'),
+            exige_elemento: !!row.exige_elemento,
+            subdivisao: String(resolvedSub.nome || ''),
+            subdivisao_id: resolvedSub.id || null,
             empresa_id: empresaId
         };
         const { error: iErr } = await withTimeout(
@@ -1006,7 +1076,34 @@ async function confirmServiceImport() {
     showList('services');
     showToast('Importação de serviços concluída.');
 }
-function openSpecialtyImportModal() {
+
+async function exportServicesXlsx() {
+    if (!isSuperAdmin) { showToast('Apenas SuperAdmin.', true); return; }
+    const empresaId = getEffectiveImportEmpresaId();
+    if (!empresaId) { showToast('Empresa inválida.', true); return; }
+    const { data, error } = await withTimeout(
+        db.from('servicos')
+            .select('seqid,descricao,valor,ie,tipo_calculo,exige_elemento,subdivisao')
+            .eq('empresa_id', empresaId)
+            .order('seqid', { ascending: true }),
+        20000,
+        'export:servicos'
+    );
+    if (error) { showToast('Falha ao exportar serviços.', true); return; }
+    const rows = (data || []).map(s => ({
+        seqid: Number(s && s.seqid || 0),
+        descricao: String(s && s.descricao || ''),
+        valor: Number(s && s.valor || 0),
+        ie: String(s && s.ie || ''),
+        tipo_calculo: String(s && s.tipo_calculo || 'Fixo'),
+        exige_elemento: !!(s && s.exige_elemento),
+        subdivisao: String(s && s.subdivisao || '')
+    }));
+    exportRowsToXlsx(rows, 'Servicos', `servicos_${empresaId}.xlsx`);
+    showToast('Exportação de serviços concluída.');
+}
+
+async function openSpecialtyImportModal() {
     if (!isSuperAdmin || !specialtyImportModal) {
         showToast('Apenas SuperAdmin pode importar especialidades.', true);
         return;
@@ -1016,14 +1113,23 @@ function openSpecialtyImportModal() {
         if (btnCancelSpecialtyImport) btnCancelSpecialtyImport.addEventListener('click', () => specialtyImportModal.classList.add('hidden'));
         specialtyImportModal.addEventListener('click', (e) => { if (e.target === specialtyImportModal) specialtyImportModal.classList.add('hidden'); });
         if (btnSpecialtyImportParse) btnSpecialtyImportParse.addEventListener('click', () => parseSpecialtyImportFile());
+        if (btnSubdivisionImportParse) btnSubdivisionImportParse.addEventListener('click', () => parseSubdivisionImportFile());
         if (btnConfirmSpecialtyImport) btnConfirmSpecialtyImport.addEventListener('click', () => confirmSpecialtyImport());
+        if (btnConfirmSubdivisionImport) btnConfirmSubdivisionImport.addEventListener('click', () => confirmSubdivisionImport());
+        if (btnExportSpecialtyXlsx) btnExportSpecialtyXlsx.addEventListener('click', () => exportSpecialtiesXlsx());
+        if (btnExportSubdivisionXlsx) btnExportSubdivisionXlsx.addEventListener('click', () => exportSubdivisionsXlsx());
         specialtyImportModal.dataset.bound = '1';
     }
     if (specialtyImportStatus) specialtyImportStatus.textContent = '';
+    if (subdivisionImportStatus) subdivisionImportStatus.textContent = '';
     if (specialtyImportPreviewWrap) specialtyImportPreviewWrap.classList.add('hidden');
+    if (subdivisionImportPreviewWrap) subdivisionImportPreviewWrap.classList.add('hidden');
     if (specialtyImportPreviewBody) specialtyImportPreviewBody.innerHTML = '';
+    if (subdivisionImportPreviewBody) subdivisionImportPreviewBody.innerHTML = '';
     if (btnConfirmSpecialtyImport) btnConfirmSpecialtyImport.disabled = true;
+    if (btnConfirmSubdivisionImport) btnConfirmSubdivisionImport.disabled = true;
     window.__specialtyImportRows = [];
+    window.__subdivisionImportRows = [];
     specialtyImportModal.classList.remove('hidden');
 }
 
@@ -1044,6 +1150,128 @@ async function readXlsxToRowArrays(file) {
     return Array.isArray(rows) ? rows : [];
 }
 
+function parseOneColumnRows(rows, skipHeader) {
+    const dataRows = skipHeader ? rows.slice(1) : rows.slice();
+    const parsed = [];
+    dataRows.forEach(r => {
+        const arr = Array.isArray(r) ? r : [];
+        const value = String(arr[0] ?? '').trim().toUpperCase();
+        if (!value) return;
+        parsed.push(value);
+    });
+    return parsed;
+}
+
+function parseImportValues(rows, skipHeader, preferredHeaders) {
+    const allRows = Array.isArray(rows) ? rows : [];
+    const headers = skipHeader ? (Array.isArray(allRows[0]) ? allRows[0] : []) : [];
+    const norm = (v) => String(v || '').trim().toLowerCase();
+    const normalizedHeaders = headers.map(norm);
+    let colIndex = 0;
+    if (skipHeader && Array.isArray(preferredHeaders) && preferredHeaders.length) {
+        const idx = preferredHeaders
+            .map(h => normalizedHeaders.indexOf(norm(h)))
+            .find(i => i >= 0);
+        if (Number.isInteger(idx) && idx >= 0) colIndex = idx;
+    }
+    const dataRows = skipHeader ? allRows.slice(1) : allRows.slice();
+    const parsed = [];
+    dataRows.forEach(r => {
+        const arr = Array.isArray(r) ? r : [];
+        const value = String(arr[colIndex] ?? '').trim().toUpperCase();
+        if (!value) return;
+        parsed.push(value);
+    });
+    return parsed;
+}
+
+function getEffectiveImportEmpresaId() {
+    const curr = String(currentEmpresaId || '').trim();
+    const sw = document.getElementById('companySwitcher');
+    const swVal = String(sw && sw.value || '').trim();
+    if (curr && curr !== 'emp_master') return curr;
+    if (swVal && swVal !== 'emp_master') return swVal;
+    return curr || swVal || '';
+}
+
+function extractLeadingSpecialtyCode(text) {
+    const s = String(text || '').trim();
+    const m = s.match(/^[^\d]*(\d+)\s*[-.)]?\s*/);
+    return m ? String(m[1]) : '';
+}
+
+function extractSubdivisionMajorCode(text) {
+    const s = String(text || '').trim();
+    const m = s.match(/^[^\d]*(\d+)(?:\.\d+)?\s*[-.)]?\s*/);
+    return m ? String(m[1]) : '';
+}
+
+function exportRowsToXlsx(rows, sheetName, fileName) {
+    if (!window.XLSX) {
+        showToast('Biblioteca XLSX não encontrada.', true);
+        return;
+    }
+    const list = Array.isArray(rows) ? rows : [];
+    const ws = window.XLSX.utils.json_to_sheet(list);
+    const wb = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb, ws, String(sheetName || 'Dados'));
+    window.XLSX.writeFile(wb, String(fileName || 'export.xlsx'));
+}
+
+async function exportSpecialtiesXlsx() {
+    if (!isSuperAdmin) { showToast('Apenas SuperAdmin.', true); return; }
+    const empresaId = getEffectiveImportEmpresaId();
+    if (!empresaId) { showToast('Empresa inválida.', true); return; }
+    const { data, error } = await withTimeout(
+        db.from('especialidades')
+            .select('id,seqid,nome,empresa_id')
+            .eq('empresa_id', empresaId)
+            .order('seqid', { ascending: true }),
+        20000,
+        'export:especialidades'
+    );
+    if (error) { showToast('Falha ao exportar especialidades.', true); return; }
+    const rows = (data || []).map(s => ({
+        seqid: Number(s && s.seqid || 0),
+        nome: String(s && s.nome || '')
+    }));
+    exportRowsToXlsx(rows, 'Especialidades', `especialidades_${empresaId}.xlsx`);
+    showToast('Exportação de especialidades concluída.');
+}
+
+async function exportSubdivisionsXlsx() {
+    if (!isSuperAdmin) { showToast('Apenas SuperAdmin.', true); return; }
+    const empresaId = getEffectiveImportEmpresaId();
+    if (!empresaId) { showToast('Empresa inválida.', true); return; }
+    const { data: specs, error: specErr } = await withTimeout(
+        db.from('especialidades')
+            .select('id,seqid,nome,empresa_id')
+            .eq('empresa_id', empresaId),
+        20000,
+        'export:subdivisoes_specs'
+    );
+    if (specErr) { showToast('Falha ao exportar subdivisões.', true); return; }
+    const bySpecId = new Map((specs || []).map(s => [String(s && s.id || ''), s]));
+    const { data, error } = await withTimeout(
+        db.from('especialidade_subdivisoes')
+            .select('id,especialidade_id,nome,empresa_id')
+            .eq('empresa_id', empresaId),
+        20000,
+        'export:subdivisoes'
+    );
+    if (error) { showToast('Falha ao exportar subdivisões.', true); return; }
+    const rows = (data || []).map(sub => {
+        const spec = bySpecId.get(String(sub && sub.especialidade_id || '')) || null;
+        return {
+            especialidade_seqid: spec ? Number(spec.seqid || 0) : null,
+            especialidade_nome: spec ? String(spec.nome || '') : '',
+            nome: String(sub && sub.nome || '')
+        };
+    });
+    exportRowsToXlsx(rows, 'Subdivisoes', `subdivisoes_${empresaId}.xlsx`);
+    showToast('Exportação de subdivisões concluída.');
+}
+
 async function parseSpecialtyImportFile() {
     try {
         if (!specialtyImportFile || !specialtyImportFile.files || !specialtyImportFile.files[0]) {
@@ -1054,29 +1282,17 @@ async function parseSpecialtyImportFile() {
         if (specialtyImportStatus) specialtyImportStatus.textContent = 'Lendo arquivo...';
         const rows = await readXlsxToRowArrays(file);
         const skipHeader = specialtyImportSkipHeader ? Boolean(specialtyImportSkipHeader.checked) : true;
-        const dataRows = skipHeader ? rows.slice(1) : rows.slice();
-
-        const parsed = [];
-        dataRows.forEach(r => {
-            const arr = Array.isArray(r) ? r : [];
-            const spec = String(arr[1] ?? '').trim().toUpperCase();
-            const sub = String(arr[2] ?? '').trim().toUpperCase();
-            if (!spec) return;
-            parsed.push({ spec, sub });
-        });
-
-        const uniqSpecs = new Set(parsed.map(x => x.spec));
-        const uniqPairs = new Set(parsed.map(x => `${x.spec}::${x.sub}`));
+        const parsed = parseImportValues(rows, skipHeader, ['nome', 'especialidade', 'especialidade_nome']);
+        const uniqSpecs = new Set(parsed);
         window.__specialtyImportRows = parsed;
 
         if (specialtyImportPreviewBody) {
             const preview = parsed.slice(0, 200).map(x => `
                 <tr>
-                    <td>${escapeHtml(x.spec)}</td>
-                    <td>${escapeHtml(x.sub || '')}</td>
+                    <td>${escapeHtml(x)}</td>
                 </tr>
             `).join('');
-            specialtyImportPreviewBody.innerHTML = preview || '<tr><td colspan="2" style="text-align:center; padding: 14px; color:#6b7280;">Nenhuma linha válida.</td></tr>';
+            specialtyImportPreviewBody.innerHTML = preview || '<tr><td style="text-align:center; padding: 14px; color:#6b7280;">Nenhuma linha válida.</td></tr>';
         }
         if (specialtyImportPreviewWrap) specialtyImportPreviewWrap.classList.remove('hidden');
         if (btnConfirmSpecialtyImport) btnConfirmSpecialtyImport.disabled = parsed.length === 0;
@@ -1084,8 +1300,7 @@ async function parseSpecialtyImportFile() {
             specialtyImportStatus.textContent = [
                 `Linhas válidas: ${parsed.length}`,
                 `Especialidades (únicas): ${uniqSpecs.size}`,
-                `Combinações (únicas): ${uniqPairs.size}`,
-                'Colunas: B=Especialidade, C=Subdivisão'
+                'Coluna usada: nome (ou coluna A)'
             ].join('\n');
         }
     } catch (e) {
@@ -1095,12 +1310,49 @@ async function parseSpecialtyImportFile() {
     }
 }
 
+async function parseSubdivisionImportFile() {
+    try {
+        if (!subdivisionImportFile || !subdivisionImportFile.files || !subdivisionImportFile.files[0]) {
+            showToast('Selecione um arquivo XLSX de subdivisões.', true);
+            return;
+        }
+        const file = subdivisionImportFile.files[0];
+        if (subdivisionImportStatus) subdivisionImportStatus.textContent = 'Lendo arquivo...';
+        const rows = await readXlsxToRowArrays(file);
+        const skipHeader = subdivisionImportSkipHeader ? Boolean(subdivisionImportSkipHeader.checked) : true;
+        const parsed = parseImportValues(rows, skipHeader, ['nome', 'subdivisao', 'subdivisão']);
+        const uniq = new Set(parsed);
+        window.__subdivisionImportRows = parsed;
+
+        if (subdivisionImportPreviewBody) {
+            const preview = parsed.slice(0, 200).map(x => `<tr><td>${escapeHtml(x)}</td></tr>`).join('');
+            subdivisionImportPreviewBody.innerHTML = preview || '<tr><td style="text-align:center; padding: 14px; color:#6b7280;">Nenhuma linha válida.</td></tr>';
+        }
+        if (subdivisionImportPreviewWrap) subdivisionImportPreviewWrap.classList.remove('hidden');
+        if (btnConfirmSubdivisionImport) btnConfirmSubdivisionImport.disabled = parsed.length === 0;
+        if (subdivisionImportStatus) {
+            subdivisionImportStatus.textContent = [
+                `Linhas válidas: ${parsed.length}`,
+                `Subdivisões (únicas): ${uniq.size}`,
+                'Vínculo automático por código: 1.x -> Especialidade 1'
+            ].join('\n');
+        }
+    } catch (e) {
+        const msg = e && e.message ? String(e.message) : 'Erro ao ler XLSX.';
+        if (subdivisionImportStatus) subdivisionImportStatus.textContent = msg;
+        showToast(msg, true);
+    }
+}
+
 async function confirmSpecialtyImport() {
     if (!isSuperAdmin) { showToast('Apenas SuperAdmin.', true); return; }
-    const parsed = Array.isArray(window.__specialtyImportRows) ? window.__specialtyImportRows : [];
+    let parsed = Array.isArray(window.__specialtyImportRows) ? window.__specialtyImportRows : [];
+    if (!parsed.length && specialtyImportFile && specialtyImportFile.files && specialtyImportFile.files[0]) {
+        await parseSpecialtyImportFile();
+        parsed = Array.isArray(window.__specialtyImportRows) ? window.__specialtyImportRows : [];
+    }
     if (!parsed.length) { showToast('Nenhuma linha para importar.', true); return; }
-    const mode = specialtyImportMode ? String(specialtyImportMode.value || 'skip_dupes') : 'skip_dupes';
-    const empresaId = String(currentEmpresaId || '');
+    const empresaId = getEffectiveImportEmpresaId();
     if (!empresaId) { showToast('Empresa inválida.', true); return; }
 
     if (specialtyImportStatus) specialtyImportStatus.textContent = 'Carregando estado atual...';
@@ -1111,12 +1363,6 @@ async function confirmSpecialtyImport() {
         'specImport:especialidades'
     );
     if (sErr) { showToast('Falha ao carregar especialidades.', true); return; }
-    const { data: existingSubs, error: subErr } = await withTimeout(
-        db.from('especialidade_subdivisoes').select('especialidade_id,nome').eq('empresa_id', empresaId),
-        20000,
-        'specImport:subdivisoes'
-    );
-    if (subErr) { showToast('Falha ao carregar subdivisões.', true); return; }
 
     const specByKey = new Map();
     let maxSeq = 0;
@@ -1126,22 +1372,11 @@ async function confirmSpecialtyImport() {
         specByKey.set(key, { id: String(s.id), seqid: Number(s.seqid || 0), nome: key });
         if (Number(s.seqid || 0) > maxSeq) maxSeq = Number(s.seqid || 0);
     });
-    const subsBySpecId = new Map();
-    (existingSubs || []).forEach(r => {
-        const sid = String(r.especialidade_id || '');
-        const nk = String(r.nome || '').trim().toUpperCase();
-        if (!sid || !nk) return;
-        if (!subsBySpecId.has(sid)) subsBySpecId.set(sid, new Set());
-        subsBySpecId.get(sid).add(nk);
-    });
-
     let createdSpecs = 0;
-    let createdSubs = 0;
     let skipped = 0;
 
     for (const row of parsed) {
-        const specKey = String(row.spec || '').trim().toUpperCase();
-        const subKey = String(row.sub || '').trim().toUpperCase();
+        const specKey = String(row || '').trim().toUpperCase();
         if (!specKey) continue;
 
         let spec = specByKey.get(specKey);
@@ -1157,36 +1392,148 @@ async function confirmSpecialtyImport() {
             spec = { id: String(ins.id), seqid: Number(ins.seqid || specData.seqid), nome: String(ins.nome || specKey) };
             specByKey.set(specKey, spec);
             createdSpecs += 1;
+        } else {
+            skipped += 1;
         }
-
-        if (!subKey) continue;
-        if (!subsBySpecId.has(spec.id)) subsBySpecId.set(spec.id, new Set());
-        const set = subsBySpecId.get(spec.id);
-        if (set.has(subKey)) {
-            if (mode === 'skip_dupes') skipped += 1;
-            continue;
-        }
-        const subData = { id: generateId(), especialidade_id: spec.id, nome: subKey, empresa_id: empresaId };
-        const { error: insErr } = await withTimeout(
-            db.from('especialidade_subdivisoes').insert(subData),
-            20000,
-            'specImport:insertSub'
-        );
-        if (insErr) throw insErr;
-        set.add(subKey);
-        createdSubs += 1;
     }
 
     if (specialtyImportStatus) {
         specialtyImportStatus.textContent = [
             `Especialidades criadas: ${createdSpecs}`,
-            `Subdivisões criadas: ${createdSubs}`,
             `Duplicados ignorados: ${skipped}`
         ].join('\n');
     }
-    try { await initializeApp(true); } catch { }
+    try {
+        if (String(currentEmpresaId || '') !== String(empresaId || '')) {
+            await switchCompany(String(empresaId));
+        } else {
+            await initializeApp(true);
+        }
+    } catch {
+        await refreshSpecialtiesGridForEmpresa(empresaId);
+    }
     showList('specialties');
-    showToast('Importação concluída.');
+    showToast(`Importação de especialidades concluída. Criadas: ${createdSpecs}.`);
+}
+
+async function refreshSpecialtiesGridForEmpresa(empresaId) {
+    const empId = String(empresaId || '').trim();
+    if (!empId) return;
+    const [specRes, subRes] = await Promise.all([
+        db.from('especialidades').select('*').eq('empresa_id', empId).order('seqid', { ascending: true }),
+        db.from('especialidade_subdivisoes').select('*').eq('empresa_id', empId)
+    ]);
+    if (specRes.error || subRes.error) return;
+    const specs = Array.isArray(specRes.data) ? specRes.data : [];
+    const subs = Array.isArray(subRes.data) ? subRes.data : [];
+    specs.forEach(spec => {
+        const sid = String(spec && spec.id || '').trim();
+        spec.subdivisoes = subs.filter(sub => String(sub && sub.especialidade_id || '').trim() === sid);
+    });
+    if (String(currentEmpresaId || '') === empId) {
+        specialties = specs;
+        renderTable(specialties, 'specialties');
+    }
+}
+
+async function confirmSubdivisionImport() {
+    if (!isSuperAdmin) { showToast('Apenas SuperAdmin.', true); return; }
+    let parsed = Array.isArray(window.__subdivisionImportRows) ? window.__subdivisionImportRows : [];
+    if (!parsed.length && subdivisionImportFile && subdivisionImportFile.files && subdivisionImportFile.files[0]) {
+        await parseSubdivisionImportFile();
+        parsed = Array.isArray(window.__subdivisionImportRows) ? window.__subdivisionImportRows : [];
+    }
+    if (!parsed.length) { showToast('Nenhuma subdivisão para importar.', true); return; }
+    const empresaId = getEffectiveImportEmpresaId();
+    if (!empresaId) { showToast('Empresa inválida.', true); return; }
+
+    const { data: specs, error: specErr } = await withTimeout(
+        db.from('especialidades')
+            .select('id,nome,seqid')
+            .eq('empresa_id', empresaId),
+        20000,
+        'subImport:load_specs'
+    );
+    if (specErr) { showToast('Falha ao carregar especialidades.', true); return; }
+    const specMap = new Map();
+    (specs || []).forEach(s => {
+        const codeFromName = extractLeadingSpecialtyCode(s && s.nome);
+        const codeFromSeq = Number.isFinite(Number(s && s.seqid)) ? String(Number(s.seqid)) : '';
+        const sid = String(s && s.id || '');
+        if (codeFromName && sid && !specMap.has(codeFromName)) specMap.set(codeFromName, sid);
+        if (codeFromSeq && sid && !specMap.has(codeFromSeq)) specMap.set(codeFromSeq, sid);
+    });
+    if (!specMap.size) {
+        showToast('Nenhuma especialidade com código (ex: 1 - ...) encontrada.', true);
+        return;
+    }
+
+    if (subdivisionImportStatus) subdivisionImportStatus.textContent = 'Carregando subdivisões atuais...';
+    const { data: existingSubs, error: subErr } = await withTimeout(
+        db.from('especialidade_subdivisoes')
+            .select('nome,especialidade_id')
+            .eq('empresa_id', empresaId)
+            .in('especialidade_id', Array.from(specMap.values())),
+        20000,
+        'subImport:load'
+    );
+    if (subErr) { showToast('Falha ao carregar subdivisões.', true); return; }
+
+    const existingBySpec = new Map();
+    (existingSubs || []).forEach(r => {
+        const sid = String(r && r.especialidade_id || '');
+        const nk = String(r && r.nome || '').trim().toUpperCase();
+        if (!sid || !nk) return;
+        if (!existingBySpec.has(sid)) existingBySpec.set(sid, new Set());
+        existingBySpec.get(sid).add(nk);
+    });
+    let created = 0;
+    let skipped = 0;
+    let semVinculo = 0;
+    for (const nameRaw of parsed) {
+        const name = String(nameRaw || '').trim().toUpperCase();
+        if (!name) continue;
+        const major = extractSubdivisionMajorCode(name);
+        const targetSpecialtyId = major ? String(specMap.get(major) || '') : '';
+        if (!targetSpecialtyId) {
+            semVinculo += 1;
+            continue;
+        }
+        if (!existingBySpec.has(targetSpecialtyId)) existingBySpec.set(targetSpecialtyId, new Set());
+        const set = existingBySpec.get(targetSpecialtyId);
+        if (set.has(name)) {
+            skipped += 1;
+            continue;
+        }
+        const row = { id: generateId(), empresa_id: empresaId, especialidade_id: targetSpecialtyId, nome: name };
+        const { error } = await withTimeout(
+            db.from('especialidade_subdivisoes').insert(row),
+            20000,
+            'subImport:insert'
+        );
+        if (error) throw error;
+        set.add(name);
+        created += 1;
+    }
+    if (subdivisionImportStatus) {
+        subdivisionImportStatus.textContent = [
+            `Subdivisões criadas: ${created}`,
+            `Duplicados ignorados: ${skipped}`,
+            `Sem especialidade correspondente: ${semVinculo}`
+        ].join('\n');
+    }
+    try {
+        if (String(currentEmpresaId || '') !== String(empresaId || '')) {
+            await switchCompany(String(empresaId));
+        } else {
+            await initializeApp(true);
+        }
+    } catch {
+        await refreshSpecialtiesGridForEmpresa(empresaId);
+    }
+    await refreshSpecialtiesGridForEmpresa(empresaId);
+    showList('specialties');
+    showToast('Importação de subdivisões concluída.');
 }
 
 function bindGlobalHotkeys() {
@@ -1650,40 +1997,19 @@ async function initializeApp(isContextSwitch = false) {
             const now = new Date();
             const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-            const createdTs = currentEmpresaRow.created_at ? Date.parse(String(currentEmpresaRow.created_at)) : NaN;
-            const trialExpired = Number.isFinite(createdTs) && Date.now() > (createdTs + (30 * 24 * 60 * 60 * 1000));
-
             const vencRaw = currentEmpresaRow.data_vencimento ? String(currentEmpresaRow.data_vencimento).slice(0, 10) : '';
             const vencExpired = vencRaw && todayYmd > vencRaw;
+            const blockMsg = statusKey === 'PENDENTE'
+                ? 'Sua assinatura está pendente. Entre em contato com o suporte.'
+                : (vencExpired ? 'Seu período de uso expirou. Renove sua assinatura para continuar.' : '');
 
-            const shouldBlock = statusKey === 'PENDENTE' || (vencExpired && statusKey !== 'ATIVO') || (trialExpired && statusKey !== 'ATIVO');
-
-            if (vencExpired && statusKey !== 'PENDENTE') {
-                try {
-                    await db.from('empresas')
-                        .update({ assinatura_status: 'PENDENTE' })
-                        .eq('id', currentEmpresaId);
-                    const local = (activeEmpresasList || []).find(e => String(e && e.id || '') === String(currentEmpresaId || ''));
-                    if (local) local.assinatura_status = 'PENDENTE';
-                } catch { }
-            }
-            if (trialExpired && statusKey === 'TRIAL') {
-                try {
-                    await db.from('empresas')
-                        .update({ assinatura_status: 'PENDENTE' })
-                        .eq('id', currentEmpresaId);
-                    const local = (activeEmpresasList || []).find(e => String(e && e.id || '') === String(currentEmpresaId || ''));
-                    if (local) local.assinatura_status = 'PENDENTE';
-                } catch { }
-            }
-
-            if (shouldBlock) {
+            if (blockMsg) {
                 const loginError = document.getElementById('loginError');
                 if (loginError) {
-                    loginError.textContent = 'Sua assinatura expirou ou está pendente de pagamento. Entre em contato com o Luiz para regularizar.';
+                    loginError.textContent = blockMsg;
                     loginError.style.display = 'block';
                 }
-                showToast('Sua assinatura expirou ou está pendente de pagamento. Entre em contato com o Luiz para regularizar.', true);
+                showToast(blockMsg, true);
                 await db.auth.signOut();
                 document.getElementById('loginView').style.display = 'flex';
                 document.getElementById('appContainer').style.display = 'none';
@@ -1702,7 +2028,8 @@ async function initializeApp(isContextSwitch = false) {
 
         const subdivisions = subdivisionsRes.data || [];
         specialties.forEach(spec => {
-            spec.subdivisoes = subdivisions.filter(sub => sub.especialidade_id === spec.id);
+            const sid = String(spec && spec.id || '').trim();
+            spec.subdivisoes = subdivisions.filter(sub => String(sub && sub.especialidade_id || '').trim() === sid);
         });
 
         services = servicesRes.data || [];
@@ -1903,6 +2230,7 @@ const navAtendimento = document.getElementById('navAtendimento');
 const navAgenda = document.getElementById('navAgenda');
 const navProtese = document.getElementById('navProtese');
 const navEmpresas = document.getElementById('navEmpresas');
+const navAssinaturas = document.getElementById('navAssinaturas');
 const navMyCompany = document.getElementById('navMyCompany');
 const navUsersAdminBtn = document.getElementById('navUsersAdmin');
 
@@ -1920,6 +2248,7 @@ const budgetFormView = document.getElementById('budgetFormView');
 const usersAdminView = document.getElementById('usersAdminView');
 const userAdminFormView = document.getElementById('userAdminFormView');
 const empresasListView = document.getElementById('empresasListView');
+const assinaturasView = document.getElementById('assinaturasView');
 const empresaFormView = document.getElementById('empresaFormView');
 const financeiroView = document.getElementById('financeiroView');
 const commissionsView = document.getElementById('commissionsView');
@@ -1932,6 +2261,29 @@ const myCompanyView = document.getElementById('myCompanyView');
 const btnAddNewEmpresa = document.getElementById('btnAddNewEmpresa');
 const btnBackEmpresa = document.getElementById('btnBackEmpresa');
 const btnCancelEmpresa = document.getElementById('btnCancelEmpresa');
+const btnAddPlanoConfig = document.getElementById('btnAddPlanoConfig');
+const configPlanosTableBody = document.getElementById('configPlanosTableBody');
+const configPlanosEmptyState = document.getElementById('configPlanosEmptyState');
+const assinaturasTableBody = document.getElementById('assinaturasTableBody');
+const assinaturasEmptyState = document.getElementById('assinaturasEmptyState');
+const assinaturaModal = document.getElementById('assinaturaModal');
+const assinaturaEmpresaId = document.getElementById('assinaturaEmpresaId');
+const assinaturaPlanoTipo = document.getElementById('assinaturaPlanoTipo');
+const assinaturaDataVencimento = document.getElementById('assinaturaDataVencimento');
+const assinaturaStatus = document.getElementById('assinaturaStatus');
+const btnCloseAssinaturaModal = document.getElementById('btnCloseAssinaturaModal');
+const btnCancelAssinaturaModal = document.getElementById('btnCancelAssinaturaModal');
+const btnSaveAssinaturaModal = document.getElementById('btnSaveAssinaturaModal');
+const planoConfigModal = document.getElementById('planoConfigModal');
+const planoConfigModalTitle = document.getElementById('planoConfigModalTitle');
+const planoConfigId = document.getElementById('planoConfigId');
+const planoConfigTipoAssinatura = document.getElementById('planoConfigTipoAssinatura');
+const planoConfigValor = document.getElementById('planoConfigValor');
+const planoConfigModulos = document.getElementById('planoConfigModulos');
+const planoConfigDestaque = document.getElementById('planoConfigDestaque');
+const btnClosePlanoConfigModal = document.getElementById('btnClosePlanoConfigModal');
+const btnCancelPlanoConfigModal = document.getElementById('btnCancelPlanoConfigModal');
+const btnSavePlanoConfigModal = document.getElementById('btnSavePlanoConfigModal');
 const empresaForm = document.getElementById('empresaForm');
 const empresaLogoFile = document.getElementById('empresaLogoFile');
 const empresaLogoBase64 = document.getElementById('empresaLogoBase64');
@@ -2215,18 +2567,28 @@ const serviceImportStatus = document.getElementById('serviceImportStatus');
 const serviceImportPreviewWrap = document.getElementById('serviceImportPreviewWrap');
 const serviceImportPreviewBody = document.getElementById('serviceImportPreviewBody');
 const btnConfirmServiceImport = document.getElementById('btnConfirmServiceImport');
+const btnExportServiceXlsx = document.getElementById('btnExportServiceXlsx');
 
 const specialtyImportModal = document.getElementById('specialtyImportModal');
 const btnCloseSpecialtyImportModal = document.getElementById('btnCloseSpecialtyImportModal');
 const btnCancelSpecialtyImport = document.getElementById('btnCancelSpecialtyImport');
 const specialtyImportFile = document.getElementById('specialtyImportFile');
-const specialtyImportMode = document.getElementById('specialtyImportMode');
 const specialtyImportSkipHeader = document.getElementById('specialtyImportSkipHeader');
 const btnSpecialtyImportParse = document.getElementById('btnSpecialtyImportParse');
 const specialtyImportStatus = document.getElementById('specialtyImportStatus');
 const specialtyImportPreviewWrap = document.getElementById('specialtyImportPreviewWrap');
 const specialtyImportPreviewBody = document.getElementById('specialtyImportPreviewBody');
 const btnConfirmSpecialtyImport = document.getElementById('btnConfirmSpecialtyImport');
+const btnExportSpecialtyXlsx = document.getElementById('btnExportSpecialtyXlsx');
+const subdivisionImportTargetSpecialty = document.getElementById('subdivisionImportTargetSpecialty');
+const subdivisionImportFile = document.getElementById('subdivisionImportFile');
+const subdivisionImportSkipHeader = document.getElementById('subdivisionImportSkipHeader');
+const btnSubdivisionImportParse = document.getElementById('btnSubdivisionImportParse');
+const subdivisionImportStatus = document.getElementById('subdivisionImportStatus');
+const subdivisionImportPreviewWrap = document.getElementById('subdivisionImportPreviewWrap');
+const subdivisionImportPreviewBody = document.getElementById('subdivisionImportPreviewBody');
+const btnConfirmSubdivisionImport = document.getElementById('btnConfirmSubdivisionImport');
+const btnExportSubdivisionXlsx = document.getElementById('btnExportSubdivisionXlsx');
 // Active State
 let currentSpecialtySubdivisions = [];
 let deletedSpecialtySubdivisionIds = new Set();
@@ -2301,6 +2663,7 @@ function updateSidebarVisibility() {
     // Admin Specific Logic (Double check Config sections)
     const navConfigSection = document.getElementById('navConfigSection');
     const navEmpresas = document.getElementById('navEmpresas');
+    const navAssinaturas = document.getElementById('navAssinaturas');
     const navMyCompany = document.getElementById('navMyCompany');
     const navUsersAdmin = document.getElementById('navUsersAdmin');
     const navCancelledBudgets = document.getElementById('navCancelledBudgets');
@@ -2308,12 +2671,14 @@ function updateSidebarVisibility() {
     if (isAdminRole()) {
         if (navConfigSection) navConfigSection.style.display = 'block';
         if (navEmpresas) navEmpresas.style.display = isSuperAdmin ? 'flex' : 'none';
+        if (navAssinaturas) navAssinaturas.style.display = isSuperAdmin ? 'flex' : 'none';
         if (navMyCompany) navMyCompany.style.display = 'flex';
         if (navUsersAdmin) navUsersAdmin.style.display = 'flex';
         if (navCancelledBudgets) navCancelledBudgets.style.display = 'flex';
     } else {
         if (navConfigSection) navConfigSection.style.display = 'none';
         if (navEmpresas) navEmpresas.style.display = 'none';
+        if (navAssinaturas) navAssinaturas.style.display = 'none';
         if (navMyCompany) navMyCompany.style.display = 'none';
         if (navUsersAdmin) navUsersAdmin.style.display = 'none';
         if (navCancelledBudgets) navCancelledBudgets.style.display = 'none';
@@ -2339,7 +2704,7 @@ function setActiveTab(tab) {
     // 1. Prepare Navigation Elements safely
     const navElements = [
         navPatients, navProfessionals, navSpecialties, navServices,
-        navBudgets, navFinanceiro, navCommissions, navMarketing, navAtendimento, navAgenda, navProtese, navDashboard, navUsersAdminBtn, navEmpresas, navMyCompany, document.getElementById('navCancelledBudgets')
+        navBudgets, navFinanceiro, navCommissions, navMarketing, navAtendimento, navAgenda, navProtese, navDashboard, navUsersAdminBtn, navEmpresas, navAssinaturas, navMyCompany, document.getElementById('navCancelledBudgets')
     ];
 
     // 2. Prepare View Elements safely
@@ -2352,6 +2717,7 @@ function setActiveTab(tab) {
         'budgets': [budgetsListView, budgetFormView],
         'usersAdmin': [usersAdminView, userAdminFormView],
         'empresas': [empresasListView, empresaFormView],
+        'assinaturas': [assinaturasView],
         'myCompany': [myCompanyView],
         'financeiro': [financeiroView],
         'commissions': [commissionsView],
@@ -2401,6 +2767,13 @@ function setActiveTab(tab) {
     } else if (tab === 'empresas') {
         if (navEmpresas) navEmpresas.classList.add('active');
         showList('empresas');
+    } else if (tab === 'assinaturas') {
+        if (!isSuperAdmin) {
+            showToast('Acesso restrito ao SuperAdmin.', true);
+            return;
+        }
+        if (navAssinaturas) navAssinaturas.classList.add('active');
+        showList('assinaturas');
     } else if (tab === 'myCompany') {
         if (navMyCompany) navMyCompany.classList.add('active');
         showList('myCompany');
@@ -2459,6 +2832,7 @@ function setupNavigationListeners() {
         'navProtese': 'protese',
         'navUsersAdmin': 'usersAdmin',
         'navEmpresas': 'empresas',
+        'navAssinaturas': 'assinaturas',
         'navMyCompany': 'myCompany',
         'navCancelledBudgets': 'cancelledBudgets'
     };
@@ -2545,14 +2919,15 @@ function renderTable(data = [], type = 'patients') {
         document.getElementById('specialtyEmptyState').classList.add('hidden');
 
         data.forEach(s => {
+            const subs = Array.isArray(s && s.subdivisoes) ? s.subdivisoes : [];
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${s.seqid}</td>
                 <td><strong>${s.nome}</strong></td>
                 <td>
-                    ${s.subdivisoes && s.subdivisoes.length > 0
+                    ${subs && subs.length > 0
                     ? `<div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                            ${s.subdivisoes.map((sub, index) => `<span style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--text-color);"><strong>${s.seqid}.${index + 1}</strong> - ${sub.nome}</span>`).join('')}
+                            ${subs.map((sub, index) => `<span style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--text-color);"><strong>${s.seqid}.${index + 1}</strong> - ${sub && sub.nome ? sub.nome : String(sub || '')}</span>`).join('')}
                            </div>`
                     : '<small style="color:var(--text-muted)">Nenhuma</small>'}
                 </td>
@@ -3346,9 +3721,20 @@ function showList(type = 'patients') {
     } else if (type === 'empresas') {
         if (empresaFormView) empresaFormView.classList.add('hidden');
         if (empresasListView) empresasListView.classList.remove('hidden');
+        const titleEl = document.getElementById('empresasListTitle');
+        if (titleEl) titleEl.textContent = 'Cadastro de Empresas';
+        if (btnAddNewEmpresa) btnAddNewEmpresa.style.display = isSuperAdmin ? 'inline-flex' : 'none';
         if (empresaForm) empresaForm.reset();
         document.getElementById('editEmpresaOldId').value = '';
         fetchEmpresas();
+    } else if (type === 'assinaturas') {
+        if (!isSuperAdmin) {
+            showToast('Acesso restrito ao SuperAdmin.', true);
+            return;
+        }
+        if (assinaturasView) assinaturasView.classList.remove('hidden');
+        fetchAssinaturas();
+        fetchConfigPlanos();
     } else if (type === 'myCompany') {
         if (myCompanyView) myCompanyView.classList.remove('hidden');
         initMyCompanyForm();
@@ -12834,11 +13220,13 @@ function populateBudgetItemSubdivisaoDropdown() {
             optgroup.label = `${spec.seqid} - ${spec.nome}`;
 
             spec.subdivisoes.forEach((sub, i) => {
-                const subId = `${spec.seqid}.${i + 1} `;
-                const displayStr = `${subId} - ${sub.nome} `;
+                const subCode = `${spec.seqid}.${i + 1}`;
+                const displayStr = `${subCode} - ${sub.nome}`;
                 const opt = document.createElement('option');
                 opt.value = displayStr;
                 opt.textContent = displayStr;
+                opt.dataset.subid = String(sub && sub.id || '');
+                opt.dataset.subnome = String(sub && sub.nome || '');
                 optgroup.appendChild(opt);
             });
             subSelect.appendChild(optgroup);
@@ -12927,6 +13315,7 @@ function updateBudgetItemFromService(serviceId) {
         const subSelect = document.getElementById('budItemSubdivisao');
         if (subSelect) {
             const raw = String(serv.subdivisao || '').trim();
+            const rawSubId = String(serv.subdivisao_id || '').trim();
             if (!subSelect.options || subSelect.options.length <= 1) {
                 populateBudgetItemSubdivisaoDropdown();
             }
@@ -12936,15 +13325,22 @@ function updateBudgetItemFromService(serviceId) {
                 const rawTrim = raw;
                 subSelect.value = rawTrim;
                 if (subSelect.value !== rawTrim) {
-                    const optExact = Array.from(subSelect.options).find(o => String(o.value || '').trim() === rawTrim);
-                    if (optExact) {
+                    const options = Array.from(subSelect.options);
+                    const optById = rawSubId ? options.find(o => String(o && o.dataset && o.dataset.subid || '').trim() === rawSubId) : null;
+                    const optExact = options.find(o => String(o.value || '').trim() === rawTrim);
+                    if (optById) {
+                        subSelect.value = optById.value;
+                    } else if (optExact) {
                         subSelect.value = optExact.value;
                     } else {
                         const rawKey = normalizeKey(rawTrim);
-                        const optByName = Array.from(subSelect.options).find(o => {
+                        const optByName = options.find(o => {
                             const v = String(o.value || '');
                             const tail = v.includes('-') ? v.split('-').slice(1).join('-') : v;
-                            return normalizeKey(tail) === rawKey || normalizeKey(v) === rawKey;
+                            const n1 = normalizeKey(tail);
+                            const n2 = normalizeKey(v);
+                            const n3 = normalizeKey(String(o && o.dataset && o.dataset.subnome || ''));
+                            return n1 === rawKey || n2 === rawKey || n3 === rawKey;
                         });
                         if (optByName) subSelect.value = optByName.value;
                     }
@@ -14283,22 +14679,23 @@ window.printService = function (id) {
     setTimeout(() => win.print(), 500);
 };
 
-window.printServiceList = function (subdivisionName = '') {
-    const filtered = subdivisionName
-        ? services.filter(s => s.subdivisao === subdivisionName)
-        : services;
+window.printServiceList = function () {
+    const filtered = Array.isArray(services) ? services : [];
 
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-    const filtroTexto = subdivisionName ? `Filtrado por: ${subdivisionName}` : 'Todos os Itens';
 
     let itemsHtml = '';
     filtered.forEach(s => {
+        const tipoCalculo = String(s && s.tipo_calculo || 'Fixo');
+        const odontograma = (s && s.exige_elemento) ? 'SIM' : 'NÃO';
         itemsHtml += `
             <tr>
                 <td>${s.seqid}</td>
                 <td>${s.descricao}</td>
                 <td>${s.ie === 'S' ? 'Serviço' : 'Estoque'}</td>
                 <td>${s.subdivisao || '-'}</td>
+                <td>${tipoCalculo}</td>
+                <td>${odontograma}</td>
                 <td style="text-align: right;">R$ ${Number(s.valor || 0).toFixed(2)}</td>
             </tr>
         `;
@@ -14336,7 +14733,6 @@ window.printServiceList = function (subdivisionName = '') {
                                                 </div>
                                                 <div>
                                                     <div class="doc-title">CATÁLOGO GERAL</div>
-                                                    <div style="color:#6b7280; font-size:10px;">${filtroTexto}</div>
                                                     <div style="color:#6b7280; font-size:10px;">Emitido em: ${hoje}</div>
                                                 </div>
                                             </div>
@@ -14348,19 +14744,95 @@ window.printServiceList = function (subdivisionName = '') {
                                                         <th>DESCRIÇÃO</th>
                                                         <th style="width: 80px;">TIPO</th>
                                                         <th style="width: 150px;">SUBDIVISÃO</th>
+                                                        <th style="width: 120px;">TIPO CÁLCULO</th>
+                                                        <th style="width: 120px;">ODONTOGRAMA</th>
                                                         <th style="width: 100px; text-align: right;">VALOR</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    ${itemsHtml || '<tr><td colspan="5" style="text-align:center">Nenhum item encontrado.</td></tr>'}
+                                                    ${itemsHtml || '<tr><td colspan="7" style="text-align:center">Nenhum item encontrado.</td></tr>'}
                                                 </tbody>
                                             </table>
 
                                             <div class="footer">
-                                                Total de registros: ${filtered.length} | Documento gerado pelo sistema de gestão da clínica.
+                                                Quantidade total de itens: ${filtered.length} | Documento gerado pelo sistema de gestão da clínica.
                                             </div>
                                         </body>
                                     </html>`;
+
+    const win = window.open('', '_blank', 'width=1000,height=700');
+    if (!win) { showToast('Habilite pop-ups para gerar o relatório.', true); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 500);
+};
+
+window.printSpecialtiesMasterDetail = function () {
+    const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const list = Array.isArray(specialties) ? [...specialties].sort((a, b) => Number(a.seqid || 0) - Number(b.seqid || 0)) : [];
+    let totalGeral = 0;
+    let bodyHtml = '';
+
+    list.forEach(spec => {
+        const subs = Array.isArray(spec && spec.subdivisoes) ? spec.subdivisoes : [];
+        totalGeral += subs.length;
+        const rows = subs.map((sub, i) => `
+            <tr>
+                <td style="width:90px;">${spec.seqid}.${i + 1}</td>
+                <td>${String(sub && sub.nome || '-')}</td>
+            </tr>
+        `).join('');
+        bodyHtml += `
+            <div style="margin-top: 14px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                <div style="background:#f3f4f6; padding:8px 10px; font-weight:700; color:#111827;">
+                    ${spec.seqid} - ${spec.nome}
+                </div>
+                <table style="width:100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 10px; width:90px;">CÓD.</th>
+                            <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 10px;">SUBDIVISÃO</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows || '<tr><td colspan="2" style="padding:8px 10px; color:#6b7280;">Nenhuma subdivisão cadastrada.</td></tr>'}
+                    </tbody>
+                </table>
+                <div style="padding:8px 10px; border-top:1px solid #e5e7eb; text-align:right; font-weight:700;">
+                    Subtotal de itens: ${subs.length}
+                </div>
+            </div>
+        `;
+    });
+
+    const html = `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <title>Relatório Master/Detail - Especialidades</title>
+                <style>
+                    * { box-sizing: border-box; }
+                    body { font-family: Arial, sans-serif; font-size: 12px; color:#1f2937; padding: 18px; }
+                    .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #0066cc; padding-bottom:10px; margin-bottom:12px; }
+                    .title { font-size:16px; font-weight:700; color:#0066cc; }
+                    .subtitle { font-size:12px; color:#6b7280; margin-top:2px; }
+                    .footer { margin-top: 16px; border-top:1px solid #e5e7eb; padding-top:8px; font-weight:700; text-align:right; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div>
+                        <div class="title">OCC - Relatório Master/Detail</div>
+                        <div class="subtitle">Especialidades e Subdivisões</div>
+                    </div>
+                    <div class="subtitle">Emitido em: ${hoje}</div>
+                </div>
+                ${bodyHtml || '<div style="color:#6b7280;">Nenhuma especialidade cadastrada.</div>'}
+                <div class="footer">Total geral de itens: ${totalGeral}</div>
+            </body>
+        </html>`;
 
     const win = window.open('', '_blank', 'width=1000,height=700');
     if (!win) { showToast('Habilite pop-ups para gerar o relatório.', true); return; }
@@ -14926,6 +15398,110 @@ if (adminUserRoleSelect) {
 if (btnAddNewEmpresa) btnAddNewEmpresa.addEventListener('click', () => showForm(false, 'empresas'));
 if (btnBackEmpresa) btnBackEmpresa.addEventListener('click', () => showList('empresas'));
 if (btnCancelEmpresa) btnCancelEmpresa.addEventListener('click', () => showList('empresas'));
+if (btnCloseAssinaturaModal) btnCloseAssinaturaModal.addEventListener('click', () => assinaturaModal.classList.add('hidden'));
+if (btnCancelAssinaturaModal) btnCancelAssinaturaModal.addEventListener('click', () => assinaturaModal.classList.add('hidden'));
+if (assinaturaModal) assinaturaModal.addEventListener('click', (e) => { if (e.target === assinaturaModal) assinaturaModal.classList.add('hidden'); });
+if (btnClosePlanoConfigModal) btnClosePlanoConfigModal.addEventListener('click', () => planoConfigModal.classList.add('hidden'));
+if (btnCancelPlanoConfigModal) btnCancelPlanoConfigModal.addEventListener('click', () => planoConfigModal.classList.add('hidden'));
+if (planoConfigModal) planoConfigModal.addEventListener('click', (e) => { if (e.target === planoConfigModal) planoConfigModal.classList.add('hidden'); });
+if (btnAddPlanoConfig) btnAddPlanoConfig.addEventListener('click', () => openPlanoConfigModal(null));
+
+function openAssinaturaModal(emp) {
+    if (!emp || !isSuperAdmin) return;
+    if (assinaturaEmpresaId) assinaturaEmpresaId.value = String(emp && emp.id || '');
+    if (assinaturaPlanoTipo) assinaturaPlanoTipo.value = String(emp && emp.plano_tipo || '');
+    if (assinaturaDataVencimento) assinaturaDataVencimento.value = emp && emp.data_vencimento ? String(emp.data_vencimento).slice(0, 10) : '';
+    if (assinaturaStatus) {
+        const key = normalizeKey(emp && emp.assinatura_status || 'PENDENTE');
+        assinaturaStatus.value = (key === 'TRIAL' || key === 'ATIVO' || key === 'ATIVA') ? (key === 'ATIVA' ? 'ATIVO' : key) : 'PENDENTE';
+    }
+    assinaturaModal.classList.remove('hidden');
+}
+
+function openPlanoConfigModal(item) {
+    if (!isSuperAdmin || !planoConfigModal) return;
+    if (planoConfigModalTitle) planoConfigModalTitle.textContent = item ? 'Editar Plano' : 'Novo Plano';
+    if (planoConfigId) planoConfigId.value = item && item.id ? String(item.id) : '';
+    if (planoConfigTipoAssinatura) planoConfigTipoAssinatura.value = item && item.tipo_assinatura ? String(item.tipo_assinatura) : '';
+    if (planoConfigValor) planoConfigValor.value = item && item.valor_plano ? String(item.valor_plano) : '';
+    if (planoConfigModulos) planoConfigModulos.value = item && item.modulos_texto ? String(item.modulos_texto) : '';
+    if (planoConfigDestaque) planoConfigDestaque.checked = !!(item && item.destaque);
+    planoConfigModal.classList.remove('hidden');
+}
+
+if (btnSaveAssinaturaModal) btnSaveAssinaturaModal.addEventListener('click', async () => {
+    if (!isSuperAdmin) {
+        showToast('Acesso restrito ao SuperAdmin.', true);
+        return;
+    }
+    const id = String(assinaturaEmpresaId && assinaturaEmpresaId.value || '').trim();
+    if (!id) return;
+    const payload = {
+        plano_tipo: String(assinaturaPlanoTipo && assinaturaPlanoTipo.value || '').trim() || null,
+        data_vencimento: String(assinaturaDataVencimento && assinaturaDataVencimento.value || '').trim() || null,
+        assinatura_status: String(assinaturaStatus && assinaturaStatus.value || '').trim() || 'PENDENTE'
+    };
+    const btn = btnSaveAssinaturaModal;
+    const prev = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Salvando...';
+    try {
+        const { error } = await db.from('empresas').update(payload).eq('id', id);
+        if (error) throw error;
+        const idx = (activeEmpresasList || []).findIndex(x => String(x && x.id || '') === id);
+        if (idx >= 0) activeEmpresasList[idx] = { ...activeEmpresasList[idx], ...payload };
+        assinaturaModal.classList.add('hidden');
+        showToast('Assinatura atualizada com sucesso.');
+        renderAssinaturas();
+    } catch (err) {
+        showToast(err && err.message ? String(err.message) : 'Falha ao atualizar assinatura.', true);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = prev;
+    }
+});
+if (btnSavePlanoConfigModal) btnSavePlanoConfigModal.addEventListener('click', async () => {
+    if (!isSuperAdmin) {
+        showToast('Acesso restrito ao SuperAdmin.', true);
+        return;
+    }
+    const id = String(planoConfigId && planoConfigId.value || '').trim();
+    const tipo = String(planoConfigTipoAssinatura && planoConfigTipoAssinatura.value || '').trim();
+    const valor = String(planoConfigValor && planoConfigValor.value || '').trim();
+    const modulos = String(planoConfigModulos && planoConfigModulos.value || '').trim();
+    const destaque = !!(planoConfigDestaque && planoConfigDestaque.checked);
+    if (!tipo || !valor || !modulos) {
+        showToast('Preencha tipo, valor e módulos.', true);
+        return;
+    }
+    const payload = {
+        tipo_assinatura: tipo,
+        valor_plano: valor,
+        modulos_texto: modulos,
+        destaque
+    };
+    const btn = btnSavePlanoConfigModal;
+    const prev = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Salvando...';
+    try {
+        if (id) {
+            const { error } = await db.from('config_planos').update(payload).eq('id', id);
+            if (error) throw error;
+        } else {
+            const { error } = await db.from('config_planos').insert(payload);
+            if (error) throw error;
+        }
+        planoConfigModal.classList.add('hidden');
+        showToast('Plano salvo com sucesso.');
+        fetchConfigPlanos();
+    } catch (err) {
+        showToast(err && err.message ? String(err.message) : 'Falha ao salvar plano.', true);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = prev;
+    }
+});
 
 if (empresaLogoFile) {
     empresaLogoFile.addEventListener('change', e => {
@@ -15047,6 +15623,123 @@ async function fetchEmpresas() {
         showToast("Erro ao carregar empresas.", true);
     }
 }
+
+async function fetchAssinaturas() {
+    try {
+        const { data, error } = await db
+            .from('empresas')
+            .select('id, nome, plano_tipo, data_vencimento, assinatura_status, created_at')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        activeEmpresasList = data || [];
+        renderAssinaturas();
+    } catch (err) {
+        console.error("Error fetching assinaturas:", err);
+        showToast("Erro ao carregar assinaturas.", true);
+    }
+}
+
+async function fetchConfigPlanos() {
+    try {
+        const { data, error } = await db
+            .from('config_planos')
+            .select('id, tipo_assinatura, valor_plano, modulos_texto, destaque')
+            .order('destaque', { ascending: false })
+            .order('tipo_assinatura', { ascending: true });
+        if (error) throw error;
+        configPlanosList = data || [];
+        renderConfigPlanos();
+    } catch (err) {
+        console.error("Error fetching config_planos:", err);
+        showToast("Erro ao carregar configuração de planos.", true);
+    }
+}
+
+function renderConfigPlanos() {
+    if (!configPlanosTableBody || !configPlanosEmptyState) return;
+    configPlanosTableBody.innerHTML = '';
+    const rows = Array.isArray(configPlanosList) ? [...configPlanosList] : [];
+    if (rows.length === 0) {
+        configPlanosEmptyState.classList.remove('hidden');
+        return;
+    }
+    configPlanosEmptyState.classList.add('hidden');
+    rows.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="font-weight:700;">${String(item && item.tipo_assinatura || '—')}</td>
+            <td>${String(item && item.valor_plano || '—')}</td>
+            <td>${String(item && item.modulos_texto || '—')}</td>
+            <td>${item && item.destaque ? '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dbeafe; color:#1d4ed8; font-weight:700;">SIM</span>' : 'NÃO'}</td>
+            <td>
+                <div class="actions">
+                    <button class="btn-icon" onclick="editPlanoConfig('${String(item && item.id || '')}')" title="Editar"><i class="ri-edit-line"></i></button>
+                    <button class="btn-icon delete-btn" onclick="deletePlanoConfig('${String(item && item.id || '')}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>
+                </div>
+            </td>
+        `;
+        configPlanosTableBody.appendChild(tr);
+    });
+}
+
+function renderAssinaturas() {
+    if (!assinaturasTableBody || !assinaturasEmptyState) return;
+    assinaturasTableBody.innerHTML = '';
+    const rows = Array.isArray(activeEmpresasList) ? [...activeEmpresasList] : [];
+    if (rows.length === 0) {
+        assinaturasEmptyState.classList.remove('hidden');
+        return;
+    }
+    assinaturasEmptyState.classList.add('hidden');
+    const now = Date.now();
+    rows.forEach(emp => {
+        const createdTs = emp && emp.created_at ? Date.parse(String(emp.created_at)) : NaN;
+        const isNovo = Number.isFinite(createdTs) && (now - createdTs) <= (72 * 60 * 60 * 1000);
+        const statusVal = String(emp && emp.assinatura_status || 'PENDENTE').toUpperCase();
+        const statusBadge = statusVal === 'ATIVO'
+            ? '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dcfce7; color:#166534; font-weight:700;">ATIVO</span>'
+            : (statusVal === 'TRIAL'
+                ? '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dbeafe; color:#1d4ed8; font-weight:700;">TRIAL</span>'
+                : '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#ffedd5; color:#c2410c; font-weight:700;">PENDENTE</span>');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${String(emp && emp.id || '')}${isNovo ? ' <span class="status-badge status-pendente" style="margin-left:6px;">NOVO</span>' : ''}</td>
+            <td style="font-weight:700;">${String(emp && emp.nome || '—')}</td>
+            <td>${String(emp && emp.plano_tipo || '—')}</td>
+            <td>${emp && emp.data_vencimento ? String(emp.data_vencimento).slice(0, 10) : '—'}</td>
+            <td>${statusBadge}</td>
+            <td><button class="btn-icon" title="Editar Assinatura"><i class="ri-edit-line"></i></button></td>
+        `;
+        const editBtn = tr.querySelector('button');
+        if (editBtn) editBtn.addEventListener('click', () => openAssinaturaModal(emp));
+        assinaturasTableBody.appendChild(tr);
+    });
+}
+
+window.editPlanoConfig = function (id) {
+    const item = (configPlanosList || []).find(x => String(x && x.id || '') === String(id || ''));
+    if (!item) return;
+    openPlanoConfigModal(item);
+};
+
+window.deletePlanoConfig = async function (id) {
+    if (!isSuperAdmin) {
+        showToast('Acesso restrito ao SuperAdmin.', true);
+        return;
+    }
+    const pid = String(id || '').trim();
+    if (!pid) return;
+    const ok = window.confirm('Excluir este plano?');
+    if (!ok) return;
+    try {
+        const { error } = await db.from('config_planos').delete().eq('id', pid);
+        if (error) throw error;
+        showToast('Plano excluído com sucesso.');
+        fetchConfigPlanos();
+    } catch (err) {
+        showToast(err && err.message ? String(err.message) : 'Falha ao excluir plano.', true);
+    }
+};
 
 function renderEmpresas() {
     const tbody = document.getElementById('empresasTableBody');
@@ -15187,6 +15880,7 @@ function initMyCompanyForm() {
 }
 
 // --- SERVICE PRINT LIST LOGIC ---
+const btnPrintSpecialtiesReport = document.getElementById('btnPrintSpecialtiesReport');
 const btnPrintServiceList = document.getElementById('btnPrintServiceList');
 const servicePrintFilterModal = document.getElementById('servicePrintFilterModal');
 const btnCloseServicePrintModal = document.getElementById('btnCloseServicePrintModal');
@@ -15194,22 +15888,15 @@ const btnCancelServicePrint = document.getElementById('btnCancelServicePrint');
 const btnConfirmServicePrint = document.getElementById('btnConfirmServicePrint');
 const printFilterSubdivisao = document.getElementById('printFilterSubdivisao');
 
+if (btnPrintSpecialtiesReport) {
+    btnPrintSpecialtiesReport.addEventListener('click', () => {
+        window.printSpecialtiesMasterDetail();
+    });
+}
+
 if (btnPrintServiceList) {
     btnPrintServiceList.addEventListener('click', () => {
-        // Populate subdivisions from specialties
-        if (printFilterSubdivisao) {
-            printFilterSubdivisao.innerHTML = '<option value="">TODAS AS SUBDIVISÕES</option>';
-            specialties.forEach(spec => {
-                const subs = (typeof spec.subdivisoes === 'string') ? JSON.parse(spec.subdivisoes) : (spec.subdivisoes || []);
-                subs.forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s.nome;
-                    opt.textContent = `${spec.nome} - ${s.nome}`;
-                    printFilterSubdivisao.appendChild(opt);
-                });
-            });
-        }
-        servicePrintFilterModal.classList.remove('hidden');
+        window.printServiceList();
     });
 }
 

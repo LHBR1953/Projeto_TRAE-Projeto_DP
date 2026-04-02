@@ -341,23 +341,12 @@
       <section class="lp-surface" id="planos" style="padding-top: 10px;">
         <h2 class="lp-section-title">Planos</h2>
         <p class="lp-section-lead">Escolha o suporte ideal para sua rotina. O OCC mantém a mesma leveza e eficiência em qualquer plano.</p>
-        <div class="lp-plans">
+        <div class="lp-plans" id="plansContainer">
           <div class="lp-plan">
-            <h3>R$ 100</h3>
-            <div class="lp-price">R$ 100</div>
+            <h3>Carregando...</h3>
+            <div class="lp-price">--</div>
             <ul>
-              <li>Rotina completa: cadastro, agenda, orçamento, atendimento e prontuário</li>
-              <li>Controle financeiro e comissões</li>
-              <li>Suporte por mensagem</li>
-            </ul>
-          </div>
-          <div class="lp-plan">
-            <h3>R$ 200</h3>
-            <div class="lp-price">R$ 200</div>
-            <ul>
-              <li>Tudo do plano R$ 100</li>
-              <li>Suporte telefônico</li>
-              <li>Acompanhamento prioritário</li>
+              <li>Aguarde a leitura dos planos configurados.</li>
             </ul>
           </div>
         </div>
@@ -385,6 +374,12 @@
           <div class="form-group">
             <label for="trialCell">Celular</label>
             <input id="trialCell" type="text" placeholder="(00) 00000-0000" maxlength="15" />
+          </div>
+          <div class="form-group">
+            <label for="trialPlan">Plano escolhido *</label>
+            <select id="trialPlan" required>
+              <option value="">Selecione um plano</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="trialPassword">Senha *</label>

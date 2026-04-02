@@ -56,6 +56,94 @@ function addDaysYmd(days: number): string {
   return new Date(Date.now() + ms).toISOString().slice(0, 10);
 }
 
+function buildDefaultSpecialtyTemplate() {
+  return [
+    { seqid: 1, nome: "1 - CLÍNICA GERAL", subs: ["1.1 - CONSULTA / AVALIAÇÃO", "1.2 - PROFILAXIA", "1.3 - RESTAURAÇÃO"] },
+    { seqid: 2, nome: "2 - ORTODONTIA", subs: ["2.1 - PREVENTIVA", "2.2 - INTERCEPTATIVA"] },
+    { seqid: 3, nome: "3 - IMPLANTODONTIA", subs: ["3.1 - PLANEJAMENTO", "3.2 - IMPLANTE UNITÁRIO"] },
+  ];
+}
+
+async function seedSpecialtiesForEmpresa(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  empresaId: string,
+): Promise<void> {
+  const target = String(empresaId || "").trim();
+  if (!target) return;
+
+  const { data: existing, error: existingErr } = await supabaseAdmin
+    .from("especialidades")
+    .select("id")
+    .eq("empresa_id", target)
+    .limit(1);
+  if (existingErr) throw existingErr;
+  if (existing && existing.length > 0) return;
+
+  const templateEmpresaId = String(Deno.env.get("SPECIALTIES_TEMPLATE_EMPRESA_ID") || "emp_master").trim();
+  const { data: templateSpecs, error: tplSpecErr } = await supabaseAdmin
+    .from("especialidades")
+    .select("id,seqid,nome")
+    .eq("empresa_id", templateEmpresaId)
+    .order("seqid", { ascending: true });
+  if (tplSpecErr) throw tplSpecErr;
+
+  const specs = Array.isArray(templateSpecs) ? templateSpecs : [];
+  if (specs.length > 0) {
+    const oldToNew = new Map<string, string>();
+    for (const s of specs) {
+      const newId = crypto.randomUUID();
+      oldToNew.set(String(s.id || ""), newId);
+      const { error } = await supabaseAdmin.from("especialidades").insert({
+        id: newId,
+        seqid: Number(s.seqid || 0),
+        nome: String(s.nome || "").trim(),
+        empresa_id: target,
+      });
+      if (error) throw error;
+    }
+
+    const { data: templateSubs, error: tplSubErr } = await supabaseAdmin
+      .from("especialidade_subdivisoes")
+      .select("especialidade_id,nome")
+      .eq("empresa_id", templateEmpresaId);
+    if (tplSubErr) throw tplSubErr;
+
+    for (const sub of (templateSubs || [])) {
+      const mappedSpecId = oldToNew.get(String(sub && sub.especialidade_id || ""));
+      if (!mappedSpecId) continue;
+      const { error } = await supabaseAdmin.from("especialidade_subdivisoes").insert({
+        id: crypto.randomUUID(),
+        especialidade_id: mappedSpecId,
+        nome: String(sub && sub.nome || "").trim(),
+        empresa_id: target,
+      });
+      if (error) throw error;
+    }
+    return;
+  }
+
+  const fallback = buildDefaultSpecialtyTemplate();
+  for (const spec of fallback) {
+    const specId = crypto.randomUUID();
+    const { error: specErr } = await supabaseAdmin.from("especialidades").insert({
+      id: specId,
+      seqid: Number(spec.seqid || 0),
+      nome: String(spec.nome || "").trim(),
+      empresa_id: target,
+    });
+    if (specErr) throw specErr;
+    for (const subName of (spec.subs || [])) {
+      const { error: subErr } = await supabaseAdmin.from("especialidade_subdivisoes").insert({
+        id: crypto.randomUUID(),
+        especialidade_id: specId,
+        nome: String(subName || "").trim(),
+        empresa_id: target,
+      });
+      if (subErr) throw subErr;
+    }
+  }
+}
+
 async function tryInsertEmpresa(
   supabaseAdmin: ReturnType<typeof createClient>,
   payload: Record<string, unknown>,
@@ -116,6 +204,7 @@ Deno.serve(async (req) => {
     const nome = String(body.nome || "").trim();
     const email = normalizeEmail(body.email || callerUser.email || "");
     const celular = String(body.celular || "").trim() || null;
+    const planoTipo = String(body.plano_tipo || body.tipo_assinatura || "").trim() || null;
 
     if (!nome) throw new Error("Nome da clínica é obrigatório.");
     if (!email) throw new Error("E-mail é obrigatório.");
@@ -144,6 +233,7 @@ Deno.serve(async (req) => {
           email,
           assinatura_status: assinaturaStatus,
           celular,
+          plano_tipo: planoTipo,
           data_vencimento: dataVencimento,
         });
         break;
@@ -165,8 +255,10 @@ Deno.serve(async (req) => {
         permissoes: permissions,
         require_password_change: false,
       });
+      await seedSpecialtiesForEmpresa(supabaseAdmin, empresaId);
     } catch (e) {
       try { await supabaseAdmin.from("empresas").delete().eq("id", empresaId); } catch {}
+      try { await supabaseAdmin.from("usuario_empresas").delete().eq("usuario_id", callerUser.id).eq("empresa_id", empresaId); } catch {}
       throw e;
     }
 
@@ -175,6 +267,7 @@ Deno.serve(async (req) => {
         ok: true,
         empresa_id: empresaId,
         empresa_nome: nome,
+        plano_tipo: planoTipo,
         assinatura_status: assinaturaStatus,
         data_vencimento: dataVencimento,
       }),

@@ -254,6 +254,9 @@
                 <button id="navEmpresas" class="nav-item" style="display: none;">
                     <i class="ri-building-line"></i> <span>Cadastro de Empresas</span>
                 </button>
+                <button id="navAssinaturas" class="nav-item" style="display: none;">
+                    <i class="ri-vip-crown-line"></i> <span>Gestão de Assinaturas</span>
+                </button>
                 <button id="navMyCompany" class="nav-item" title="Minha Clínica" style="display: none;">
                     <i class="ri-home-4-line"></i> <span>Minha Clínica</span>
                 </button>
@@ -1067,9 +1070,15 @@
             <section id="specialtiesListView" class="view-section hidden">
                 <div class="section-header">
                     <h2 id="specialtiesTitle">Especialidades</h2>
-                    <button id="btnNewSpecialty" class="btn btn-primary">
-                        <i class="ri-add-line"></i> Nova Especialidade
-                    </button>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <button id="btnPrintSpecialtiesReport" class="btn btn-secondary" title="Relatório Master/Detail de Especialidades"
+                            style="padding: 0.5rem 0.75rem; font-size: 1.2rem;">
+                            <i class="ri-printer-line"></i>
+                        </button>
+                        <button id="btnNewSpecialty" class="btn btn-primary">
+                            <i class="ri-add-line"></i> Nova Especialidade
+                        </button>
+                    </div>
                 </div>
 
                 <div class="table-container">
@@ -1672,7 +1681,7 @@
             <!-- EMPRESAS LIST VIEW -->
             <section id="empresasListView" class="view-section hidden">
                 <div class="section-header">
-                    <h2>Cadastro de Empresas</h2>
+                    <h2 id="empresasListTitle">Cadastro de Empresas</h2>
                     <button id="btnAddNewEmpresa" class="btn btn-primary">
                         <i class="ri-add-line"></i> Nova Empresa
                     </button>
@@ -1695,6 +1704,59 @@
                     <div id="empresasEmptyState" class="empty-state hidden">
                         <i class="ri-building-line"></i>
                         <p>Nenhuma empresa cadastrada.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="assinaturasView" class="view-section hidden">
+                <div class="section-header">
+                    <h2>Gestão de Assinaturas</h2>
+                </div>
+                <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; margin-bottom: 14px;">
+                    <div style="text-align:center; font-weight:700; margin-bottom: 10px;">Configuração de Planos</div>
+                    <div style="display:flex; justify-content:flex-end; margin-bottom: 10px;">
+                        <button id="btnAddPlanoConfig" class="btn btn-primary"><i class="ri-add-line"></i> Novo Plano</button>
+                    </div>
+                    <div class="table-container">
+                        <table id="configPlanosTable">
+                            <thead>
+                                <tr>
+                                    <th>Tipo Assinatura</th>
+                                    <th>Valor</th>
+                                    <th>Módulos</th>
+                                    <th>Destaque</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="configPlanosTableBody"></tbody>
+                        </table>
+                        <div id="configPlanosEmptyState" class="empty-state hidden">
+                            <i class="ri-price-tag-3-line"></i>
+                            <p>Nenhum plano configurado.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 12px;">
+                    <div style="text-align:center; font-weight:700; margin-bottom: 10px;">Gestão de Assinaturas</div>
+                    <div class="table-container">
+                        <table id="assinaturasTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nome da Clínica</th>
+                                    <th>Plano</th>
+                                    <th>Vencimento</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="assinaturasTableBody"></tbody>
+                        </table>
+                        <div id="assinaturasEmptyState" class="empty-state hidden">
+                            <i class="ri-vip-crown-line"></i>
+                            <p>Nenhuma clínica encontrada.</p>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -4011,6 +4073,9 @@
                         <button type="button" id="btnServiceImportParse" class="btn btn-secondary"><i class="ri-file-search-line"></i> Ler arquivo</button>
                     </div>
                 </div>
+                <div style="margin-top: 10px;">
+                    <button type="button" id="btnExportServiceXlsx" class="btn btn-secondary"><i class="ri-file-excel-2-line"></i> Exportar Serviços</button>
+                </div>
                 <pre id="serviceImportStatus" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 12px 0 0;"></pre>
                 <div id="serviceImportPreviewWrap" class="table-container hidden" style="margin-top: 12px;">
                     <table class="main-table" id="serviceImportPreviewTable">
@@ -4036,7 +4101,7 @@
     <div id="specialtyImportModal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width: 920px; width: 95%;">
             <div class="modal-header">
-                <h3><i class="ri-file-upload-line"></i> Importar Especialidades (XLSX)</h3>
+                <h3><i class="ri-file-upload-line"></i> Importador Rápido (Especialidades / Subdivisões)</h3>
                 <button type="button" class="btn-close-modal" id="btnCloseSpecialtyImportModal">
                     <i class="ri-close-line"></i>
                 </button>
@@ -4044,47 +4109,71 @@
             <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
                 <div class="card" style="padding: 0.75rem; margin-bottom: 12px;">
                     <div style="color: var(--text-muted); font-size: 0.9rem;">
-                        Colunas do Excel: B=Especialidade, C=Subdivisão (opcional)
+                        Atalho disponível na tela de Especialidades: Ctrl + Shift + Alt + E. Arquivos XLSX de uma coluna.
                     </div>
                 </div>
-                <div style="display:flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-                    <div class="form-group" style="min-width: 260px; margin-bottom: 0;">
-                        <label for="specialtyImportFile">Arquivo XLSX</label>
-                        <input id="specialtyImportFile" type="file" accept=".xlsx" class="form-control">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="card" style="padding: 0.9rem;">
+                        <h4 style="margin:0 0 10px;">Subdivisões</h4>
+                        <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px;">
+                            Vínculo automático por código: 1.x -> Especialidade 1, 2.x -> Especialidade 2
+                        </div>
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label for="subdivisionImportFile">Arquivo XLSX (1 coluna)</label>
+                            <input id="subdivisionImportFile" type="file" accept=".xlsx" class="form-control">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="subdivisionImportSkipHeader" checked>
+                                Ignorar primeira linha
+                            </label>
+                        </div>
+                        <div style="display:flex; gap: 0.6rem; margin-bottom: 8px;">
+                            <button type="button" id="btnSubdivisionImportParse" class="btn btn-secondary"><i class="ri-file-search-line"></i> Ler</button>
+                            <button type="button" id="btnConfirmSubdivisionImport" class="btn btn-primary" disabled><i class="ri-upload-cloud-2-line"></i> Importar</button>
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <button type="button" id="btnExportSubdivisionXlsx" class="btn btn-secondary"><i class="ri-file-excel-2-line"></i> Exportar Subdivisões</button>
+                        </div>
+                        <pre id="subdivisionImportStatus" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0;"></pre>
+                        <div id="subdivisionImportPreviewWrap" class="table-container hidden" style="margin-top: 10px;">
+                            <table class="main-table">
+                                <thead><tr><th>Subdivisão</th></tr></thead>
+                                <tbody id="subdivisionImportPreviewBody"></tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
-                        <label for="specialtyImportMode">Modo</label>
-                        <select id="specialtyImportMode" class="form-control">
-                            <option value="skip_dupes" selected>Pular duplicados</option>
-                            <option value="update_dupes">Atualizar existentes</option>
-                        </select>
+                    <div class="card" style="padding: 0.9rem;">
+                        <h4 style="margin:0 0 10px;">Especialidades</h4>
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label for="specialtyImportFile">Arquivo XLSX (1 coluna)</label>
+                            <input id="specialtyImportFile" type="file" accept=".xlsx" class="form-control">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="specialtyImportSkipHeader" checked>
+                                Ignorar primeira linha
+                            </label>
+                        </div>
+                        <div style="display:flex; gap: 0.6rem; margin-bottom: 8px;">
+                            <button type="button" id="btnSpecialtyImportParse" class="btn btn-secondary"><i class="ri-file-search-line"></i> Ler</button>
+                            <button type="button" id="btnConfirmSpecialtyImport" class="btn btn-primary" disabled><i class="ri-upload-cloud-2-line"></i> Importar</button>
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <button type="button" id="btnExportSpecialtyXlsx" class="btn btn-secondary"><i class="ri-file-excel-2-line"></i> Exportar Especialidades</button>
+                        </div>
+                        <pre id="specialtyImportStatus" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0;"></pre>
+                        <div id="specialtyImportPreviewWrap" class="table-container hidden" style="margin-top: 10px;">
+                            <table class="main-table">
+                                <thead><tr><th>Especialidade</th></tr></thead>
+                                <tbody id="specialtyImportPreviewBody"></tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="specialtyImportSkipHeader" checked>
-                            Ignorar primeira linha
-                        </label>
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0; display:flex; gap: 0.75rem;">
-                        <button type="button" id="btnSpecialtyImportParse" class="btn btn-secondary"><i class="ri-file-search-line"></i> Ler arquivo</button>
-                    </div>
-                </div>
-                <pre id="specialtyImportStatus" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 12px 0 0;"></pre>
-                <div id="specialtyImportPreviewWrap" class="table-container hidden" style="margin-top: 12px;">
-                    <table class="main-table" id="specialtyImportPreviewTable">
-                        <thead>
-                            <tr>
-                                <th>Especialidade</th>
-                                <th>Subdivisão</th>
-                            </tr>
-                        </thead>
-                        <tbody id="specialtyImportPreviewBody"></tbody>
-                    </table>
                 </div>
             </div>
             <div class="modal-footer" style="display:flex; justify-content: flex-end; gap: 0.75rem;">
                 <button type="button" class="btn btn-secondary" id="btnCancelSpecialtyImport">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="btnConfirmSpecialtyImport" disabled><i class="ri-upload-cloud-2-line"></i> Importar</button>
             </div>
         </div>
     </div>
@@ -4266,6 +4355,72 @@
                     <h3>“Esqueci a senha de um usuário” 🔑</h3>
                     <p>Crie uma nova senha pelo módulo <strong>Usuários (Admin)</strong> ou peça suporte ao responsável do sistema 🛠️</p>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="assinaturaModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header">
+                <h3>Editar Assinatura</h3>
+                <button type="button" class="btn-close-modal" id="btnCloseAssinaturaModal" aria-label="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="assinaturaEmpresaId">
+                <div class="form-group">
+                    <label for="assinaturaPlanoTipo">Plano (Texto)</label>
+                    <input type="text" id="assinaturaPlanoTipo" class="form-control" placeholder="Ex: R$ 100,00 / R$ 200,00">
+                </div>
+                <div class="form-group">
+                    <label for="assinaturaDataVencimento">Vencimento</label>
+                    <input type="date" id="assinaturaDataVencimento" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="assinaturaStatus">Status</label>
+                    <select id="assinaturaStatus" class="form-control">
+                        <option value="TRIAL">TRIAL</option>
+                        <option value="ATIVO">ATIVO</option>
+                        <option value="PENDENTE">PENDENTE</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnCancelAssinaturaModal" class="btn btn-secondary">Cancelar</button>
+                <button type="button" id="btnSaveAssinaturaModal" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="planoConfigModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 560px;">
+            <div class="modal-header">
+                <h3 id="planoConfigModalTitle">Novo Plano</h3>
+                <button type="button" class="btn-close-modal" id="btnClosePlanoConfigModal" aria-label="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="planoConfigId">
+                <div class="form-group">
+                    <label for="planoConfigTipoAssinatura">Tipo Assinatura</label>
+                    <input type="text" id="planoConfigTipoAssinatura" class="form-control" placeholder="Ex: Full">
+                </div>
+                <div class="form-group">
+                    <label for="planoConfigValor">Valor do Plano</label>
+                    <input type="text" id="planoConfigValor" class="form-control" placeholder="Ex: 300,00">
+                </div>
+                <div class="form-group">
+                    <label for="planoConfigModulos">Módulos (Texto)</label>
+                    <textarea id="planoConfigModulos" class="form-control" rows="3" placeholder="Ex: Todos os módulos"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="planoConfigDestaque">
+                        Plano em destaque
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnCancelPlanoConfigModal" class="btn btn-secondary">Cancelar</button>
+                <button type="button" id="btnSavePlanoConfigModal" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
             </div>
         </div>
     </div>
