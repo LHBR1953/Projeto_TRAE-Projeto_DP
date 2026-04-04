@@ -1,0 +1,17 @@
+{
+  "empresaId": "emp_a279673a1b",
+  "total": 500,
+  "prefixed": 0,
+  "consumiveis": 252,
+  "instrumentais": 248,
+  "areas": [
+    "Cirurgia",
+    "Dentistica",
+    "Dentística",
+    "Endodontia",
+    "Harmonização Facial",
+    "Implantodontia",
+    "Ortodontia",
+    "Periodontia"
+  ]
+}

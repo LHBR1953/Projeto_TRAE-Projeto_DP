@@ -1,0 +1,116 @@
+{
+  "empresaId": "emp_a279673a1b",
+  "kits": [
+    {
+      "nome_modelo": "Kit Dentistica",
+      "itens": 4
+    },
+    {
+      "nome_modelo": "Kit Cirurgia",
+      "itens": 4
+    },
+    {
+      "nome_modelo": "Kit Ortodontia",
+      "itens": 8
+    },
+    {
+      "nome_modelo": "Kit Endodontia",
+      "itens": 4
+    },
+    {
+      "nome_modelo": "Kit Periodontia",
+      "itens": 1
+    },
+    {
+      "nome_modelo": "Kit Implantodontia",
+      "itens": 3
+    },
+    {
+      "nome_modelo": "Kit Harmonização Facial",
+      "itens": 10
+    }
+  ],
+  "service_links_total": 29,
+  "service_links_sample": [
+    {
+      "servico": "APARELHO AUTOLIGADO",
+      "modelo": "Kit Ortodontia"
+    },
+    {
+      "servico": "APARELHO ESTÉTICO CERÂMICA",
+      "modelo": "Kit Ortodontia"
+    },
+    {
+      "servico": "APARELHO ESTÉTICO SAFIRA",
+      "modelo": "Kit Ortodontia"
+    },
+    {
+      "servico": "APARELHO EXTRA ( EX: BARRA T. / HYRAX / BIONATOR )",
+      "modelo": "Kit Ortodontia"
+    },
+    {
+      "servico": "CANAL MOLAR",
+      "modelo": "Kit Endodontia"
+    },
+    {
+      "servico": "CANAL PRÉ-MOLAR",
+      "modelo": "Kit Endodontia"
+    },
+    {
+      "servico": "CANAL UNI (CENTRAL/LATERAL/CANINO)",
+      "modelo": "Kit Endodontia"
+    },
+    {
+      "servico": "EXODONTIA DECÍDUO",
+      "modelo": "Kit Cirurgia"
+    },
+    {
+      "servico": "EXODONTIA SISO INCLUSO INFERIOR",
+      "modelo": "Kit Cirurgia"
+    },
+    {
+      "servico": "EXODONTIA SISO INCLUSO SUPERIOR",
+      "modelo": "Kit Cirurgia"
+    },
+    {
+      "servico": "EXPOSIÇÃO DE DENTE PARA TRATAMENTO ORTODÔNTICO",
+      "modelo": "Kit Ortodontia"
+    },
+    {
+      "servico": "EXTRAÇÃO DECÍDUO",
+      "modelo": "Kit Cirurgia"
+    },
+    {
+      "servico": "IMPLANTE - CIRURGIA (POR ELEMENTO)",
+      "modelo": "Kit Cirurgia"
+    },
+    {
+      "servico": "LENTE DE CONTATO EM RESINA DE ALTO PADRÃO ( POR ARCADA)",
+      "modelo": "Kit Dentistica"
+    },
+    {
+      "servico": "LIMPEZA COMPLETA",
+      "modelo": "Kit Periodontia"
+    },
+    {
+      "servico": "LIMPEZA COMPLETA PEDIÀTRICA",
+      "modelo": "Kit Periodontia"
+    },
+    {
+      "servico": "MANUTENÇÃO APARELHO ESTÉTICO",
+      "modelo": "Kit Ortodontia"
+    },
+    {
+      "servico": "MANUTENÇÃO APARELHO METÁLICO",
+      "modelo": "Kit Ortodontia"
+    },
+    {
+      "servico": "OVERDENTURE/PROTOCOLO (SÓ A PRÓTESE -  ACRESCENTAR IMPLANTE )",
+      "modelo": "Kit Implantodontia"
+    },
+    {
+      "servico": "PRÓTESE PROVISÓRIA SOBRE IMPLANTE (POR ELEMENTO)",
+      "modelo": "Kit Implantodontia"
+    }
+  ]
+}

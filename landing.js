@@ -175,13 +175,20 @@ function initTrialModal() {
       if (error) throw error;
       setProgress(95, 'Finalizando e liberando acesso...');
       const empresaId = data && data.empresa_id ? String(data.empresa_id) : '';
-      setOk(`Clínica criada com sucesso.\nEmpresa: ${empresaId || '—'}\nEntrando no OCC...`);
-      if (btnSubmit) btnSubmit.textContent = 'Entrando...';
-      setTimeout(() => {
-        setProgress(100, 'Acesso liberado. Redirecionando...');
-        try { backdrop.style.display = 'none'; } catch { }
-        window.location.assign('/app.html');
-      }, 600);
+      const status = String(data && data.assinatura_status || '').toUpperCase();
+      if (status === 'TRIAL') {
+        setOk(`Clínica criada com sucesso.\nEmpresa: ${empresaId || '—'}\nEntrando no OCC...`);
+        if (btnSubmit) btnSubmit.textContent = 'Entrando...';
+        setTimeout(() => {
+          setProgress(100, 'Acesso liberado. Redirecionando...');
+          try { backdrop.style.display = 'none'; } catch { }
+          window.location.assign('/app.html');
+        }, 600);
+      } else {
+        setProgress(100, 'Pedido recebido.');
+        setOk(`Recebemos seu pedido para o ${planoTipo}!\nEstamos aguardando a confirmação do pagamento para liberar seu acesso.`);
+        try { await db.auth.signOut(); } catch { }
+      }
     } catch (err) {
       let msg = err && err.message ? String(err.message) : 'Falha ao criar o trial.';
       try {

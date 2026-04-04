@@ -56,6 +56,11 @@ function addDaysYmd(days: number): string {
   return new Date(Date.now() + ms).toISOString().slice(0, 10);
 }
 
+function isTrialPlanName(input: unknown): boolean {
+  const k = normalizeKey(input);
+  return k === "TRIAL" || k.includes("TRIAL");
+}
+
 function buildDefaultSpecialtyTemplate() {
   return [
     { seqid: 1, nome: "1 - CLÍNICA GERAL", subs: ["1.1 - CONSULTA / AVALIAÇÃO", "1.2 - PROFILAXIA", "1.3 - RESTAURAÇÃO"] },
@@ -273,8 +278,8 @@ Deno.serve(async (req) => {
     }
 
     let empresaId = generateEmpresaId();
-    const assinaturaStatus = "TRIAL";
-    const dataVencimento = addDaysYmd(30);
+    const assinaturaStatus = isTrialPlanName(planoTipo) ? "TRIAL" : "PENDENTE";
+    const dataVencimento = assinaturaStatus === "TRIAL" ? addDaysYmd(30) : null;
     const permissions = buildFullPermissions();
 
     for (let i = 0; i < 5; i += 1) {

@@ -33,15 +33,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px) saturate(160%);
-            -webkit-backdrop-filter: blur(20px) saturate(160%);
-        }
-
-        @media (prefers-color-scheme: dark) {
-            #privacyScreensaver {
-                background-color: rgba(0, 0, 0, 0.3);
-            }
+            background: radial-gradient(1200px 800px at 20% 20%, rgba(79, 70, 229, 0.18), transparent 60%),
+                radial-gradient(900px 700px at 80% 60%, rgba(16, 185, 129, 0.12), transparent 55%),
+                rgba(10, 15, 25, 0.92);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
         }
 
         #privacyScreensaver.hidden {
@@ -57,10 +53,10 @@
             align-items: center;
             gap: 14px;
             padding: 34px 28px;
-            border-radius: 25px;
+            border-radius: 22px;
             border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(10, 34, 64, 0.72);
-            box-shadow: 0 28px 72px rgba(0, 0, 0, 0.62);
+            background: rgba(255, 255, 255, 0.06);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
             min-width: min(560px, 92vw);
             opacity: 0.8;
             will-change: transform;
@@ -79,12 +75,12 @@
         #privacyScreensaverCompanyName {
             font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
             font-weight: 800;
-            letter-spacing: 2px;
+            letter-spacing: -0.02em;
             font-size: clamp(26px, 3vw, 44px);
             line-height: 1.05;
             text-align: center;
-            color: #ffffff;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            color: rgba(255, 255, 255, 0.92);
+            text-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
             animation: psFade 2.2s ease-in-out infinite alternate;
         }
 
@@ -93,8 +89,7 @@
             font-size: 12px;
             letter-spacing: 0.08em;
             text-transform: uppercase;
-            color: rgba(255, 255, 255, 0.7);
-            opacity: 0.7;
+            color: rgba(255, 255, 255, 0.55);
             margin-top: 2px;
         }
 
@@ -258,28 +253,6 @@
                 <button id="navServices" class="nav-item">
                     <i class="ri-shopping-bag-3-line"></i> <span>Serviços</span>
                 </button>
-                <button id="navEstoqueToggle" class="nav-item nav-item-stock">
-                    <i class="ri-box-3-line"></i>
-                    <span class="nav-item-label">Estoque</span>
-                    <i id="navEstoqueToggleIcon" class="ri-arrow-down-s-line nav-toggle-icon"></i>
-                </button>
-                <div id="navEstoqueSubmenu" class="stock-submenu" style="display:none;">
-                    <button id="navInventory" class="nav-item nav-subitem">
-                        <i class="ri-database-2-line"></i> <span>Inventário</span>
-                    </button>
-                    <button id="navUsageModels" class="nav-item nav-subitem">
-                        <i class="ri-function-line"></i> <span>Modelos de Uso</span>
-                    </button>
-                    <button id="navServiceMapping" class="nav-item nav-subitem">
-                        <i class="ri-links-line"></i> <span>Vínculo de Serviços</span>
-                    </button>
-                    <button id="navInventoryLogs" class="nav-item nav-subitem">
-                        <i class="ri-history-line"></i> <span>Movimentações</span>
-                    </button>
-                    <button id="navInventoryReports" class="nav-item nav-subitem">
-                        <i class="ri-file-chart-line"></i> <span>Relatórios</span>
-                    </button>
-                </div>
                 <button id="navBudgets" class="nav-item">
                     <i class="ri-wallet-3-line"></i> <span>Orçamentos</span>
                 </button>
@@ -1341,319 +1314,6 @@
                         </button>
                     </div>
                 </form>
-            </section>
-
-            <section id="inventoryView" class="view-section hidden">
-                <div class="section-header">
-                    <h2>Inventário</h2>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button id="btnToggleInventoryLibrary" class="btn btn-secondary">
-                            <i class="ri-book-open-line"></i> Mostrar Biblioteca Completa
-                        </button>
-                        <button id="btnPrintInventoryChecklist" class="btn btn-secondary">
-                            <i class="ri-printer-line"></i> Imprimir Estoque
-                        </button>
-                        <button id="btnInventoryNew" class="btn btn-primary">
-                            <i class="ri-add-line"></i> Novo Material
-                        </button>
-                    </div>
-                </div>
-                <div class="inventory-table-toolbar">
-                    <div id="inventoryStatusCounter" class="inventory-status-counter">Ativos: 0 | Inativos: 0</div>
-                    <select id="inventoryAreaFilter" class="form-control" style="max-width: 260px;">
-                        <option value="">Todas as Áreas</option>
-                    </select>
-                    <div class="inventory-type-wrap">
-                    <select id="inventoryTypeFilter" class="form-control" style="max-width: 320px;">
-                        <option value="">Todos os Itens</option>
-                        <option value="consumiveis">Consumíveis</option>
-                        <option value="instrumentais">Instrumentais</option>
-                        <option value="equipamentos">Equipamentos</option>
-                        <option value="administrativo">Administrativo</option>
-                    </select>
-                    <span class="inventory-hint-icon" title="Consumíveis: O que acaba - Gaze, Resina, Luva.&#10;Instrumentais: O que vai para a autoclave e volta - Alicates, Espelhos.&#10;Equipamentos: O que tem manutenção - Fotopolimerizador, Compressor.&#10;Administrativo: O que mantém a clínica de pé - Papel, Álcool 70."><i class="ri-information-line"></i></span>
-                    </div>
-                    <div class="search-bar" style="margin-bottom: 0;">
-                        <i class="ri-search-line"></i>
-                        <input type="text" id="inventorySearchInput" placeholder="Buscar material por nome, unidade ou código de barras...">
-                    </div>
-                </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Nome</th>
-                                <th>Unidade</th>
-                                <th>Saldo Atual</th>
-                                <th>Mínimo</th>
-                                <th>Ativo</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="inventoryTableBody"></tbody>
-                    </table>
-                    <div id="inventoryEmptyState" class="empty-state hidden">
-                        <i class="ri-database-2-line"></i>
-                        <p>Nenhum material cadastrado.</p>
-                    </div>
-                </div>
-            </section>
-
-            <div id="inventoryModal" class="modal-overlay hidden">
-                <div class="modal-content" style="max-width: 760px;">
-                    <div class="modal-header">
-                        <h3 id="inventoryModalTitle">Novo Material</h3>
-                        <button type="button" class="btn-close-modal" id="btnInventoryModalX"><i class="ri-close-line"></i></button>
-                    </div>
-                    <div class="modal-body">
-                        <form id="inventoryForm" class="patient-form" style="margin-bottom: 0;">
-                            <input type="hidden" id="inventoryEditId">
-                            <div class="form-grid">
-                                <div class="form-group span-2">
-                                    <label for="inventoryNome">Nome *</label>
-                                    <input type="text" id="inventoryNome" list="inventoryNomeSuggestions" required placeholder="Ex: Resina A2">
-                                    <datalist id="inventoryNomeSuggestions"></datalist>
-                                </div>
-                                <div class="form-group">
-                                    <label for="inventoryCodigoBarras">Código de Barras (EAN/GTIN)</label>
-                                    <input type="text" id="inventoryCodigoBarras" placeholder="Ex: 7891234567890">
-                                </div>
-                                <div class="form-group">
-                                    <label for="inventoryUnidade">Unidade</label>
-                                    <input type="text" id="inventoryUnidade" placeholder="Ex: tubete, grama, un">
-                                </div>
-                                <div class="form-group">
-                                    <label for="inventoryUnidadeMedida">Unidade de Medida (Custo)</label>
-                                    <input type="text" id="inventoryUnidadeMedida" placeholder="Ex: caixa, unidade, ml">
-                                </div>
-                                <div class="form-group">
-                                    <label for="inventoryTipoInventario">Tipo de Inventário *</label>
-                                    <select id="inventoryTipoInventario" class="form-control" required onchange="window.__forceInventoryAreaOptions(this)" oninput="window.__forceInventoryAreaOptions(this)">
-                                        <option value="consumiveis">Consumível</option>
-                                        <option value="instrumentais">Instrumental</option>
-                                        <option value="equipamentos">Equipamento</option>
-                                        <option value="administrativo">Administrativo</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="inventoryArea">Área</label>
-                                    <select id="inventoryArea" class="form-control">
-                                        <option value="Dentística">Dentística</option>
-                                        <option value="Endodontia">Endodontia</option>
-                                        <option value="Periodontia">Periodontia</option>
-                                        <option value="Cirurgia">Cirurgia</option>
-                                        <option value="Implantodontia">Implantodontia</option>
-                                        <option value="Ortodontia">Ortodontia</option>
-                                        <option value="Harmonização Facial">Harmonização Facial</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="inventoryMinimo">Estoque Mínimo</label>
-                                    <input type="number" id="inventoryMinimo" min="0" step="0.01" value="0">
-                                </div>
-                                <div class="form-group">
-                                    <label for="inventoryAtual">Estoque Atual (Saldo)</label>
-                                    <input type="number" id="inventoryAtual" min="0" step="0.01" value="0">
-                                </div>
-                                <div class="form-group">
-                                    <label style="display:flex; gap:10px; align-items:center; margin-top: 1.75rem;">
-                                        <input type="checkbox" id="inventoryEhConsumivel" checked>
-                                        Permitir Baixa Automática por Serviço?
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="form-actions">
-                                <button type="button" id="btnInventoryCancel" class="btn btn-secondary">Cancelar</button>
-                                <button type="submit" id="btnInventorySave" class="btn btn-primary"><i class="ri-save-line"></i> Salvar Material</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <section id="usageModelsView" class="view-section hidden">
-                <div class="section-header">
-                    <h2>Modelos de Uso</h2>
-                    <button id="btnRestoreStockMaster" class="btn btn-secondary">
-                        <i class="ri-refresh-line"></i> Restaurar Modelos Mestres
-                    </button>
-                </div>
-                <div class="form-card" style="margin-bottom:1rem;">
-                    <h3 class="card-title">Novo Modelo</h3>
-                    <form id="usageModelForm" style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <input id="usageModelNome" type="text" class="form-control" required placeholder="Ex: Kit Restauração" style="max-width:420px;">
-                        <button type="submit" class="btn btn-primary"><i class="ri-add-line"></i> Criar Modelo</button>
-                    </form>
-                </div>
-                <div style="display:grid; grid-template-columns: 1.1fr 1fr; gap: 1rem;">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Modelo</th>
-                                    <th style="width: 120px;">Qtde Itens</th>
-                                    <th style="width: 170px;">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="usageModelsTableBody"></tbody>
-                        </table>
-                        <div id="usageModelsEmptyState" class="empty-state hidden">
-                            <i class="ri-function-line"></i>
-                            <p>Nenhum modelo cadastrado.</p>
-                        </div>
-                    </div>
-                    <div class="form-card">
-                        <h3 class="card-title" id="modelItemsTitle">Itens do Modelo</h3>
-                        <form id="modelItemForm" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
-                            <select id="modelItemInventoryId" class="form-control" style="min-width:220px;" required></select>
-                            <input id="modelItemQuantidade" type="number" class="form-control" step="0.01" min="0.01" value="1" required style="max-width:130px;">
-                            <button type="submit" class="btn btn-primary">Adicionar</button>
-                        </form>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Material</th>
-                                        <th>Qtd Sugerida</th>
-                                        <th style="width:110px;">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="modelItemsTableBody"></tbody>
-                            </table>
-                            <div id="modelItemsEmptyState" class="empty-state hidden">
-                                <i class="ri-inbox-line"></i>
-                                <p>Selecione um modelo para editar os itens.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="serviceMappingView" class="view-section hidden">
-                <div class="section-header">
-                    <h2>Vínculo de Serviços</h2>
-                </div>
-                <div class="search-bar" style="margin-bottom: 0.75rem;">
-                    <i class="ri-search-line"></i>
-                    <input type="text" id="serviceMappingSearchInput" placeholder="Buscar serviço (ex: Resina)...">
-                </div>
-                <div style="margin-bottom: 0.75rem;">
-                    <select id="serviceMappingStatusFilter" class="form-control" style="max-width: 280px;">
-                        <option value="com_modelo">Itens com Modelo</option>
-                        <option value="sem_modelo">Itens Sem Modelo</option>
-                    </select>
-                </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Serviço</th>
-                                <th>Modelo de Uso</th>
-                                <th>Itens no Modelo</th>
-                            </tr>
-                        </thead>
-                        <tbody id="serviceMappingTableBody"></tbody>
-                    </table>
-                    <div id="serviceMappingEmptyState" class="empty-state hidden">
-                        <i class="ri-links-line"></i>
-                        <p>Nenhum serviço cadastrado para vincular.</p>
-                    </div>
-                </div>
-            </section>
-
-            <section id="inventoryMovementsView" class="view-section hidden">
-                <div class="section-header">
-                    <h2>Movimentações de Estoque</h2>
-                </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Data/Hora</th>
-                                <th>Material</th>
-                                <th>Tipo</th>
-                                <th>Quantidade</th>
-                                <th>Atendimento</th>
-                                <th style="width:100px;">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="inventoryLogsTableBody"></tbody>
-                    </table>
-                    <div id="inventoryLogsEmptyState" class="empty-state hidden">
-                        <i class="ri-history-line"></i>
-                        <p>Nenhuma movimentação encontrada.</p>
-                    </div>
-                </div>
-            </section>
-
-            <section id="inventoryReportsView" class="view-section hidden">
-                <div class="section-header">
-                    <h2>Relatórios de Estoque</h2>
-                    <div style="display:flex; gap:8px;">
-                        <button id="btnPrintInventoryReport" class="btn btn-secondary"><i class="ri-printer-line"></i> Imprimir Inventário</button>
-                        <button id="btnPrintModelsReport" class="btn btn-secondary"><i class="ri-file-pdf-2-line"></i> Gerar PDF / Imprimir Modelos</button>
-                        <button id="btnExportInventoryCostsPdf" class="btn btn-secondary"><i class="ri-file-pdf-line"></i> PDF Custos</button>
-                        <button id="btnExportInventoryCostsExcel" class="btn btn-secondary"><i class="ri-file-excel-2-line"></i> Excel Custos</button>
-                    </div>
-                </div>
-                <div class="form-card" style="margin-bottom:1rem;">
-                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
-                        <div class="form-group" style="min-width:180px; margin-bottom:0;">
-                            <label for="inventoryReportStartDate">Data Inicial</label>
-                            <input type="date" id="inventoryReportStartDate" class="form-control">
-                        </div>
-                        <div class="form-group" style="min-width:180px; margin-bottom:0;">
-                            <label for="inventoryReportEndDate">Data Final</label>
-                            <input type="date" id="inventoryReportEndDate" class="form-control">
-                        </div>
-                        <button id="btnInventoryReportToday" class="btn btn-secondary"><i class="ri-sun-line"></i> Hoje</button>
-                        <button id="btnInventoryReportLast7Days" class="btn btn-secondary"><i class="ri-calendar-check-line"></i> Últimos 7 dias</button>
-                        <button id="btnInventoryReportCurrentMonth" class="btn btn-secondary"><i class="ri-calendar-2-line"></i> Mês Atual</button>
-                    </div>
-                </div>
-
-                <div class="stock-dashboard-grid" style="margin-bottom:1rem;">
-                    <div class="form-card">
-                        <h3 class="card-title">Valor Total</h3>
-                        <div id="stockDashboardTotalValue" class="stock-dashboard-kpi">R$ 0,00</div>
-                        <div id="stockDashboardPeriodCost" class="stock-dashboard-sub">Valor movimentado no período: R$ 0,00</div>
-                    </div>
-                    <div class="form-card">
-                        <h3 class="card-title">Itens Críticos</h3>
-                        <div id="stockDashboardCriticalItems" class="stock-dashboard-kpi">0</div>
-                        <div class="stock-dashboard-sub">Itens com saldo no mínimo ou abaixo</div>
-                    </div>
-                    <div class="form-card">
-                        <h3 class="card-title">Top 5 Gastos</h3>
-                        <div id="stockTopCostChartBars" class="stock-type-chart"></div>
-                    </div>
-                </div>
-
-                <div class="form-card" style="margin-bottom:1rem;">
-                    <h3 class="card-title">Histórico de Movimentação</h3>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Data/Hora</th>
-                                    <th>Material</th>
-                                    <th>Tipo</th>
-                                    <th>Quantidade</th>
-                                    <th>Valor Movimentado</th>
-                                    <th>Atendimento</th>
-                                </tr>
-                            </thead>
-                            <tbody id="inventoryFinanceHistoryTableBody"></tbody>
-                        </table>
-                        <div id="inventoryFinanceHistoryEmptyState" class="empty-state hidden">
-                            <i class="ri-file-list-3-line"></i>
-                            <p>Nenhuma Entrada NF ou Baixa Automática no período selecionado.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="inventoryReportContainer" class="form-card" style="margin-bottom:1rem;"></div>
-                <div id="modelsReportContainer" class="form-card"></div>
             </section>
 
             <!-- BUDGETS LIST VIEW -->
@@ -4801,61 +4461,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260403_FINAL"></script>
-    <script>
-        (function () {
-            const areasClinicas = ['Dentística', 'Endodontia', 'Periodontia', 'Cirurgia', 'Implantodontia', 'Ortodontia', 'Harmonização Facial'];
-            const areasAdmin = ['Limpeza', 'Escritório', 'Copa'];
-            const areasEquip = ['Máquinas', 'TI', 'Consultório'];
-            window.__forceInventoryAreaOptions = function (tipoEl) {
-                const tipo = tipoEl || document.getElementById('inventoryTipoInventario');
-                if (!tipo) return;
-                console.log('>>> GATILHO ATIVADO: Tipo selecionado =', tipo.value);
-                const parentForm = tipo.closest('.modal-content') || document;
-                const val = String((tipoEl && tipoEl.value) || tipo.value || '').toLowerCase();
-                let items = areasClinicas;
-                if (val.includes('admin')) items = areasAdmin;
-                else if (val.includes('equip')) items = areasEquip;
-                setTimeout(function () {
-                    const baixaCheckbox = parentForm.querySelector('input[type="checkbox"][id*="onsumiv"]');
-                    if (baixaCheckbox) {
-                        const deveMarcar = val.includes('consumiv');
-                        baixaCheckbox.checked = deveMarcar;
-                        if (deveMarcar) baixaCheckbox.setAttribute('checked', 'checked');
-                        else baixaCheckbox.removeAttribute('checked');
-                        baixaCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-                        baixaCheckbox.dispatchEvent(new Event('input', { bubbles: true }));
-                        console.log('>>> VISUAL REFRESH DISPARADO:', deveMarcar);
-                        console.log('>>> FORÇANDO CHECKBOX PARA:', deveMarcar);
-                    } else {
-                        console.error('>>> ERRO: O Checkbox sumiu do mapa!');
-                    }
-                }, 50);
-                console.log('>>> INJETANDO ITENS:', items);
-                const applyItems = function () {
-                    const areaSelect = parentForm.querySelector('select[id*="rea"]');
-                    if (!areaSelect) {
-                        console.error('ERRO: O campo Area sumiu do modal!');
-                        return;
-                    }
-                    const current = String(areaSelect.value || '');
-                    areaSelect.innerHTML = items.map(x => `<option value="${x}">${x}</option>`).join('');
-                    areaSelect.value = items.includes(current) ? current : items[0];
-                };
-                applyItems();
-                setTimeout(applyItems, 0);
-            };
-            document.addEventListener('change', function (e) {
-                const t = e && e.target;
-                if (t && t.id === 'inventoryTipoInventario') window.__forceInventoryAreaOptions(t);
-            }, true);
-            document.addEventListener('input', function (e) {
-                const t = e && e.target;
-                if (t && t.id === 'inventoryTipoInventario') window.__forceInventoryAreaOptions(t);
-            }, true);
-            window.__forceInventoryAreaOptions();
-        })();
-    </script>
+    <script src="app_v20.js?v=20260325-1125"></script>
 </body>
 
 </html>

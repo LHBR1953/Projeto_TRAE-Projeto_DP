@@ -124,6 +124,61 @@ body {
     white-space: nowrap;
 }
 
+.nav-item-label {
+    flex: 1;
+}
+
+.nav-item-stock {
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.nav-toggle-icon {
+    min-width: 18px;
+    flex: 0 0 18px;
+    font-size: 1rem;
+    margin-left: auto !important;
+    text-align: right;
+}
+
+.nav-item-stock.expanded {
+    background: #eef2ff;
+    color: #1d4ed8;
+}
+
+.stock-submenu {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin: 0.2rem 0 0.5rem 0;
+    padding: 0.12rem 0 0.12rem 1rem;
+    border-left: 2px solid #e2e8f0;
+}
+
+.stock-submenu .nav-subitem.active {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #ffffff;
+    box-shadow: 0 8px 22px rgba(37, 99, 235, 0.25);
+}
+
+.stock-submenu .nav-subitem.active i {
+    color: #ffffff;
+}
+
+.nav-subitem {
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 0.62rem 0.85rem 0.62rem 1.1rem;
+    border-radius: 10px;
+}
+
+.nav-subitem i {
+    font-size: 1.05rem;
+}
+
 .sidebar.collapsed .nav-item {
     padding: 0.75rem;
     justify-content: center;
@@ -145,9 +200,63 @@ body {
 }
 
 .nav-item.active {
-    background-color: var(--primary-color);
-    color: white;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #ffffff;
     font-weight: 600;
+    box-shadow: 0 8px 22px rgba(37, 99, 235, 0.25);
+}
+
+.inventory-row-low {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.inventory-row-inactive {
+    opacity: 0.62;
+}
+
+.inventory-alert {
+    color: #dc2626;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.inventory-balance-low {
+    color: #dc2626;
+    font-weight: 700;
+}
+
+.inventory-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    padding: 0.12rem 0.5rem;
+    font-size: 0.73rem;
+    font-weight: 700;
+    margin-left: 0.35rem;
+}
+
+.inventory-kind-consumivel {
+    background: rgba(16, 185, 129, 0.14);
+    color: #047857;
+}
+
+.inventory-kind-instrumental {
+    background: rgba(245, 158, 11, 0.16);
+    color: #b45309;
+}
+
+.inventory-area-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    padding: 0.12rem 0.52rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-left: 0.35rem;
 }
 
 /* =========================================
@@ -491,6 +600,31 @@ h2 {
     background: #fef2f2;
 }
 
+.btn-icon.inventory-active,
+.inventory-active {
+    color: #16a34a;
+    font-weight: 900;
+    font-size: 1.36rem;
+    text-shadow: 0 0 0 currentColor;
+}
+
+.btn-icon.inventory-active:hover {
+    color: #15803d;
+    background: #ecfdf3;
+}
+
+.btn-icon.inventory-inactive,
+.inventory-inactive {
+    color: #dc2626;
+    font-size: 1.38rem;
+    font-weight: 300;
+}
+
+.btn-icon.inventory-inactive:hover {
+    color: #b91c1c;
+    background: #fef2f2;
+}
+
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -719,6 +853,133 @@ h2 {
     box-shadow: var(--shadow-sm);
     overflow-x: auto;
     overflow-y: hidden;
+}
+
+.inventory-table-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    margin-bottom: 0.75rem;
+    background: var(--bg-color);
+    padding-bottom: 0.35rem;
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+}
+
+.inventory-status-counter {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #334155;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    padding: 0.38rem 0.65rem;
+}
+
+.inventory-type-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.inventory-hint-icon {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    background: #f8fafc;
+    cursor: help;
+}
+
+.inventory-table-toolbar .search-bar {
+    margin-bottom: 0;
+    flex: 1;
+}
+
+.inventory-filter-chips {
+    display: inline-flex;
+    gap: 0.45rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.inventory-filter-chip {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+    border-radius: 999px;
+    padding: 0.42rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.inventory-filter-chip.active {
+    border-color: #2563eb;
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.stock-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
+    gap: 0.75rem;
+}
+
+.stock-dashboard-kpi {
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 0.25rem;
+}
+
+.stock-dashboard-sub {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.stock-type-chart {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.35rem;
+}
+
+.stock-type-row {
+    display: grid;
+    gap: 0.28rem;
+}
+
+.stock-type-label {
+    font-size: 0.82rem;
+    color: #334155;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+}
+
+.stock-type-bar {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+
+.stock-type-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+}
+
+#inventoryView .table-container table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
 table {
@@ -1233,6 +1494,33 @@ textarea {
         width: auto;
         padding: 0.5rem 1rem;
         font-size: 0.85rem;
+    }
+
+    .nav-item-stock {
+        width: 100%;
+    }
+
+    .stock-submenu {
+        width: 100%;
+        padding-left: 0.65rem;
+        border-left: none;
+        gap: 0.35rem;
+    }
+
+    .stock-submenu .nav-subitem.active {
+        background: rgba(37, 99, 235, 0.2);
+    }
+
+    .nav-subitem {
+        width: 100%;
+        padding: 0.55rem 0.85rem 0.55rem 1rem;
+    }
+
+    .nav-item i,
+    .nav-subitem i {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .sidebar-footer {
