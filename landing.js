@@ -251,7 +251,7 @@ function renderPlanosCards(planos) {
   container.innerHTML = list.map(p => {
     const tipo = String(p && p.tipo_assinatura || '').trim() || 'Plano';
     const legenda = String(p && p.legenda_comercial || '').trim();
-    const legendaHtml = legenda ? `<div style="font-size: 0.95rem; color: #64748b; font-weight: 500; margin-top: -12px; margin-bottom: 12px; text-align: left;">${legenda}</div>` : '';
+    const legendaHtml = legenda ? `<div style="font-size: 0.95rem; color: #64748b; font-weight: 500; margin-top: 4px; margin-bottom: 12px; text-align: left;">${legenda}</div>` : '';
     const valor = String(p && p.valor_plano || '').trim() || '-';
     const modulos = splitModulesText(p && p.modulos_texto);
     const itens = modulos.length ? modulos : ['Plano OCC'];
