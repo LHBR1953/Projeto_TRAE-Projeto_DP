@@ -6,6 +6,7 @@
     --text-main: #1f2937;
     --text-muted: #6b7280;
     --border-color: #e5e7eb;
+    --card-panel-border-color: #cbd5e1;
     --danger-color: #dc2626;
     --danger-hover: #b91c1c;
     --success-color: #16a34a;
@@ -28,6 +29,15 @@ body {
     line-height: 1.5;
 }
 
+.occ-spin {
+    animation: occ-spin 0.9s linear infinite;
+}
+
+@keyframes occ-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .app-container {
     display: flex;
     min-height: 100vh;
@@ -37,6 +47,7 @@ body {
 }
 
 /* Sidebar Navigation */
+/* Garante que o menu lateral seja sempre visível e não esmagado */
 .sidebar {
     width: 280px;
     background-color: var(--card-bg);
@@ -49,7 +60,21 @@ body {
     height: 100vh;
     transition: width var(--transition-speed) ease, padding var(--transition-speed) ease;
     overflow-x: hidden;
+    overflow-y: auto; /* Permite a rolagem independente no menu lateral */
     z-index: 100;
+    flex-shrink: 0;
+}
+
+/* Esconde a barra de rolagem (opcional, para visual mais limpo) */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+.sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar::-webkit-scrollbar-thumb {
+    background-color: var(--border-color);
+    border-radius: 10px;
 }
 
 .sidebar.collapsed {
@@ -243,9 +268,29 @@ body {
     color: #047857;
 }
 
+.inventory-kind-consumo {
+    background: rgba(59, 130, 246, 0.14);
+    color: #1d4ed8;
+}
+
+.inventory-kind-cirurgia {
+    background: rgba(239, 68, 68, 0.14);
+    color: #b91c1c;
+}
+
 .inventory-kind-instrumental {
     background: rgba(245, 158, 11, 0.16);
     color: #b45309;
+}
+
+.inventory-kind-equipamentos {
+    background: rgba(148, 163, 184, 0.22);
+    color: #334155;
+}
+
+.inventory-kind-administrativo {
+    background: rgba(168, 85, 247, 0.14);
+    color: #6d28d9;
 }
 
 .inventory-area-badge {
@@ -640,7 +685,7 @@ h2 {
 
 .kpi-card {
     background: var(--card-bg);
-    border: 1px solid var(--border-color);
+    border: 2px solid var(--card-panel-border-color);
     border-radius: var(--border-radius);
     padding: 1rem;
     box-shadow: var(--shadow-sm);
@@ -724,7 +769,7 @@ h2 {
 
 .dash-card {
     background: var(--card-bg);
-    border: 1px solid var(--border-color);
+    border: 2px solid var(--card-panel-border-color);
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-sm);
     overflow: hidden;
@@ -764,7 +809,7 @@ h2 {
 }
 
 .mini-card {
-    border: 1px solid var(--border-color);
+    border: 2px solid var(--card-panel-border-color);
     border-radius: 10px;
     padding: 0.75rem;
     background: #f9fafb;
@@ -925,6 +970,44 @@ h2 {
     color: #1d4ed8;
 }
 
+.inventory-buy-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+    border-radius: 999px;
+    padding: 0.42rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+    user-select: none;
+}
+
+.inventory-buy-filter input {
+    width: 14px;
+    height: 14px;
+}
+
+.inventory-row-buy td:first-child strong {
+    color: #92400e;
+}
+
+.inventory-buy-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: 0.4rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    color: #9a3412;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
 .stock-dashboard-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(220px, 1fr));
@@ -1081,6 +1164,7 @@ tbody tr:nth-child(even) {
 /* Form Styles */
 .form-card {
     background: var(--card-bg);
+    border: 2px solid var(--card-panel-border-color);
     border-radius: var(--border-radius);
     padding: 1.5rem;
     margin-bottom: 1.5rem;
@@ -1148,6 +1232,41 @@ textarea:focus {
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
     background: #ffffff;
+}
+
+#modalCheckOutEstoque .checkout-build-line {
+    color: #2563eb;
+    font-weight: 800;
+}
+
+#modalCheckOutEstoque .checkout-biosseg-row {
+    background: #eff6ff;
+}
+
+#modalCheckOutEstoque input.checkout-biosseg-check {
+    accent-color: #2563eb;
+}
+
+#modalCheckOutEstoque input.checkout-biosseg-check:disabled {
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* Novo Orcamento: normaliza visual do input com datalist (sem cara de combobox) */
+#budPacienteNome {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background-image: none !important;
+    padding-right: 0.625rem !important;
+}
+
+#budPacienteNome::-webkit-calendar-picker-indicator {
+    display: none !important;
+    -webkit-appearance: none !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    pointer-events: none !important;
 }
 
 .tooth path {
@@ -1489,6 +1608,10 @@ textarea {
         margin-top: 0.5rem;
         margin-bottom: 0.5rem;
     }
+    
+    #companySwitcherContainer {
+        width: 100%;
+    }
 
     .nav-item {
         width: auto;
@@ -1524,8 +1647,9 @@ textarea {
     }
 
     .sidebar-footer {
-        display: none;
-        /* Hide user footer on mobile to save vertical space */
+        display: flex;
+        flex-direction: column;
+        padding-bottom: 2rem;
     }
 
     .main-content {

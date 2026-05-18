@@ -250,6 +250,8 @@ function renderPlanosCards(planos) {
 
   container.innerHTML = list.map(p => {
     const tipo = String(p && p.tipo_assinatura || '').trim() || 'Plano';
+    const legenda = String(p && p.legenda_comercial || '').trim();
+    const legendaHtml = legenda ? `<div style="font-size: 0.95rem; color: #64748b; font-weight: 500; margin-top: -12px; margin-bottom: 12px; text-align: left;">${legenda}</div>` : '';
     const valor = String(p && p.valor_plano || '').trim() || '-';
     const modulos = splitModulesText(p && p.modulos_texto);
     const itens = modulos.length ? modulos : ['Plano OCC'];
@@ -258,6 +260,7 @@ function renderPlanosCards(planos) {
     return `
       <div class="lp-plan" style="${border}">
         <h3>${tipo}</h3>
+        ${legendaHtml}
         <div class="lp-price">${valor}</div>
         <ul>${itens.map(i => `<li>${i}</li>`).join('')}</ul>
         <div style="margin-top:14px;">
@@ -287,7 +290,7 @@ async function loadPlanosConfig() {
   try {
     const { data, error } = await db
       .from('config_planos')
-      .select('id,tipo_assinatura,valor_plano,modulos_texto,destaque')
+      .select('id,tipo_assinatura,legenda_comercial,valor_plano,modulos_texto,destaque')
       .order('destaque', { ascending: false })
       .order('tipo_assinatura', { ascending: true });
     if (error) throw error;

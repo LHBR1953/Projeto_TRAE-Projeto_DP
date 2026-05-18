@@ -2978,19 +2978,12 @@ function showFinancialOnboardingModal() {
                 <div style="font-size:14px; color:#334155; line-height:1.5; margin-bottom:16px;">
                     Bem-vindo ao Sistema OCC! Para garantir a precisão dos seus cálculos de lucro e comissão, você precisa configurar seus Parâmetros Financeiros antes de começar. Clique aqui para configurar.
                 </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button id="btnAbortFinancialOnboarding" class="btn btn-secondary"><i class="ri-logout-box-r-line"></i> Sair do Sistema</button>
+                <div style="display:flex; justify-content:flex-end;">
                     <button id="btnGoFinancialParamsOnboarding" class="btn btn-primary"><i class="ri-calculator-line"></i> Configurar Agora</button>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
-        
-        const abort = document.getElementById('btnAbortFinancialOnboarding');
-        if (abort) abort.addEventListener('click', () => {
-            if (db) db.auth.signOut().then(() => window.location.replace('index.html'));
-        });
-
         const go = document.getElementById('btnGoFinancialParamsOnboarding');
         if (go) go.addEventListener('click', () => {
             hideFinancialOnboardingModal();
@@ -3015,12 +3008,6 @@ function refreshFinancialOnboardingLock(showModal = false) {
     const check = validateFinancialParamsCompleteness(financialParamsCache || {});
     financialOnboardingLocked = !check.ok;
     applyFinancialOnboardingMenuLock();
-
-    const abortBtn = document.getElementById('btnAbortFinancialParams');
-    if (abortBtn) {
-        abortBtn.style.display = financialOnboardingLocked ? 'inline-flex' : 'none';
-    }
-
     if (!financialOnboardingLocked) {
         hideFinancialOnboardingModal();
         try { localStorage.removeItem(getFinancialOnboardingStorageKey()); } catch { }
@@ -3560,20 +3547,15 @@ function setActiveTab(tab) {
         if (navUsersAdminBtn) navUsersAdminBtn.classList.add('active');
         showList('usersAdmin');
     } else if (tab === 'empresas') {
-        const navEmp = document.getElementById('navEmpresas');
-        if (navEmp) navEmp.classList.add('active');
+        if (navEmpresas) navEmpresas.classList.add('active');
         showList('empresas');
     } else if (tab === 'assinaturas') {
         if (!isSuperAdmin) {
             showToast('Acesso restrito ao SuperAdmin.', true);
             return;
         }
-        const navAssinaturasEl = document.getElementById('navAssinaturas');
-        if (navAssinaturasEl) navAssinaturasEl.classList.add('active');
+        if (navAssinaturas) navAssinaturas.classList.add('active');
         showList('assinaturas');
-        // Forçar renderização e busca
-        if (typeof fetchConfigPlanos === 'function') fetchConfigPlanos();
-        if (typeof fetchAssinaturas === 'function') fetchAssinaturas();
     } else if (tab === 'myCompany') {
         if (navMyCompany) navMyCompany.classList.add('active');
         showList('myCompany');
@@ -3588,10 +3570,6 @@ function setActiveTab(tab) {
         const navFin = document.getElementById('navFinanceiro');
         if (navFin) navFin.classList.add('active');
         showList('financeiro');
-        // Define Visão Geral como default
-        if (typeof setStockReportsActive === 'function') {
-            setStockReportsActive('home');
-        }
     } else if (tab === 'commissions') {
         const navC = document.getElementById('navCommissions');
         if (navC) navC.classList.add('active');
@@ -8507,14 +8485,13 @@ function renderStockReportsActive({ key, startDate, endDate }) {
                             <div style="font-size:19px; font-weight:800; color:#0f172a;"><i class="ri-archive-line"></i> ${escapeHtml(formatCurrencyBRL(totalMat))}</div>
                         </div>
                     </div>
-                    <div style="display:grid; grid-template-columns: 1fr 180px 180px auto; gap:8px;">
+                    <div style="display:grid; grid-template-columns: 1fr 180px 180px; gap:8px;">
                         <select id="stockApurExecutorFilter" class="form-control">
                             <option value="">Todos os Executores</option>
                             ${exOptions.map(n => `<option value="${escapeHtml(n)}"${n === stockReportsApuracaoExecutorFilter ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}
                         </select>
                         <input id="stockApurStart" type="date" class="form-control" value="${escapeHtml(String(inventoryReportStartDate || ''))}">
                         <input id="stockApurEnd" type="date" class="form-control" value="${escapeHtml(String(inventoryReportEndDate || ''))}">
-                        <button type="button" class="btn btn-primary" onclick="openPrintExtratoFilter()"><i class="ri-printer-line"></i> Imprimir Extrato</button>
                     </div>
                 </div>
             `;
@@ -8927,15 +8904,6 @@ function renderStockReports() {
     if (String(stockReportsActiveKey || 'home') === 'home') {
         reportPanel.classList.add('hidden');
         homePanel.classList.remove('hidden');
-        
-        // Esconde a Busca e o Extrato na Visão Geral para ficar uma tela limpa só com gráficos
-        const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
-        const cardExtrato = document.getElementById('finExtratoCard');
-        const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
-        if (cardBusca) cardBusca.style.display = 'none';
-        if (cardExtrato) cardExtrato.style.display = 'none';
-        if (cardEmissao) cardEmissao.style.display = 'none';
-
         homePanel.innerHTML = `<div class="stock-dashboard-sub">Carregando...</div>`;
         renderStockReportsHome({ startDate, endDate }).catch((err) => {
             const msg = err && err.message ? String(err.message) : 'Falha ao carregar relatório.';
@@ -8946,44 +8914,6 @@ function renderStockReports() {
     }
     homePanel.classList.add('hidden');
     reportPanel.classList.remove('hidden');
-    
-    // Remove active class from all nav items so we don't accidentally hide our current view
-    // (Removido pois causava o sumiço do menu principal)
-
-    // Move dynamically to the correct section based on active report
-    if (stockReportsActiveKey === 'financial_apportion') {
-        const financeiroView = document.getElementById('financeiroView');
-        if (financeiroView && reportPanel.parentNode !== financeiroView) {
-            // Insere no financeiroView logo abaixo do stockReportsHomePanel para não bagunçar o Extrato
-            const anchor = document.getElementById('stockReportsHomePanel');
-            if (anchor && anchor.parentNode === financeiroView) {
-                financeiroView.insertBefore(reportPanel, anchor.nextSibling);
-            } else {
-                // Fallback seguro se não achar a âncora
-                financeiroView.appendChild(reportPanel);
-            }
-        }
-        
-        // Esconde o painel do Extrato de Transações para não ficar "uma bagunça" visual
-        const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
-        // Usa id dinâmico mais seguro para encontrar o wrapper inteiro do extrato e esconder
-        const cardExtrato = document.getElementById('finTransacoesTable')?.closest('.card');
-        if (cardBusca) cardBusca.style.display = 'none';
-        if (cardExtrato) cardExtrato.style.display = 'none';
-
-        // Garante que o container do app não ganhe scroll indesejado que "empurra" o menu
-        document.body.style.overflow = '';
-    } else {
-        const btnAcc = document.getElementById('btnStockReportAccuracy');
-        if (btnAcc) {
-            const relatoriosMenuDiv = btnAcc.closest('.form-card');
-            if (relatoriosMenuDiv && reportPanel.parentNode !== relatoriosMenuDiv.parentNode) {
-                // Insere logo abaixo do menu de relatórios
-                relatoriosMenuDiv.parentNode.insertBefore(reportPanel, relatoriosMenuDiv.nextSibling);
-            }
-        }
-    }
-
     renderStockReportsActive({ key: stockReportsActiveKey, startDate, endDate });
     bindGridArrowNavigation(reportPanel);
 }
@@ -9519,7 +9449,7 @@ function bindEstoqueModule() {
     }
     if (btnExportInventoryBiPdf) btnExportInventoryBiPdf.addEventListener('click', exportInventoryBiPdf);
     if (btnExportInventoryBiExcel) btnExportInventoryBiExcel.addEventListener('click', exportInventoryBiExcel);
-    if (btnStockReportHome) btnStockReportHome.addEventListener('click', () => { setStockReportsActive('home'); });
+    if (btnStockReportHome) btnStockReportHome.addEventListener('click', () => setStockReportsActive('home'));
     if (btnStockReportAccuracy) btnStockReportAccuracy.addEventListener('click', () => setStockReportsActive('accuracy'));
     if (btnStockReportReplenishment) btnStockReportReplenishment.addEventListener('click', () => setStockReportsActive('replenishment'));
     if (btnStockReportCosts) btnStockReportCosts.addEventListener('click', () => setStockReportsActive('costs'));
@@ -9527,91 +9457,7 @@ function bindEstoqueModule() {
     if (btnStockReportConsumption) btnStockReportConsumption.addEventListener('click', () => setStockReportsActive('consumption'));
     if (btnStockReportInventory) btnStockReportInventory.addEventListener('click', () => setStockReportsActive('inventory'));
     if (btnStockReportKits) btnStockReportKits.addEventListener('click', () => setStockReportsActive('kits'));
-    if (btnStockReportApuracao) btnStockReportApuracao.addEventListener('click', () => { setStockReportsActive('financial_apportion'); });
-    if (document.getElementById('btnMenuContaPaciente')) {
-        document.getElementById('btnMenuContaPaciente').addEventListener('click', () => {
-            stockReportsActiveKey = 'conta_paciente';
-            const financeiroView = document.getElementById('financeiroView');
-            const reportPanel = document.getElementById('stockReportPanel');
-            const homePanel = document.getElementById('stockReportsHomePanel');
-            const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
-            const cardSaldo = document.getElementById('finPainelSaldo');
-            const cardExtrato = document.getElementById('finExtratoCard');
-            const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
-
-            if (reportPanel) reportPanel.classList.add('hidden');
-            if (homePanel) homePanel.classList.add('hidden');
-            if (cardBusca) cardBusca.style.display = 'block';
-            
-            // Oculta a emissão por padrão, a menos que haja busca
-            if (cardEmissao) cardEmissao.style.display = 'none';
-            
-            // Mostra o Extrato e oculta os filtros (ou mantém, mas o padrão original era sem os filtros em cima, apenas a tabela)
-            // Como agora o Extrato virou um card com filtros, podemos apenas mostrar ele
-            if (cardExtrato) cardExtrato.style.display = 'block';
-
-            // Força reset de botões
-            const topButtons = financeiroView.querySelectorAll('.section-header .btn');
-            topButtons.forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
-            document.getElementById('btnMenuContaPaciente').classList.remove('btn-secondary');
-            document.getElementById('btnMenuContaPaciente').classList.add('btn-primary');
-        });
-    }
-
-    if (document.getElementById('btnMenuExtratoTransacoes')) {
-        document.getElementById('btnMenuExtratoTransacoes').addEventListener('click', () => {
-            // "Esconde" as outras telas de relatório e mostra o Extrato
-            stockReportsActiveKey = 'extrato'; // Para saber onde estamos
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            const navFin = document.getElementById('navFinanceiro');
-            if(navFin) navFin.classList.add('active');
-
-            const financeiroView = document.getElementById('financeiroView');
-            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-            if(financeiroView) financeiroView.classList.remove('hidden');
-
-            const reportPanel = document.getElementById('stockReportPanel');
-            const homePanel = document.getElementById('stockReportsHomePanel');
-            const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
-            const cardSaldo = document.getElementById('finPainelSaldo');
-            const cardExtrato = document.getElementById('finExtratoCard');
-            const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
-            
-            if (reportPanel) reportPanel.classList.add('hidden');
-            if (homePanel) homePanel.classList.add('hidden');
-            if (cardBusca) cardBusca.style.display = 'none';
-            if (cardSaldo) cardSaldo.classList.add('hidden');
-            if (cardEmissao) cardEmissao.style.display = 'none';
-
-            if (cardExtrato) {
-                cardExtrato.style.display = 'block';
-                // Remove preenchimento do combo que não existe mais, já que agora é um campo de texto livre
-
-                // Preenche datas default se vazio
-                const extStart = document.getElementById('extratoFilterStart');
-                const extEnd = document.getElementById('extratoFilterEnd');
-                if(extStart && !extStart.value) {
-                    const d = new Date();
-                    extStart.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
-                }
-                if(extEnd && !extEnd.value) {
-                    const d = new Date();
-                    extEnd.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-                }
-
-                // Dispara o filtro automaticamente ao abrir a aba
-                if(document.getElementById('btnFiltrarExtrato')) {
-                    document.getElementById('btnFiltrarExtrato').click();
-                }
-            }
-            
-            // Força reset de botões do menu do financeiro
-            const topButtons = financeiroView.querySelectorAll('.section-header .btn');
-            topButtons.forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
-            document.getElementById('btnMenuExtratoTransacoes').classList.remove('btn-secondary');
-            document.getElementById('btnMenuExtratoTransacoes').classList.add('btn-primary');
-        });
-    }
+    if (btnStockReportApuracao) btnStockReportApuracao.addEventListener('click', () => setStockReportsActive('financial_apportion'));
     if (btnStockReportBack) btnStockReportBack.addEventListener('click', () => setStockReportsActive('home'));
     syncStockReportInitialAdjustButton();
     if (btnStockReportPrint) btnStockReportPrint.addEventListener('click', printStockReportActive);
@@ -12963,7 +12809,7 @@ async function fetchAgendaRowsForFechamento({ dateStr, profSeqId }) {
     return data || [];
 }
 
-function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId, dateStr }) {
+function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId }) {
     const list = (agendaRows || []).filter(a => String(a.status || '') !== 'CANCELADO');
     const byPaciente = new Map();
     list.forEach(a => {
@@ -12997,12 +12843,6 @@ function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId, dateStr }) {
                 const st = String(it.status || it.item_status || '').trim();
                 const stKey = normalizeStatusKey(st);
                 if (stKey === 'CANCELADO') return;
-                
-                // Exigir que a data do item finalizado seja compatível com a data do Fechamento
-                // Como updated_at muda em qualquer edição do orçamento, usamos data_finalizacao (se existir) ou o created_at como fallback para evitar que itens antigos apareçam hoje.
-                const itemDateStr = it.data_finalizacao ? it.data_finalizacao.split('T')[0] : (it.created_at ? it.created_at.split('T')[0] : (it.updated_at ? it.updated_at.split('T')[0] : ''));
-                if (stKey === 'FINALIZADO' && itemDateStr && dateStr && itemDateStr !== dateStr) return;
-
                 const eligible = isFreeBudget || stKey === 'LIBERADO' || stKey === 'EMEXECUCAO' || stKey === 'FINALIZADO';
                 if (!eligible) return;
 
@@ -13215,7 +13055,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
 
         const profName = profSeqId ? getProfessionalNameBySeqId(profSeqId) : 'Todos';
         const humanDate = dateStr.split('-').reverse().join('/');
-        const rows = buildAtendimentoRowsFromAgenda({ agendaRows: agValid, profSeqId: profSeqId || '', dateStr });
+        const rows = buildAtendimentoRowsFromAgenda({ agendaRows: agValid, profSeqId: profSeqId || '' });
         const totalProduzido = rows.reduce((acc, r) => acc + Number(r.itemTotal || 0), 0);
         const totalFinalizados = rows.filter(r => normalizeStatusKey(r.itemStatus) === 'FINALIZADO').length;
         const totalFinalizadosValor = rows
@@ -24459,10 +24299,6 @@ function openPlanoConfigModal(item) {
     if (planoConfigModalTitle) planoConfigModalTitle.textContent = item ? 'Editar Plano' : 'Novo Plano';
     if (planoConfigId) planoConfigId.value = item && item.id ? String(item.id) : '';
     if (planoConfigTipoAssinatura) planoConfigTipoAssinatura.value = item && item.tipo_assinatura ? String(item.tipo_assinatura) : '';
-    
-    const planoConfigLegendaComercial = document.getElementById('planoConfigLegendaComercial');
-    if (planoConfigLegendaComercial) planoConfigLegendaComercial.value = item && item.legenda_comercial ? String(item.legenda_comercial) : '';
-    
     if (planoConfigValor) planoConfigValor.value = item && item.valor_plano ? String(item.valor_plano) : '';
     
     const modulosTxt = item && item.modulos_texto ? String(item.modulos_texto) : '';
@@ -24528,10 +24364,6 @@ if (btnSavePlanoConfigModal) btnSavePlanoConfigModal.addEventListener('click', a
     }
     const id = String(planoConfigId && planoConfigId.value || '').trim();
     const tipo = String(planoConfigTipoAssinatura && planoConfigTipoAssinatura.value || '').trim();
-    
-    const planoConfigLegendaComercial = document.getElementById('planoConfigLegendaComercial');
-    const legendaComercial = String(planoConfigLegendaComercial && planoConfigLegendaComercial.value || '').trim() || null;
-    
     const valor = String(planoConfigValor && planoConfigValor.value || '').trim();
     const modulos = String(planoConfigModulos && planoConfigModulos.value || '').trim();
     const destaque = !!(planoConfigDestaque && planoConfigDestaque.checked);
@@ -24541,7 +24373,6 @@ if (btnSavePlanoConfigModal) btnSavePlanoConfigModal.addEventListener('click', a
     }
     const payload = {
         tipo_assinatura: tipo,
-        legenda_comercial: legendaComercial,
         valor_plano: valor,
         modulos_texto: modulos,
         destaque
@@ -24776,7 +24607,7 @@ async function fetchConfigPlanos() {
     try {
         const { data, error } = await db
             .from('config_planos')
-            .select('*')
+            .select('id, tipo_assinatura, valor_plano, modulos_texto, destaque')
             .order('destaque', { ascending: false })
             .order('tipo_assinatura', { ascending: true });
         if (error) throw error;
@@ -24817,11 +24648,9 @@ function renderConfigPlanos() {
     const rows = Array.isArray(configPlanosList) ? [...configPlanosList] : [];
     if (rows.length === 0) {
         configPlanosEmptyState.classList.remove('hidden');
-        configPlanosTableBody.parentElement.style.display = 'none'; // Esconde a tabela se vazia
         return;
     }
     configPlanosEmptyState.classList.add('hidden');
-    configPlanosTableBody.parentElement.style.display = ''; // Mostra a tabela
     rows.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -25654,17 +25483,6 @@ function initFinancialParamsForm() {
         });
     }
     loadData();
-
-    const abortBtn = document.getElementById('btnAbortFinancialParams');
-    if (abortBtn) {
-        abortBtn.style.display = financialOnboardingLocked ? 'inline-flex' : 'none';
-        if (!abortBtn.__boundAbortFp) {
-            abortBtn.__boundAbortFp = true;
-            abortBtn.addEventListener('click', () => {
-                if (db) db.auth.signOut().then(() => window.location.replace('index.html'));
-            });
-        }
-    }
 }
 
 function initMyCompanyForm() {
@@ -27234,10 +27052,6 @@ async function fetchTransactions(patientId = null) {
             });
         }
 
-        // Mostra o card do extrato para os resultados da busca
-        const cardExtrato = document.getElementById('finExtratoCard');
-        if (cardExtrato) cardExtrato.style.display = 'block';
-
         if (finTransacoesBody) {
             finTransacoesBody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando...</td></tr>';
         }
@@ -27573,209 +27387,6 @@ async function deleteTransaction(id) {
         btnFinVerTodos.addEventListener('click', () => {
             if (finPainelSaldo) finPainelSaldo.classList.add('hidden');
             fetchTransactions();
-        });
-    }
-
-    const btnFiltrarExtrato = document.getElementById('btnFiltrarExtrato');
-    if (btnFiltrarExtrato) {
-        btnFiltrarExtrato.addEventListener('click', async () => {
-            const start = document.getElementById('extratoFilterStart').value;
-            const end = document.getElementById('extratoFilterEnd').value;
-            const pacText = document.getElementById('extratoFilterPaciente').value.trim().toLowerCase();
-            const cat = document.getElementById('extratoFilterCategoria').value;
-
-            if (finTransacoesBody) {
-                finTransacoesBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 2rem; color: var(--text-muted);">Filtrando transações...</td></tr>';
-            }
-
-            // Removendo a montagem do "query" antigo daqui, tudo vai pra queryBase lá embaixo
-            try {
-                // O supabase falha em queries muito complexas com dados nulos, vamos apenas buscar tudo da empresa 
-                // e fazer a filtragem de datas e formas de pagamento localmente, igual fazemos com paciente.
-                // Isso garante 100% de precisão e evita erros do backend.
-                let queryBase = db.from('financeiro_transacoes')
-                    .select('*')
-                    .order('data_transacao', { ascending: false });
-                    
-                if (currentEmpresaId) {
-                    queryBase = queryBase.eq('empresa_id', currentEmpresaId);
-                }
-
-                const { data, error } = await queryBase;
-                if (error) {
-                    console.error("Supabase Error na queryBase:", error);
-                    throw error;
-                }
-                
-                // Filtros locais (Memória) - Totalmente precisos e imunes a falhas de timeout de DB
-                let localData = data || [];
-                
-                // Filtro 1: Data Inicial
-                if (start) {
-                    const startVal = start + 'T00:00:00';
-                    localData = localData.filter(t => t.data_transacao >= startVal);
-                }
-                
-                // Filtro 2: Data Final
-                if (end) {
-                    const endVal = end + 'T23:59:59';
-                    localData = localData.filter(t => t.data_transacao <= endVal);
-                }
-                
-                // Filtro 3: Categoria (Forma de Pagamento)
-                if (cat !== 'TODAS') {
-                    // Para evitar problemas com acentos e palavras diferentes (ex: Cartão de Débito vs Cartão Débito)
-                    // Normalizamos removendo acentos E a palavra "de " antes de comparar
-                    const normalizeStr = (str) => {
-                        let n = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-                        return n.replace(" de ", " ");
-                    };
-                    const catLower = normalizeStr(cat);
-                    
-                    localData = localData.filter(t => {
-                        const formaPgto = normalizeStr(t.forma_pagamento || '');
-                        return formaPgto.includes(catLower);
-                    });
-                }
-                
-                // Precisamos formatar e popular os nomes dos pacientes assim como no fetchTransactions
-                let localTransactions = localData.map(t => {
-                    // Garantir que as variáveis de contexto existam
-                    const listPat = window.patients || (typeof patients !== 'undefined' ? patients : []);
-                    const listBud = window.budgets || (typeof budgets !== 'undefined' ? budgets : []);
-                    
-                    let pat = listPat.find(p => String(p.seqid) === String(t.paciente_id)) || listPat.find(p => String(p.id) === String(t.paciente_id));
-                    let obsDisplay = typeof replaceObsBudgetTag === 'function' ? replaceObsBudgetTag(t.observacoes || '') : (t.observacoes || '');
-                    if (!pat) {
-                        try {
-                            const mId = String(t.observacoes || '').match(/\[Orçamento\s+([0-9a-f\-]{8,})\]/i);
-                            const mSeq = String(t.observacoes || '').match(/\[Orçamento\s*#(\d+)\]/i);
-                            let b = null;
-                            if (mId && mId[1]) b = listBud.find(x => String(x.id) === String(mId[1]));
-                            if (!b && mSeq && mSeq[1]) b = listBud.find(x => String(x.seqid) === String(mSeq[1]));
-                            if (b) {
-                                pat = listPat.find(p => String(p.id) === String(b.pacienteid || b.paciente_id));
-                                obsDisplay = typeof replaceObsBudgetTag === 'function' ? replaceObsBudgetTag(t.observacoes || '') : (t.observacoes || '');
-                            }
-                        } catch { }
-                    }
-                    
-                    const pNomeOriginal = pat ? pat.nome : '—';
-                    // Trim e Upper no nome do paciente conforme solicitado
-                    const pNomeFormatado = pNomeOriginal !== '—' ? pNomeOriginal.trim().toUpperCase() : '—';
-                    
-                    return {
-                        ...t,
-                        paciente_nome: pNomeFormatado,
-                        observacoes_display: obsDisplay
-                    };
-                });
-                
-                // Filtro dinâmico pelo nome do paciente (ignorando case)
-                if (pacText) {
-                    localTransactions = localTransactions.filter(t => t.paciente_nome.includes(pacText.toUpperCase()));
-                }
-                
-        // A tabela localTransactions do extrato vai usar o id de extrato finTransacoesTable 
-        // para renderizar corretamente
-        if (finTransacoesBody) {
-                    finTransacoesBody.innerHTML = ''; // Limpa a tabela antes de preencher
-                    if (localTransactions.length === 0) {
-                        finTransacoesBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 2rem; color: var(--text-muted);">Nenhuma transação encontrada.</td></tr>';
-                    } else {
-                        // Reutiliza a lógica visual de renderTable mas injeta direto no extrato
-                        localTransactions.forEach((t, i) => {
-                            const tr = document.createElement('tr');
-                            const budgetId = t.observacoes ? t.observacoes.match(/\[Orçamento\s+#?([0-9a-fA-F\-]+)\]/i) : null;
-                            const budgetText = budgetId ? `Orçamento ${budgetId[1].substring(0,6)}...` : '—';
-                            
-                            tr.innerHTML = `
-                                <td>${i + 1}</td>
-                                <td>${budgetText}</td>
-                                <td><strong>${escapeHtml(t.paciente_nome)}</strong></td>
-                                <td>${new Date(t.data_transacao).toLocaleString('pt-BR')}</td>
-                                <td>${escapeHtml(t.forma_pagamento || '—')}</td>
-                                <td><strong style="color: ${t.tipo === 'CREDITO' ? 'var(--success-color)' : 'var(--danger-color)'};">R$ ${parseFloat(t.valor).toFixed(2).replace('.',',')}</strong></td>
-                                <td><span class="badge ${t.tipo === 'CREDITO' ? 'badge-success' : 'badge-danger'}">${t.tipo}</span></td>
-                                <td><div style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(t.observacoes_display || t.observacoes || '')}">${escapeHtml(t.observacoes_display || t.observacoes || '—')}</div></td>
-                                <td><button class="btn btn-icon btn-danger" onclick="deleteTransaction('${t.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button></td>
-                            `;
-                            finTransacoesBody.appendChild(tr);
-                        });
-                    }
-                }
-            } catch (err) {
-                console.error("Erro no filtro de extrato:", err);
-                
-                // Captura erros de timeout do Supabase ou problemas de rede para dar um aviso melhor
-                const errMsg = err && err.message ? err.message : '';
-                if (errMsg.includes('timeout') || errMsg.includes('FetchError')) {
-                    showToast("Sua internet ou o servidor demorou a responder. Tente novamente.", true);
-                } else {
-                    showToast("Falha ao filtrar o extrato.", true);
-                }
-                
-                if (finTransacoesBody) {
-                    finTransacoesBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 2rem; color: var(--text-muted);">Erro ao carregar dados. Tente novamente.</td></tr>';
-                }
-            }
-        });
-    }
-
-    // Input dinâmico: filtra automaticamente quando altera os campos
-    const extratoFilterPaciente = document.getElementById('extratoFilterPaciente');
-    const extratoFilterStart = document.getElementById('extratoFilterStart');
-    const extratoFilterEnd = document.getElementById('extratoFilterEnd');
-    const extratoFilterCategoria = document.getElementById('extratoFilterCategoria');
-
-    if (extratoFilterStart && extratoFilterEnd) {
-        // Default: 1º dia do mês até hoje (apenas se os campos estiverem vazios ao carregar a página)
-        if (!extratoFilterStart.value || !extratoFilterEnd.value) {
-            const today = new Date();
-            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-            
-            extratoFilterStart.value = firstDay.toISOString().split('T')[0];
-            extratoFilterEnd.value = today.toISOString().split('T')[0];
-            extratoFilterEnd.min = extratoFilterStart.value;
-        }
-
-        extratoFilterStart.addEventListener('change', () => {
-            const startVal = extratoFilterStart.value;
-            const endVal = extratoFilterEnd.value;
-            
-            // Regra: Atualiza o mínimo permitido na data final
-            if (startVal) {
-                extratoFilterEnd.min = startVal;
-                // A data fim SÓ deve ser alterada automaticamente se ela for menor que a inicial
-                if (endVal && endVal < startVal) {
-                    extratoFilterEnd.value = startVal;
-                }
-            }
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
-        });
-
-        extratoFilterEnd.addEventListener('change', () => {
-            const startVal = extratoFilterStart.value;
-            const endVal = extratoFilterEnd.value;
-            
-            // Proteção extra: não deixa a final ser menor que a inicial
-            if (startVal && endVal && endVal < startVal) {
-                extratoFilterEnd.value = startVal;
-                showToast("A data final não pode ser menor que a data inicial.", true);
-            }
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
-        });
-    }
-
-    if (extratoFilterPaciente) {
-        extratoFilterPaciente.addEventListener('input', () => {
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
-        });
-    }
-
-    if (extratoFilterCategoria) {
-        extratoFilterCategoria.addEventListener('change', () => {
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
         });
     }
 
@@ -29206,246 +28817,4 @@ async function showCancelDetails(logId) {
         showToast("Erro ao carregar detalhes.", true);
     }
 }
-
-// ============================================================
-// MODULO: IMPRESSAO DE EXTRATO DE TRANSACOES
-// ============================================================
-window.openPrintExtratoFilter = function() {
-    let modal = document.getElementById('modalPrintExtrato');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'modalPrintExtrato';
-        modal.style.position = 'fixed';
-        modal.style.inset = '0';
-        modal.style.background = 'rgba(0,0,0,0.5)';
-        modal.style.zIndex = '10000';
-        modal.style.display = 'flex';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-        
-        // Define default dates: first day of month to today
-        const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-        const currentDay = today.toISOString().split('T')[0];
-
-        modal.innerHTML = `
-            <div class="card" style="width: 420px; max-width: 90vw; padding: 1.5rem; background: #fff; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.2rem;">
-                    <h3 style="margin: 0; color: var(--text-dark);"><i class="ri-printer-line"></i> Imprimir Extrato</h3>
-                    <button class="btn-icon" onclick="document.getElementById('modalPrintExtrato').style.display='none'" style="color: var(--text-muted); border: none; background: transparent; cursor: pointer; font-size: 1.2rem;"><i class="ri-close-line"></i></button>
-                </div>
-                
-                <div class="form-group">
-                    <label>Período Inicial</label>
-                    <input type="date" id="printExtratoStart" class="form-control" value="${firstDay}">
-                </div>
-                <div class="form-group">
-                    <label>Período Final</label>
-                    <input type="date" id="printExtratoEnd" class="form-control" value="${currentDay}">
-                </div>
-                <div class="form-group">
-                    <label>Tipo de Transação</label>
-                    <select id="printExtratoTipo" class="form-control">
-                        <option value="">Todas (Receitas e Despesas)</option>
-                        <option value="RECEITA">Apenas Receitas</option>
-                        <option value="DESPESA">Apenas Despesas</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Categoria (Opcional)</label>
-                    <input type="text" id="printExtratoCategoria" class="form-control" placeholder="Ex: Clínica, Protético, etc.">
-                </div>
-                
-                <div style="display: flex; gap: 1rem; margin-top: 1.8rem;">
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('modalPrintExtrato').style.display='none'">Cancelar</button>
-                    <button class="btn btn-primary" style="flex: 1;" onclick="executePrintExtrato()"><i class="ri-printer-fill"></i> Gerar Impressão</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }
-    modal.style.display = 'flex';
-};
-
-window.executePrintExtrato = async function() {
-    const start = document.getElementById('printExtratoStart').value;
-    const end = document.getElementById('printExtratoEnd').value;
-    const tipo = document.getElementById('printExtratoTipo').value;
-    const categoria = document.getElementById('printExtratoCategoria').value.trim().toLowerCase();
-    
-    if (!start || !end) {
-        showToast('Preencha as datas inicial e final', true);
-        return;
-    }
-    
-    document.getElementById('modalPrintExtrato').style.display = 'none';
-    const loader = document.getElementById('bootLoader');
-    if (loader) {
-        loader.textContent = 'Gerando Extrato...';
-        loader.style.display = 'flex';
-    }
-    
-    try {
-        let query = db.from('financeiro_transacoes')
-            .select('*')
-            .gte('data_transacao', start)
-            .lte('data_transacao', end)
-            .order('data_transacao', { ascending: true });
-            
-        if (typeof currentEmpresaId !== 'undefined' && currentEmpresaId) {
-            query = query.eq('empresa_id', currentEmpresaId);
-        }
-            
-        if (tipo) {
-            query = query.eq('tipo', tipo);
-        }
-        
-        const { data, error } = await query;
-        if (error) throw error;
-        
-        let filteredData = data || [];
-        if (categoria) {
-            filteredData = filteredData.filter(t => (t.categoria || '').toLowerCase().includes(categoria));
-        }
-        
-        if (!filteredData || filteredData.length === 0) {
-            showToast('Nenhuma transação encontrada para os filtros selecionados.', true);
-            if (loader) loader.style.display = 'none';
-            return;
-        }
-        
-        const formatDataBR = (d) => {
-            if (!d) return '';
-            const p = d.split('-');
-            if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
-            return d;
-        };
-        
-        let totalReceita = 0;
-        let totalDespesa = 0;
-        
-        let trHtml = '';
-        filteredData.forEach(t => {
-            const val = parseFloat(t.valor) || 0;
-            if (t.tipo === 'RECEITA') totalReceita += val;
-            if (t.tipo === 'DESPESA') totalDespesa += val;
-            
-            // Tentar pegar nome do paciente do cache
-            let pNome = '';
-            if (t.paciente_id && typeof patients !== 'undefined' && Array.isArray(patients)) {
-                const p = patients.find(x => String(x.id) === String(t.paciente_id) || String(x.seqid) === String(t.paciente_id));
-                if (p) pNome = p.nome;
-            }
-            
-            const desc = t.observacoes ? t.observacoes : (pNome ? 'Paciente: ' + pNome : '-');
-            const color = t.tipo === 'RECEITA' ? '#166534' : '#991b1b';
-            
-            trHtml += `
-                <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${formatDataBR(t.data_transacao)}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${t.categoria || '-'}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${desc}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${t.forma_pagamento || '-'}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: ${color}; font-weight: 600; text-align: right;">${formatCurrencyBRL(val)}</td>
-                </tr>
-            `;
-        });
-        
-        const saldo = totalReceita - totalDespesa;
-        const saldoColor = saldo >= 0 ? '#166534' : '#991b1b';
-        
-        const printHtml = `
-            <!DOCTYPE html>
-            <html lang="pt-BR">
-            <head>
-                <meta charset="UTF-8">
-                <title>Extrato de Transações</title>
-                <style>
-                    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; margin: 0; padding: 20px; font-size: 13px; }
-                    .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #cbd5e1; }
-                    .header h1 { margin: 0 0 5px 0; color: #0f172a; font-size: 20px; }
-                    .header p { margin: 0; color: #64748b; font-size: 14px; }
-                    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-                    th { background-color: #f8fafc; color: #475569; font-weight: 600; text-align: left; padding: 10px 8px; border-bottom: 2px solid #e2e8f0; }
-                    .totals { display: flex; justify-content: flex-end; gap: 30px; margin-top: 20px; padding-top: 15px; border-top: 2px solid #cbd5e1; }
-                    .total-box { text-align: right; }
-                    .total-box div:first-child { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-                    .total-box div:last-child { font-size: 18px; font-weight: 700; margin-top: 4px; }
-                    @media print {
-                        body { padding: 0; }
-                        button { display: none !important; }
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1>Extrato de Transações</h1>
-                    <p>Período: ${formatDataBR(start)} a ${formatDataBR(end)}</p>
-                    ${categoria ? `<p>Filtro Categoria: ${categoria}</p>` : ''}
-                    ${tipo ? `<p>Filtro Tipo: ${tipo === 'RECEITA' ? 'Receitas' : 'Despesas'}</p>` : ''}
-                </div>
-                
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 90px;">Data</th>
-                            <th style="width: 150px;">Categoria</th>
-                            <th>Descrição / Observação</th>
-                            <th style="width: 130px;">Forma de Pag.</th>
-                            <th style="width: 120px; text-align: right;">Valor</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${trHtml}
-                    </tbody>
-                </table>
-                
-                <div class="totals">
-                    <div class="total-box">
-                        <div>Total Entradas</div>
-                        <div style="color: #166534;">${formatCurrencyBRL(totalReceita)}</div>
-                    </div>
-                    <div class="total-box">
-                        <div>Total Saídas</div>
-                        <div style="color: #991b1b;">${formatCurrencyBRL(totalDespesa)}</div>
-                    </div>
-                    <div class="total-box">
-                        <div>Saldo do Período</div>
-                        <div style="color: ${saldoColor};">${formatCurrencyBRL(saldo)}</div>
-                    </div>
-                </div>
-                
-                <div style="margin-top: 40px; text-align: center;">
-                    <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px;">Imprimir Extrato</button>
-                </div>
-                
-                <script>
-                    window.onload = function() {
-                        setTimeout(function() { window.print(); }, 500);
-                    };
-                </script>
-            </body>
-            </html>
-        `;
-
-        
-        const printWin = window.open('', '_blank');
-        if (printWin) {
-            printWin.document.open();
-            printWin.document.write(printHtml);
-            printWin.document.close();
-        } else {
-            showToast('O bloqueador de pop-ups impediu a abertura da impressão.', true);
-        }
-        
-    } catch (e) {
-        console.error(e);
-        showToast('Erro ao gerar extrato: ' + (e.message || ''), true);
-    } finally {
-        if (loader) {
-            loader.style.display = 'none';
-            loader.textContent = 'Carregando...';
-        }
-    }
-};
 

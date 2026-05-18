@@ -10,21 +10,49 @@ function normalizeEmail(input: unknown): string {
   return String(input ?? "").trim().toLowerCase();
 }
 
-function buildFullPermissions() {
-  return {
-    dashboard: { select: true, insert: true, update: true, delete: true },
-    pacientes: { select: true, insert: true, update: true, delete: true },
-    profissionais: { select: true, insert: true, update: true, delete: true },
-    especialidades: { select: true, insert: true, update: true, delete: true },
-    servicos: { select: true, insert: true, update: true, delete: true },
-    orcamentos: { select: true, insert: true, update: true, delete: true },
-    financeiro: { select: true, insert: true, update: true, delete: true },
-    comissoes: { select: true, insert: true, update: true, delete: true },
-    marketing: { select: true, insert: true, update: true, delete: true },
-    atendimento: { select: true, insert: true, update: true, delete: true },
-    agenda: { select: true, insert: true, update: true, delete: true },
-    protese: { select: true, insert: true, update: true, delete: true },
-  };
+function buildFullPermissions(planoModulosTexto?: string | null) {
+  const allModules = [
+    { id: "agenda", label: "Agenda" },
+    { id: "atendimento", label: "Atendimento" },
+    { id: "audit_cancelados", label: "Audit Cancelados" },
+    { id: "comissoes", label: "Comissões" },
+    { id: "dashboard", label: "Dashboard" },
+    { id: "especialidades", label: "Especialidades" },
+    { id: "estoque_inventario", label: "Estoque: Inventário" },
+    { id: "estoque_modelos", label: "Estoque: Modelos de Uso" },
+    { id: "estoque_movimentacoes", label: "Estoque: Movimentações" },
+    { id: "estoque_relatorios", label: "Estoque: Relatórios" },
+    { id: "estoque_vinculos", label: "Estoque: Vínculo de Serviços" },
+    { id: "financeiro", label: "Financeiro" },
+    { id: "ia", label: "Inteligência OCC" },
+    { id: "marketing", label: "Marketing" },
+    { id: "orcamentos", label: "Orçamentos" },
+    { id: "pacientes", label: "Pacientes" },
+    { id: "protese", label: "Produção Protética" },
+    { id: "profissionais", label: "Profissionais" },
+    { id: "servicos", label: "Serviços/Estoque" }
+  ];
+
+  let allowedModules: string[] | null = null;
+  if (planoModulosTexto) {
+    allowedModules = planoModulosTexto.toLowerCase().split(',').map(s => s.trim());
+  }
+
+  const perms: any = {};
+  for (const mod of allModules) {
+    let isAllowed = true;
+    if (allowedModules) {
+      isAllowed = allowedModules.includes(mod.label.toLowerCase()) || allowedModules.includes(mod.id.toLowerCase());
+    }
+    
+    perms[mod.id] = { 
+      select: isAllowed, 
+      insert: isAllowed, 
+      update: isAllowed, 
+      delete: isAllowed 
+    };
+  }
+  return perms;
 }
 
 function isEmailAlreadyRegisteredError(err: unknown): boolean {
@@ -188,6 +216,7 @@ Deno.serve(async (req) => {
     const logotipo = String(body.logotipo || "").trim() || null;
     const identificador = String(body.identificador || empresaId || "").trim();
     const assinaturaStatus = String(body.assinatura_status || body.assinaturaStatus || "ATIVA").trim();
+    const planoTipo = String(body.plano_tipo || body.planoTipo || "").trim() || null;
 
     if (!empresaId || !nome || !email) {
       throw new Error("Missing required fields: empresa_id, nome, email.");
@@ -209,6 +238,7 @@ Deno.serve(async (req) => {
       nome,
       email,
       assinatura_status: assinaturaStatus,
+      plano_tipo: planoTipo,
       supervisor_pin: supervisorPin || null,
       telefone,
       celular,
@@ -238,7 +268,35 @@ Deno.serve(async (req) => {
         createdNewAuthUser = true;
       }
 
-      const permissoes = buildFullPermissions();
+      let modulosTextoDoPlano = null;
+      if (planoTipo) {
+        let planData = null;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(planoTipo);
+        
+        if (isUuid) {
+          const { data } = await supabaseAdmin
+            .from("config_planos")
+            .select("modulos_texto")
+            .eq("id", planoTipo)
+            .maybeSingle();
+          planData = data;
+        }
+
+        if (!planData) {
+          const { data } = await supabaseAdmin
+            .from("config_planos")
+            .select("modulos_texto")
+            .ilike("tipo_assinatura", planoTipo)
+            .maybeSingle();
+          planData = data;
+        }
+
+        if (planData && planData.modulos_texto) {
+          modulosTextoDoPlano = planData.modulos_texto;
+        }
+      }
+
+      const permissoes = buildFullPermissions(modulosTextoDoPlano);
       const { error: linkError } = await supabaseAdmin.from("usuario_empresas").upsert(
         {
           usuario_id: authUserId,
@@ -271,7 +329,7 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        message: `Clínica ${nome} cadastrada! O acesso do Administrador (${email}) já está ativo.`,
+        message: `Clínica ${nome} cadastrada! O acesso do Administrador (${email}) já está ativo. [Plano: ${planoTipo}, Modulos: ${modulosTextoDoPlano || 'TODOS'}]`,
         empresa_id: empresaId,
         admin_email: email,
         admin_password: initialPassword,

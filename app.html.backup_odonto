@@ -10,7 +10,7 @@
     <title>OCC - Odonto Connect Cloud</title>
     <link rel="icon" href="data:,">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260515_mobile_fix">
+    <link rel="stylesheet" href="styles.css?v=20260406_PREMIUM_FILTER">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
         #bootLoader {
@@ -488,7 +488,6 @@
                             <label for="dashRenewalsFilter" style="font-size: 0.85rem; color: var(--text-muted);">Filtro</label>
                             <select id="dashRenewalsFilter" class="form-control" style="max-width: 190px;">
                                 <option value="ALL">Todas</option>
-                                <option value="5DIAS">Vencem em 5 dias</option>
                                 <option value="ATIVO">Ativas</option>
                                 <option value="TRIAL">Trial</option>
                                 <option value="PENDENTE">Pendentes</option>
@@ -593,7 +592,7 @@
                     </div>
                 </div>
 
-                <div class="dash-card" id="dashFiscalPanelWrapper" style="margin-top: 1rem; display: none;">
+                <div class="dash-card" style="margin-top: 1rem;">
                     <div class="dash-card-header">
                         <div class="dash-card-title"><i class="ri-file-chart-line"></i> Monitoramento Fiscal (Hoje)</div>
                         <div class="dash-card-sub" id="dashFiscalSummary">—</div>
@@ -1818,6 +1817,7 @@
                 <div class="form-card" style="margin-bottom:1rem;">
                     <h3 class="card-title">Menu de Relatórios</h3>
                     <div style="display:flex; gap: 10px; flex-wrap:wrap;">
+                        <button id="btnStockReportHome" class="btn btn-primary"><i class="ri-dashboard-3-line"></i> Visão Geral</button>
                         <button id="btnStockReportAccuracy" class="btn btn-secondary"><i class="ri-scales-3-line"></i> Acuracidade</button>
                         <button id="btnStockReportReplenishment" class="btn btn-secondary"><i class="ri-alarm-warning-line"></i> Reposição</button>
                         <button id="btnStockReportCosts" class="btn btn-secondary"><i class="ri-funds-line"></i> Custos</button>
@@ -1825,8 +1825,11 @@
                         <button id="btnStockReportConsumption" class="btn btn-secondary"><i class="ri-file-list-3-line"></i> Consumo por Atendimento</button>
                         <button id="btnStockReportInventory" class="btn btn-secondary"><i class="ri-stack-line"></i> Inventário</button>
                         <button id="btnStockReportKits" class="btn btn-secondary"><i class="ri-function-line"></i> Kits</button>
+                        <button id="btnStockReportApuracao" class="btn btn-secondary"><i class="ri-line-chart-line"></i> Apuração Financeira</button>
                     </div>
                 </div>
+
+                <div id="stockReportsHomePanel" class="form-card" style="margin-bottom:1rem; border:2px solid #cbd5e1; border-radius:12px;"></div>
 
                 <div id="stockReportPanel" class="form-card hidden" style="margin-bottom:1rem; border:2px solid #cbd5e1; border-radius:12px;">
                     <div style="display:flex; gap: 10px; align-items:center; flex-wrap:wrap;">
@@ -2413,15 +2416,6 @@
                                     <option value="LUCRO_REAL">Lucro Real</option>
                                 </select>
                             </div>
-                        </div>
-                    </div>
-                    
-                    <div class="form-card" id="panelEmissaoFiscalWrapper" style="border:2px solid #60a5fa; background:linear-gradient(180deg,#eff6ff 0%,#ffffff 100%);">
-                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px;">
-                            <h3 class="card-title" style="color:#1d4ed8; margin-bottom:0;">Configuração de Emissão de Notas (NFS-e)</h3>
-                        </div>
-                        <div style="font-size:12px; color:#334155; margin-bottom:16px;">Configure os parâmetros técnicos para a emissão de notas fiscais através do Hub Fiscal.</div>
-                        <div class="form-grid" id="panelEmissaoFiscal">
                             <div class="form-group">
                                 <label for="fpFiscalCodigoServico">Código de Serviço</label>
                                 <input type="text" id="fpFiscalCodigoServico" value="04.01" placeholder="04.01">
@@ -2441,12 +2435,7 @@
                             <div class="form-group span-2">
                                 <div id="fpFiscalProviderCreds" style="border:1px dashed #93c5fd; border-radius:10px; background:#f8fbff; padding:10px;">
                                     <div id="fpFiscalCredFocus" class="fp-cred-box">
-                                        <label for="fpFiscalFocusModo" style="font-weight:700;">Modo de Operação</label>
-                                        <select id="fpFiscalFocusModo" style="margin-bottom: 8px;">
-                                            <option value="HOMOLOGACAO">Homologação (Sandbox)</option>
-                                            <option value="PRODUCAO">Produção</option>
-                                        </select>
-                                        <label for="fpFiscalFocusToken" style="font-weight:700;">Chave de API (Token)</label>
+                                        <label for="fpFiscalFocusToken" style="font-weight:700;">Token Focus NFe</label>
                                         <input type="text" id="fpFiscalFocusToken" placeholder="Token API da Focus NFe">
                                     </div>
                                     <div id="fpFiscalCredNfeIo" class="fp-cred-box hidden">
@@ -2586,10 +2575,7 @@
                         </div>
                     </div>
 
-                    <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
-                        <button type="button" id="btnAbortFinancialParams" class="btn btn-secondary" style="display:none;">
-                            <i class="ri-logout-box-r-line"></i> Sair (Abortar)
-                        </button>
+                    <div class="form-actions">
                         <button type="submit" id="btnSaveFinancialParams" class="btn btn-primary">
                             <i class="ri-save-line"></i> Salvar Parâmetros Financeiros
                         </button>
@@ -2646,8 +2632,8 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="empresaSupervisorPin">Senha do Supervisor</label>
-                                <input type="password" id="empresaSupervisorPin" placeholder="Ex: 1234">
+                                <label for="empresaSupervisorPin">Senha do Supervisor *</label>
+                                <input type="password" id="empresaSupervisorPin" required placeholder="Ex: 1234">
                             </div>
 
                             <div class="form-group">
@@ -2676,10 +2662,7 @@
 
                             <div class="form-group">
                                 <label for="empresaPlanoTipo">Plano (Tipo)</label>
-                                <select id="empresaPlanoTipo" class="form-control">
-                                    <option value="">Selecione um plano...</option>
-                                    <!-- Options will be populated dynamically -->
-                                </select>
+                                <input type="text" id="empresaPlanoTipo" placeholder="Ex: R$ 100,00 / R$ 200,00">
                             </div>
 
                             <div class="form-group">
@@ -2907,25 +2890,11 @@
                         <button id="btnFechamentoDiarioFull" class="btn btn-secondary">
                             <i class="ri-clipboard-line"></i> Fechamento Diário
                         </button>
-                        <button id="btnMenuContaPaciente" class="btn btn-secondary">
-                            <i class="ri-user-search-line"></i> Conta Paciente
-                        </button>
-                        <button id="btnStockReportHome" class="btn btn-primary">
-                            <i class="ri-dashboard-3-line"></i> Visão Geral
-                        </button>
-                        <button id="btnStockReportApuracao" class="btn btn-secondary">
-                            <i class="ri-line-chart-line"></i> Apuração Financeira
-                        </button>
-                        <button id="btnMenuExtratoTransacoes" class="btn btn-secondary">
-                            <i class="ri-list-check"></i> Extrato de Transações
-                        </button>
                         <button id="btnNovaTransacao" class="btn btn-primary">
                             <i class="ri-add-line"></i> Novo Lançamento
                         </button>
                     </div>
                 </div>
-
-                <div id="stockReportsHomePanel" class="form-card" style="margin-bottom:1rem; border:2px solid #cbd5e1; border-radius:12px;"></div>
 
                 <!-- Painel de Busca por Paciente -->
                 <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
@@ -2969,7 +2938,7 @@
                     </div>
                 </div>
 
-                <div class="card" id="financeiroEmissaoNotasWrapper" style="margin-bottom:1rem; display: none;">
+                <div class="card" style="margin-bottom:1rem;">
                     <h3 style="margin-bottom: 1rem; padding: 1rem 1rem 0;">Emissão de Notas</h3>
                     <div style="padding:0 1rem 1rem 1rem; color:var(--text-muted); font-size:12px;">Grid consolidada por Orçamento Fechado (emissão única por orçamento).</div>
                     <div style="overflow-x:auto;">
@@ -2994,45 +2963,11 @@
                 </div>
 
                 <!-- Tabela de Extrato de Transações -->
-                <div class="card" id="finExtratoCard" style="display: none;">
+                <div class="card">
                     <h3 style="margin-bottom: 1rem; padding: 1rem 1rem 0;">Extrato de Transações</h3>
-                    
-                    <!-- Filtros do Extrato -->
-                    <div style="display: flex; gap: 10px; padding: 0 1rem 1rem 1rem; flex-wrap: wrap; align-items: flex-end; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem;">
-                        <div class="form-group" style="margin: 0; min-width: 140px;">
-                            <label>Data Inicial</label>
-                            <input type="date" id="extratoFilterStart" class="form-control">
-                        </div>
-                        <div class="form-group" style="margin: 0; min-width: 140px;">
-                            <label>Data Final</label>
-                            <input type="date" id="extratoFilterEnd" class="form-control">
-                        </div>
-                        <div class="form-group" style="margin: 0; flex: 1; min-width: 200px;">
-                            <label>Paciente</label>
-                            <input type="text" id="extratoFilterPaciente" class="form-control" placeholder="Digite o nome do paciente...">
-                        </div>
-                        <div class="form-group" style="margin: 0; min-width: 150px;">
-                            <label>Forma de Pagamento</label>
-                            <select id="extratoFilterCategoria" class="form-control">
-                                <option value="TODAS">Todas</option>
-                                <option value="Dinheiro">Dinheiro</option>
-                                <option value="PIX">PIX</option>
-                                <option value="Cartão Débito">Cartão de Débito</option>
-                                <option value="Cartão Crédito">Cartão de Crédito</option>
-                                <option value="Boleto">Boleto</option>
-                                <option value="Transferência Bancária">Transferência Bancária</option>
-                                <option value="Cheque">Cheque</option>
-                                <option value="Outros">Outros</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="margin: 0;">
-                            <button id="btnFiltrarExtrato" class="btn btn-primary"><i class="ri-filter-3-line"></i> Filtrar</button>
-                        </div>
-                    </div>
-
-                    <div style="overflow-x: auto; overflow-y: auto; max-height: 400px; border-bottom: 1px solid var(--border-color);">
+                    <div style="overflow-x: auto;">
                         <table id="finTransacoesTable" style="width: 100%; border-collapse: collapse;">
-                            <thead style="position: sticky; top: 0; background-color: #f8fafc; z-index: 10;">
+                            <thead>
                                 <tr>
                                     <th
                                         style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">
@@ -4438,25 +4373,6 @@
         </main>
     </div>
 
-    <!-- Modal de Faces do Dente -->
-    <div class="modal-overlay hidden" id="modalOdontoFaces" style="z-index: 9999;">
-        <div class="modal-content" style="max-width:320px; padding:24px; text-align:center;">
-            <h3 style="margin-top:0; font-size:18px;" id="modalOdontoFacesTitle">Faces do Dente</h3>
-            <p style="color:var(--text-muted); font-size:14px; margin-bottom:20px;">Selecione as faces (opcional):</p>
-            <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-bottom:24px;" id="odontoFacesButtonsContainer">
-                <button class="btn btn-secondary odonto-face-btn" data-face="V" style="width:60px; height:60px; font-weight:bold; font-size:16px; border-radius:8px;">V</button>
-                <button class="btn btn-secondary odonto-face-btn" data-face="L/P" style="width:60px; height:60px; font-weight:bold; font-size:16px; border-radius:8px;">L/P</button>
-                <button class="btn btn-secondary odonto-face-btn" data-face="M" style="width:60px; height:60px; font-weight:bold; font-size:16px; border-radius:8px;">M</button>
-                <button class="btn btn-secondary odonto-face-btn" data-face="D" style="width:60px; height:60px; font-weight:bold; font-size:16px; border-radius:8px;">D</button>
-                <button class="btn btn-secondary odonto-face-btn" data-face="O/I" style="width:60px; height:60px; font-weight:bold; font-size:16px; border-radius:8px;">O/I</button>
-            </div>
-            <div style="display:flex; justify-content:space-between; gap:8px;">
-                <button class="btn btn-secondary" id="btnCancelFaces" style="flex:1;">Remover Dente</button>
-                <button class="btn btn-primary" id="btnConfirmFaces" style="flex:1;">OK</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Modal para Filtro de Impressão de Serviços -->
     <div id="servicePrintFilterModal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width: 400px;">
@@ -5341,39 +5257,17 @@
                     <input type="text" id="planoConfigTipoAssinatura" class="form-control" placeholder="Ex: Full">
                 </div>
                 <div class="form-group">
-                    <label for="planoConfigLegendaComercial">Texto de Destaque Comercial (Ex: Sem limite de dentistas)</label>
-                    <input type="text" id="planoConfigLegendaComercial" class="form-control" placeholder="Texto curto de destaque comercial">
-                </div>
-                <div class="form-group">
                     <label for="planoConfigValor">Valor do Plano</label>
                     <input type="text" id="planoConfigValor" class="form-control" placeholder="Ex: 300,00">
                 </div>
                 <div class="form-group">
-                    <label>Módulos Permitidos</label>
-                    <div id="planoModulosCheckboxContainer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; font-size: 0.85rem;">
-                        <label class="checkbox-label"><input type="checkbox" value="dashboard"> Dashboard</label>
-                        <label class="checkbox-label"><input type="checkbox" value="pacientes"> Pacientes</label>
-                        <label class="checkbox-label"><input type="checkbox" value="profissionais"> Profissionais</label>
-                        <label class="checkbox-label"><input type="checkbox" value="especialidades"> Especialidades</label>
-                        <label class="checkbox-label"><input type="checkbox" value="servicos"> Serviços</label>
-                        <label class="checkbox-label"><input type="checkbox" value="estoque"> Estoque</label>
-                        <label class="checkbox-label"><input type="checkbox" value="orcamentos"> Orçamentos</label>
-                        <label class="checkbox-label"><input type="checkbox" value="financeiro"> Financeiro</label>
-                        <label class="checkbox-label"><input type="checkbox" value="marketing"> Marketing</label>
-                        <label class="checkbox-label"><input type="checkbox" value="comissoes"> Comissões</label>
-                        <label class="checkbox-label"><input type="checkbox" value="atendimento"> Atendimento</label>
-                        <label class="checkbox-label"><input type="checkbox" value="agenda"> Agenda</label>
-                        <label class="checkbox-label"><input type="checkbox" value="protese"> Produção Protética</label>
-                        <label class="checkbox-label"><input type="checkbox" value="nfse"> Emitir NFS-e</label>
-                    </div>
-                </div>
-                <div class="form-group" style="display:none;">
-                    <input type="hidden" id="planoConfigModulos">
+                    <label for="planoConfigModulos">Módulos (Texto)</label>
+                    <textarea id="planoConfigModulos" class="form-control" rows="3" placeholder="Ex: Todos os módulos"></textarea>
                 </div>
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="planoConfigDestaque">
-                        Destacar no Site
+                        Plano em destaque
                     </label>
                 </div>
             </div>
@@ -5414,7 +5308,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <!-- App Script -->
-    <script src="app_v20.js?v=20260515_NFSE_FIX3"></script>
+    <script src="app_v20.js?v=20260422_PDF_STORAGE_FIX3"></script>
     <script>
         (function () {
             const areasClinicas = ['Dentística', 'Endodontia', 'Periodontia', 'Cirurgia', 'Implantodontia', 'Ortodontia', 'Harmonização Facial', 'Instrumental', 'Prótese', 'Biossegurança', 'Geral'];

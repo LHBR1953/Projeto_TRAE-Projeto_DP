@@ -58,7 +58,7 @@ function addDaysYmd(days: number): string {
 
 function isTrialPlanName(input: unknown): boolean {
   const k = normalizeKey(input);
-  return k === "TRIAL" || k.includes("TRIAL");
+  return k === "TRIAL" || k === "TRAIL" || k.includes("TRIAL") || k.includes("TRAIL");
 }
 
 function buildDefaultSpecialtyTemplate() {
@@ -314,6 +314,8 @@ Deno.serve(async (req) => {
         require_password_change: false,
       });
       await seedSpecialtiesForEmpresa(supabaseAdmin, empresaId);
+      const { error: importError } = await supabaseAdmin.rpc("rpc_import_default_templates", { p_empresa_id: empresaId });
+      if (importError) throw importError;
     } catch (e) {
       try { await supabaseAdmin.from("empresas").delete().eq("id", empresaId); } catch {}
       try { await supabaseAdmin.from("usuario_empresas").delete().eq("usuario_id", callerUser.id).eq("empresa_id", empresaId); } catch {}

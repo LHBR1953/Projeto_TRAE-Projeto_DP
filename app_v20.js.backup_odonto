@@ -552,31 +552,6 @@ function canStockAction(area, action, ctx = null) {
     return can(modByArea[a] || a, act);
 }
 
-async function checkEmpresaHasNfseModule() {
-    try {
-        const { data: empData, error: empErr } = await db.from('empresas').select('plano_tipo').eq('id', currentEmpresaId).single();
-        if (empErr) throw empErr;
-        if (!empData || !empData.plano_tipo) return false;
-        
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empData.plano_tipo);
-        let planData = null;
-        if (isUuid) {
-            const { data } = await db.from('config_planos').select('modulos_texto').eq('id', empData.plano_tipo).maybeSingle();
-            planData = data;
-        } else {
-            const { data } = await db.from('config_planos').select('modulos_texto').ilike('tipo_assinatura', empData.plano_tipo).maybeSingle();
-            planData = data;
-        }
-        if (planData && planData.modulos_texto) {
-            const mods = planData.modulos_texto.toLowerCase();
-            return mods.includes('nfse') || mods.includes('emitir nfs-e') || mods.includes('emitir nfs');
-        }
-    } catch (e) {
-        console.error("Erro ao verificar permissão do módulo NFSe no plano:", e);
-    }
-    return false;
-}
-
 function setupAdminManualOCC() {
     const btn = document.getElementById('btnAdminManualOCC');
     const overlay = document.getElementById('adminManualOverlay');
@@ -2861,25 +2836,23 @@ const empresaLogoBase64 = document.getElementById('empresaLogoBase64');
 const logoPreviewContainer = document.getElementById('logoPreviewContainer');
 
 const systemModules = [
-    { id: 'agenda', label: 'Agenda' },
-    { id: 'atendimento', label: 'Atendimento' },
-    { id: 'audit_cancelados', label: 'Audit Cancelados' },
-    { id: 'comissoes', label: 'Comissões' },
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'pacientes', label: 'Pacientes' },
+    { id: 'profissionais', label: 'Profissionais' },
     { id: 'especialidades', label: 'Especialidades' },
+    { id: 'servicos', label: 'Serviços/Estoque' },
     { id: 'estoque_inventario', label: 'Estoque: Inventário' },
     { id: 'estoque_modelos', label: 'Estoque: Modelos de Uso' },
+    { id: 'estoque_vinculos', label: 'Estoque: Vínculo de Serviços' },
     { id: 'estoque_movimentacoes', label: 'Estoque: Movimentações' },
     { id: 'estoque_relatorios', label: 'Estoque: Relatórios' },
-    { id: 'estoque_vinculos', label: 'Estoque: Vínculo de Serviços' },
-    { id: 'financeiro', label: 'Financeiro' },
-    { id: 'ia', label: 'Inteligência OCC' },
-    { id: 'marketing', label: 'Marketing' },
     { id: 'orcamentos', label: 'Orçamentos' },
-    { id: 'pacientes', label: 'Pacientes' },
-    { id: 'protese', label: 'Produção Protética' },
-    { id: 'profissionais', label: 'Profissionais' },
-    { id: 'servicos', label: 'Serviços/Estoque' }
+    { id: 'financeiro', label: 'Financeiro' },
+    { id: 'comissoes', label: 'Comissões' },
+    { id: 'marketing', label: 'Marketing' },
+    { id: 'atendimento', label: 'Atendimento' },
+    { id: 'agenda', label: 'Agenda' },
+    { id: 'protese', label: 'Produção Protética' }
 ];
 
 function buildFullPermissions() {
@@ -2978,19 +2951,12 @@ function showFinancialOnboardingModal() {
                 <div style="font-size:14px; color:#334155; line-height:1.5; margin-bottom:16px;">
                     Bem-vindo ao Sistema OCC! Para garantir a precisão dos seus cálculos de lucro e comissão, você precisa configurar seus Parâmetros Financeiros antes de começar. Clique aqui para configurar.
                 </div>
-                <div style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button id="btnAbortFinancialOnboarding" class="btn btn-secondary"><i class="ri-logout-box-r-line"></i> Sair do Sistema</button>
+                <div style="display:flex; justify-content:flex-end;">
                     <button id="btnGoFinancialParamsOnboarding" class="btn btn-primary"><i class="ri-calculator-line"></i> Configurar Agora</button>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
-        
-        const abort = document.getElementById('btnAbortFinancialOnboarding');
-        if (abort) abort.addEventListener('click', () => {
-            if (db) db.auth.signOut().then(() => window.location.replace('index.html'));
-        });
-
         const go = document.getElementById('btnGoFinancialParamsOnboarding');
         if (go) go.addEventListener('click', () => {
             hideFinancialOnboardingModal();
@@ -3015,12 +2981,6 @@ function refreshFinancialOnboardingLock(showModal = false) {
     const check = validateFinancialParamsCompleteness(financialParamsCache || {});
     financialOnboardingLocked = !check.ok;
     applyFinancialOnboardingMenuLock();
-
-    const abortBtn = document.getElementById('btnAbortFinancialParams');
-    if (abortBtn) {
-        abortBtn.style.display = financialOnboardingLocked ? 'inline-flex' : 'none';
-    }
-
     if (!financialOnboardingLocked) {
         hideFinancialOnboardingModal();
         try { localStorage.removeItem(getFinancialOnboardingStorageKey()); } catch { }
@@ -3036,32 +2996,12 @@ function refreshFinancialOnboardingLock(showModal = false) {
     }
 }
 
-function renderPermissionsGrid(existingPerms = null, targetEmpresaId = null) {
+function renderPermissionsGrid(existingPerms = null) {
     const tbody = document.getElementById('permissionsTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    let allowedModules = null; // null means all modules allowed
-    const empId = targetEmpresaId || currentEmpresaId;
-    if (empId && activeEmpresasList && typeof resolvePlanDisplayName === 'function') {
-        const emp = activeEmpresasList.find(e => e.id === empId);
-        if (emp && emp.plano_tipo && configPlanosList) {
-            const planName = resolvePlanDisplayName(emp.plano_tipo);
-            const planCfg = configPlanosList.find(p => p.tipo_assinatura === planName || p.id === emp.plano_tipo || p.tipo_assinatura === emp.plano_tipo);
-            if (planCfg && planCfg.modulos_texto) {
-                allowedModules = planCfg.modulos_texto.toLowerCase().split(',').map(s => s.trim());
-            }
-        }
-    }
-
     systemModules.forEach(mod => {
-        if (allowedModules) {
-            const isAllowed = allowedModules.includes(mod.label.toLowerCase()) || allowedModules.includes(mod.id.toLowerCase());
-            if (!isAllowed) {
-                return; // Skip rendering this module if it's not in the plan
-            }
-        }
-
         const tr = document.createElement('tr');
         const p = existingPerms ? existingPerms[mod.id] : { select: false, insert: false, update: false, delete: false };
 
@@ -3207,8 +3147,6 @@ const pagamentosPacientesStart = document.getElementById('pagamentosPacientesSta
 const pagamentosPacientesEnd = document.getElementById('pagamentosPacientesEnd');
 const pagamentosPacientesForma = document.getElementById('pagamentosPacientesForma');
 
-let currentAgendaAgendamentos = [];
-
 // Agenda DOM Elements
 const agendaDate = document.getElementById('agendaDate');
 const agendaProfessional = document.getElementById('agendaProfessional');
@@ -3351,16 +3289,6 @@ const btnCloseModalOdonto = document.getElementById('btnCloseModalOdonto');
 const btnCancelOdonto = document.getElementById('btnCancelOdonto');
 const btnConfirmOdonto = document.getElementById('btnConfirmOdonto');
 const odontogramaSvg = document.getElementById('odontogramaSvg');
-
-// Odontograma Faces Modal Elements
-const modalOdontoFaces = document.getElementById('modalOdontoFaces');
-const modalOdontoFacesTitle = document.getElementById('modalOdontoFacesTitle');
-const btnCancelFaces = document.getElementById('btnCancelFaces');
-const btnConfirmFaces = document.getElementById('btnConfirmFaces');
-const odontoFaceBtns = document.querySelectorAll('.odonto-face-btn');
-let currentEditingTooth = null;
-let currentToothFaces = new Set();
-let odontoSelectionsMap = new Map(); // Armazena { tooth: '18', faces: ['V', 'M'] }
 
 // Shared Inputs
 const inputCpf = document.getElementById('cpf');
@@ -3560,20 +3488,15 @@ function setActiveTab(tab) {
         if (navUsersAdminBtn) navUsersAdminBtn.classList.add('active');
         showList('usersAdmin');
     } else if (tab === 'empresas') {
-        const navEmp = document.getElementById('navEmpresas');
-        if (navEmp) navEmp.classList.add('active');
+        if (navEmpresas) navEmpresas.classList.add('active');
         showList('empresas');
     } else if (tab === 'assinaturas') {
         if (!isSuperAdmin) {
             showToast('Acesso restrito ao SuperAdmin.', true);
             return;
         }
-        const navAssinaturasEl = document.getElementById('navAssinaturas');
-        if (navAssinaturasEl) navAssinaturasEl.classList.add('active');
+        if (navAssinaturas) navAssinaturas.classList.add('active');
         showList('assinaturas');
-        // Forçar renderização e busca
-        if (typeof fetchConfigPlanos === 'function') fetchConfigPlanos();
-        if (typeof fetchAssinaturas === 'function') fetchAssinaturas();
     } else if (tab === 'myCompany') {
         if (navMyCompany) navMyCompany.classList.add('active');
         showList('myCompany');
@@ -3588,10 +3511,6 @@ function setActiveTab(tab) {
         const navFin = document.getElementById('navFinanceiro');
         if (navFin) navFin.classList.add('active');
         showList('financeiro');
-        // Define Visão Geral como default
-        if (typeof setStockReportsActive === 'function') {
-            setStockReportsActive('home');
-        }
     } else if (tab === 'commissions') {
         const navC = document.getElementById('navCommissions');
         if (navC) navC.classList.add('active');
@@ -8507,14 +8426,13 @@ function renderStockReportsActive({ key, startDate, endDate }) {
                             <div style="font-size:19px; font-weight:800; color:#0f172a;"><i class="ri-archive-line"></i> ${escapeHtml(formatCurrencyBRL(totalMat))}</div>
                         </div>
                     </div>
-                    <div style="display:grid; grid-template-columns: 1fr 180px 180px auto; gap:8px;">
+                    <div style="display:grid; grid-template-columns: 1fr 180px 180px; gap:8px;">
                         <select id="stockApurExecutorFilter" class="form-control">
                             <option value="">Todos os Executores</option>
                             ${exOptions.map(n => `<option value="${escapeHtml(n)}"${n === stockReportsApuracaoExecutorFilter ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}
                         </select>
                         <input id="stockApurStart" type="date" class="form-control" value="${escapeHtml(String(inventoryReportStartDate || ''))}">
                         <input id="stockApurEnd" type="date" class="form-control" value="${escapeHtml(String(inventoryReportEndDate || ''))}">
-                        <button type="button" class="btn btn-primary" onclick="openPrintExtratoFilter()"><i class="ri-printer-line"></i> Imprimir Extrato</button>
                     </div>
                 </div>
             `;
@@ -8927,15 +8845,6 @@ function renderStockReports() {
     if (String(stockReportsActiveKey || 'home') === 'home') {
         reportPanel.classList.add('hidden');
         homePanel.classList.remove('hidden');
-        
-        // Esconde a Busca e o Extrato na Visão Geral para ficar uma tela limpa só com gráficos
-        const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
-        const cardExtrato = document.getElementById('finExtratoCard');
-        const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
-        if (cardBusca) cardBusca.style.display = 'none';
-        if (cardExtrato) cardExtrato.style.display = 'none';
-        if (cardEmissao) cardEmissao.style.display = 'none';
-
         homePanel.innerHTML = `<div class="stock-dashboard-sub">Carregando...</div>`;
         renderStockReportsHome({ startDate, endDate }).catch((err) => {
             const msg = err && err.message ? String(err.message) : 'Falha ao carregar relatório.';
@@ -8946,44 +8855,6 @@ function renderStockReports() {
     }
     homePanel.classList.add('hidden');
     reportPanel.classList.remove('hidden');
-    
-    // Remove active class from all nav items so we don't accidentally hide our current view
-    // (Removido pois causava o sumiço do menu principal)
-
-    // Move dynamically to the correct section based on active report
-    if (stockReportsActiveKey === 'financial_apportion') {
-        const financeiroView = document.getElementById('financeiroView');
-        if (financeiroView && reportPanel.parentNode !== financeiroView) {
-            // Insere no financeiroView logo abaixo do stockReportsHomePanel para não bagunçar o Extrato
-            const anchor = document.getElementById('stockReportsHomePanel');
-            if (anchor && anchor.parentNode === financeiroView) {
-                financeiroView.insertBefore(reportPanel, anchor.nextSibling);
-            } else {
-                // Fallback seguro se não achar a âncora
-                financeiroView.appendChild(reportPanel);
-            }
-        }
-        
-        // Esconde o painel do Extrato de Transações para não ficar "uma bagunça" visual
-        const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
-        // Usa id dinâmico mais seguro para encontrar o wrapper inteiro do extrato e esconder
-        const cardExtrato = document.getElementById('finTransacoesTable')?.closest('.card');
-        if (cardBusca) cardBusca.style.display = 'none';
-        if (cardExtrato) cardExtrato.style.display = 'none';
-
-        // Garante que o container do app não ganhe scroll indesejado que "empurra" o menu
-        document.body.style.overflow = '';
-    } else {
-        const btnAcc = document.getElementById('btnStockReportAccuracy');
-        if (btnAcc) {
-            const relatoriosMenuDiv = btnAcc.closest('.form-card');
-            if (relatoriosMenuDiv && reportPanel.parentNode !== relatoriosMenuDiv.parentNode) {
-                // Insere logo abaixo do menu de relatórios
-                relatoriosMenuDiv.parentNode.insertBefore(reportPanel, relatoriosMenuDiv.nextSibling);
-            }
-        }
-    }
-
     renderStockReportsActive({ key: stockReportsActiveKey, startDate, endDate });
     bindGridArrowNavigation(reportPanel);
 }
@@ -9519,7 +9390,7 @@ function bindEstoqueModule() {
     }
     if (btnExportInventoryBiPdf) btnExportInventoryBiPdf.addEventListener('click', exportInventoryBiPdf);
     if (btnExportInventoryBiExcel) btnExportInventoryBiExcel.addEventListener('click', exportInventoryBiExcel);
-    if (btnStockReportHome) btnStockReportHome.addEventListener('click', () => { setStockReportsActive('home'); });
+    if (btnStockReportHome) btnStockReportHome.addEventListener('click', () => setStockReportsActive('home'));
     if (btnStockReportAccuracy) btnStockReportAccuracy.addEventListener('click', () => setStockReportsActive('accuracy'));
     if (btnStockReportReplenishment) btnStockReportReplenishment.addEventListener('click', () => setStockReportsActive('replenishment'));
     if (btnStockReportCosts) btnStockReportCosts.addEventListener('click', () => setStockReportsActive('costs'));
@@ -9527,91 +9398,7 @@ function bindEstoqueModule() {
     if (btnStockReportConsumption) btnStockReportConsumption.addEventListener('click', () => setStockReportsActive('consumption'));
     if (btnStockReportInventory) btnStockReportInventory.addEventListener('click', () => setStockReportsActive('inventory'));
     if (btnStockReportKits) btnStockReportKits.addEventListener('click', () => setStockReportsActive('kits'));
-    if (btnStockReportApuracao) btnStockReportApuracao.addEventListener('click', () => { setStockReportsActive('financial_apportion'); });
-    if (document.getElementById('btnMenuContaPaciente')) {
-        document.getElementById('btnMenuContaPaciente').addEventListener('click', () => {
-            stockReportsActiveKey = 'conta_paciente';
-            const financeiroView = document.getElementById('financeiroView');
-            const reportPanel = document.getElementById('stockReportPanel');
-            const homePanel = document.getElementById('stockReportsHomePanel');
-            const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
-            const cardSaldo = document.getElementById('finPainelSaldo');
-            const cardExtrato = document.getElementById('finExtratoCard');
-            const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
-
-            if (reportPanel) reportPanel.classList.add('hidden');
-            if (homePanel) homePanel.classList.add('hidden');
-            if (cardBusca) cardBusca.style.display = 'block';
-            
-            // Oculta a emissão por padrão, a menos que haja busca
-            if (cardEmissao) cardEmissao.style.display = 'none';
-            
-            // Mostra o Extrato e oculta os filtros (ou mantém, mas o padrão original era sem os filtros em cima, apenas a tabela)
-            // Como agora o Extrato virou um card com filtros, podemos apenas mostrar ele
-            if (cardExtrato) cardExtrato.style.display = 'block';
-
-            // Força reset de botões
-            const topButtons = financeiroView.querySelectorAll('.section-header .btn');
-            topButtons.forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
-            document.getElementById('btnMenuContaPaciente').classList.remove('btn-secondary');
-            document.getElementById('btnMenuContaPaciente').classList.add('btn-primary');
-        });
-    }
-
-    if (document.getElementById('btnMenuExtratoTransacoes')) {
-        document.getElementById('btnMenuExtratoTransacoes').addEventListener('click', () => {
-            // "Esconde" as outras telas de relatório e mostra o Extrato
-            stockReportsActiveKey = 'extrato'; // Para saber onde estamos
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            const navFin = document.getElementById('navFinanceiro');
-            if(navFin) navFin.classList.add('active');
-
-            const financeiroView = document.getElementById('financeiroView');
-            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-            if(financeiroView) financeiroView.classList.remove('hidden');
-
-            const reportPanel = document.getElementById('stockReportPanel');
-            const homePanel = document.getElementById('stockReportsHomePanel');
-            const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
-            const cardSaldo = document.getElementById('finPainelSaldo');
-            const cardExtrato = document.getElementById('finExtratoCard');
-            const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
-            
-            if (reportPanel) reportPanel.classList.add('hidden');
-            if (homePanel) homePanel.classList.add('hidden');
-            if (cardBusca) cardBusca.style.display = 'none';
-            if (cardSaldo) cardSaldo.classList.add('hidden');
-            if (cardEmissao) cardEmissao.style.display = 'none';
-
-            if (cardExtrato) {
-                cardExtrato.style.display = 'block';
-                // Remove preenchimento do combo que não existe mais, já que agora é um campo de texto livre
-
-                // Preenche datas default se vazio
-                const extStart = document.getElementById('extratoFilterStart');
-                const extEnd = document.getElementById('extratoFilterEnd');
-                if(extStart && !extStart.value) {
-                    const d = new Date();
-                    extStart.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
-                }
-                if(extEnd && !extEnd.value) {
-                    const d = new Date();
-                    extEnd.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-                }
-
-                // Dispara o filtro automaticamente ao abrir a aba
-                if(document.getElementById('btnFiltrarExtrato')) {
-                    document.getElementById('btnFiltrarExtrato').click();
-                }
-            }
-            
-            // Força reset de botões do menu do financeiro
-            const topButtons = financeiroView.querySelectorAll('.section-header .btn');
-            topButtons.forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
-            document.getElementById('btnMenuExtratoTransacoes').classList.remove('btn-secondary');
-            document.getElementById('btnMenuExtratoTransacoes').classList.add('btn-primary');
-        });
-    }
+    if (btnStockReportApuracao) btnStockReportApuracao.addEventListener('click', () => setStockReportsActive('financial_apportion'));
     if (btnStockReportBack) btnStockReportBack.addEventListener('click', () => setStockReportsActive('home'));
     syncStockReportInitialAdjustButton();
     if (btnStockReportPrint) btnStockReportPrint.addEventListener('click', printStockReportActive);
@@ -10016,11 +9803,7 @@ function renderTable(data = [], type = 'patients') {
                 <td>
                     ${subs && subs.length > 0
                     ? `<div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                            ${subs.map((sub, index) => {
-                                let n = sub && sub.nome ? sub.nome : String(sub || '');
-                                n = n.replace(/^\\d+\\.\\d+\\s*-\\s*/, '').trim();
-                                return '<span style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--text-color);"><strong>' + s.seqid + '.' + (index + 1) + '</strong> - ' + n + '</span>';
-                            }).join('')}
+                            ${subs.map((sub, index) => `<span style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--text-color);"><strong>${s.seqid}.${index + 1}</strong> - ${sub && sub.nome ? sub.nome : String(sub || '')}</span>`).join('')}
                            </div>`
                     : '<small style="color:var(--text-muted)">Nenhuma</small>'}
                 </td>
@@ -10051,12 +9834,11 @@ function renderTable(data = [], type = 'patients') {
         data.forEach(s => {
             const tr = document.createElement('tr');
             tr.dataset.id = String(s.id || '');
-            let sub = s.subdivisao ? s.subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim() : '';
             tr.innerHTML = `
                 <td>${s && s.codigo_servico ? String(s.codigo_servico) : String(s.seqid || '')}</td>
                 <td><strong>${s.descricao}</strong></td>
                 <td>
-                    ${sub ? `<span style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--text-color);">${sub}</span>` : '<small style="color:var(--text-muted)">-</small>'}
+                    ${s.subdivisao ? `<span style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--text-color);">${s.subdivisao}</span>` : '<small style="color:var(--text-muted)">-</small>'}
                 </td>
                 <td>R$ ${Number(s.valor).toFixed(2)}</td>
                 <td>${s.ie === 'S' ? 'Serviço' : 'Estoque'}</td>
@@ -10628,12 +10410,6 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
                 activeEmpresasList.forEach(emp => {
                     companySelect.innerHTML += `<option value="${emp.id}">${emp.nome}</option>`;
                 });
-                if (!companySelect.__bound) {
-                    companySelect.__bound = true;
-                    companySelect.addEventListener('change', () => {
-                        renderPermissionsGrid(null, companySelect.value);
-                    });
-                }
             } else {
                 companyContainer.style.display = 'none';
                 companySelect.required = false;
@@ -10666,28 +10442,19 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
                 const k = normalizeKey(dataObj.assinatura_status || '');
                 assinaturaStatusInput.value = (k === 'ATIVO' || k === 'PENDENTE' || k === 'TRIAL') ? k : 'TRIAL';
             }
-            if (planoTipoInput) {
-                planoTipoInput.innerHTML = '<option value="">Selecione um plano...</option>';
-                if (configPlanosList) {
-                    configPlanosList.forEach(p => {
-                        const opt = document.createElement('option');
-                        opt.value = p.id || p.tipo_assinatura;
-                        opt.textContent = p.tipo_assinatura;
-                        planoTipoInput.appendChild(opt);
-                    });
-                }
+            if (planoTipoInput) planoTipoInput.value = dataObj.plano_tipo || '';
+            if (planoTipoInput && planoTipoInput.tagName === 'SELECT') {
                 const v = String(dataObj.plano_tipo || '').trim();
-                if (v && !Array.from(planoTipoInput.options).some(o => String(o.value) === v)) {
+                if (v && !Array.from(planoTipoInput.options || []).some(o => String(o.value || '') === v)) {
                     const opt = document.createElement('option');
                     opt.value = v;
                     opt.textContent = v;
                     planoTipoInput.appendChild(opt);
+                    planoTipoInput.value = v;
                 }
-                planoTipoInput.value = v;
             }
             if (dataVencInput) dataVencInput.value = dataObj.data_vencimento ? String(dataObj.data_vencimento).slice(0, 10) : '';
             document.getElementById('empresaSupervisorPin').value = dataObj.supervisor_pin || '';
-            document.getElementById('empresaSupervisorPin').placeholder = 'Deixe em branco para manter a senha atual';
             base64Input.value = dataObj.logotipo || '';
             if (dataObj.logotipo) {
                 logoPreview.innerHTML = `<img src="${dataObj.logotipo}" style="width: 100%; height: 100%; object-fit: cover;">`;
@@ -10698,23 +10465,11 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
         } else {
             empresaForm.reset();
             document.getElementById('empresaSupervisorPin').value = '';
-            document.getElementById('empresaSupervisorPin').placeholder = 'Ex: 1234 (Obrigatório para nova empresa)';
             if (emailInput) emailInput.value = '';
             if (telInput) telInput.value = '';
             if (celInput) celInput.value = '';
             if (assinaturaStatusInput) assinaturaStatusInput.value = 'TRIAL';
-            if (planoTipoInput) {
-                planoTipoInput.innerHTML = '<option value="">Selecione um plano...</option>';
-                if (configPlanosList) {
-                    configPlanosList.forEach(p => {
-                        const opt = document.createElement('option');
-                        opt.value = p.id || p.tipo_assinatura;
-                        opt.textContent = p.tipo_assinatura;
-                        planoTipoInput.appendChild(opt);
-                    });
-                }
-                planoTipoInput.value = '';
-            }
+            if (planoTipoInput) planoTipoInput.value = '';
             if (dataVencInput) dataVencInput.value = '';
             base64Input.value = '';
             logoPreview.innerHTML = `<i class="ri-image-line" style="font-size: 1.5rem; color: var(--text-muted);"></i>`;
@@ -10781,9 +10536,8 @@ async function refreshServSubdivisaoLookupForEmpresa(empresaId) {
     (subsRes.data || []).forEach(sub => {
         const sid = String(sub && sub.id || '').trim();
         if (!sid) return;
-        let label = String(sub && sub.nome || '').trim();
+        const label = String(sub && sub.nome || '').trim();
         if (!label) return;
-        label = label.replace(/^\d+\.\d+\s*-\s*/, '').trim();
         const search = normalizeKey(label);
         map.set(label, sid);
         byId.set(sid, label);
@@ -11234,15 +10988,12 @@ function showList(type = 'patients') {
 
         // If SuperAdmin, we could potentially remove the filter, 
         // but let's stick to currentEmpresaId and see if it helps with isolation.
-        if (currentEmpresaId) {
+        if (!isSuperAdmin) {
             query = query.eq('empresa_id', currentEmpresaId);
         }
 
         (async () => {
             try {
-                if (!configPlanosList || configPlanosList.length === 0) {
-                    await fetchConfigPlanos();
-                }
                 const { data, error } = await withTimeout(query, 15000, 'usuario_empresas');
                 console.log("DEBUG Users Admin Raw Data:", data);
                 if (error) throw error;
@@ -11269,7 +11020,6 @@ function showList(type = 'patients') {
         if (btnAddNewEmpresa) btnAddNewEmpresa.style.display = isSuperAdmin ? 'inline-flex' : 'none';
         if (empresaForm) empresaForm.reset();
         document.getElementById('editEmpresaOldId').value = '';
-        fetchConfigPlanos();
         fetchEmpresas();
     } else if (type === 'assinaturas') {
         if (!isSuperAdmin) {
@@ -12963,7 +12713,7 @@ async function fetchAgendaRowsForFechamento({ dateStr, profSeqId }) {
     return data || [];
 }
 
-function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId, dateStr }) {
+function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId }) {
     const list = (agendaRows || []).filter(a => String(a.status || '') !== 'CANCELADO');
     const byPaciente = new Map();
     list.forEach(a => {
@@ -12997,12 +12747,6 @@ function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId, dateStr }) {
                 const st = String(it.status || it.item_status || '').trim();
                 const stKey = normalizeStatusKey(st);
                 if (stKey === 'CANCELADO') return;
-                
-                // Exigir que a data do item finalizado seja compatível com a data do Fechamento
-                // Como updated_at muda em qualquer edição do orçamento, usamos data_finalizacao (se existir) ou o created_at como fallback para evitar que itens antigos apareçam hoje.
-                const itemDateStr = it.data_finalizacao ? it.data_finalizacao.split('T')[0] : (it.created_at ? it.created_at.split('T')[0] : (it.updated_at ? it.updated_at.split('T')[0] : ''));
-                if (stKey === 'FINALIZADO' && itemDateStr && dateStr && itemDateStr !== dateStr) return;
-
                 const eligible = isFreeBudget || stKey === 'LIBERADO' || stKey === 'EMEXECUCAO' || stKey === 'FINALIZADO';
                 if (!eligible) return;
 
@@ -13215,7 +12959,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
 
         const profName = profSeqId ? getProfessionalNameBySeqId(profSeqId) : 'Todos';
         const humanDate = dateStr.split('-').reverse().join('/');
-        const rows = buildAtendimentoRowsFromAgenda({ agendaRows: agValid, profSeqId: profSeqId || '', dateStr });
+        const rows = buildAtendimentoRowsFromAgenda({ agendaRows: agValid, profSeqId: profSeqId || '' });
         const totalProduzido = rows.reduce((acc, r) => acc + Number(r.itemTotal || 0), 0);
         const totalFinalizados = rows.filter(r => normalizeStatusKey(r.itemStatus) === 'FINALIZADO').length;
         const totalFinalizadosValor = rows
@@ -14146,11 +13890,6 @@ async function refreshDashboardFromUI() {
     if (!dateStr) return;
     if (!hasBootDataContext()) return;
     await fetchDashboard({ dateStr, profSeqId: profSeqId ? Number(profSeqId) : null });
-    
-    // Ensure configPlanosList is loaded before rendering renewals so resolvePlanDisplayName works
-    if (!configPlanosList || configPlanosList.length === 0) {
-        await fetchConfigPlanos();
-    }
     renderSuperAdminRenewals();
 }
 
@@ -14204,15 +13943,17 @@ function renderSuperAdminRenewals() {
         .map(e => {
             const id = e && e.id ? String(e.id) : '';
             const nome = e && e.nome ? String(e.nome) : id || '—';
-            const statusRaw = String(e && e.assinatura_status || 'PENDENTE').toUpperCase();
-            const status = statusRaw === 'TRAIL' ? 'TRIAL' : statusRaw;
+            const status = String(e && e.assinatura_status || 'PENDENTE').toUpperCase();
             const venc = e && e.data_vencimento ? String(e.data_vencimento).slice(0, 10) : '';
             let vencDate = null;
             let diffDays = null;
+            let due = false;
             if (venc) {
                 const tmp = new Date(`${venc}T00:00:00`);
                 if (Number.isFinite(tmp.getTime())) {
                     vencDate = tmp;
+                    const threshold = new Date(vencDate.getTime() - (5 * dayMs));
+                    due = today.getTime() >= threshold.getTime();
                     diffDays = Math.ceil((vencDate.getTime() - today.getTime()) / dayMs);
                 }
             }
@@ -14220,12 +13961,9 @@ function renderSuperAdminRenewals() {
             const isActive = status === 'ATIVO';
             const isTrial = status === 'TRIAL';
             const isExpired = Number.isFinite(diffDays) && diffDays < 0;
-            return { id, nome, status, venc, vencDate, diffDays, isPending, isActive, isTrial, isExpired };
+            return { id, nome, status, venc, vencDate, diffDays, due, isPending, isActive, isTrial, isExpired };
         })
         .filter(r => r && r.id);
-
-    // Apenas quem vence nos próximos 5 dias (0 a 5)
-    const within5Days = allRows.filter(r => r.vencDate && r.diffDays >= 0 && r.diffDays <= 5);
 
     const rows = allRows
         .filter(r => {
@@ -14234,7 +13972,6 @@ function renderSuperAdminRenewals() {
             if (filterValue === 'TRIAL') return r.isTrial;
             if (filterValue === 'PENDENTE') return r.isPending;
             if (filterValue === 'VENCIDA') return r.isExpired;
-            if (filterValue === '5DIAS') return r.vencDate && r.diffDays >= 0 && r.diffDays <= 5;
             return true;
         })
         .sort((a, b) => {
@@ -14244,16 +13981,19 @@ function renderSuperAdminRenewals() {
             return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR');
         });
 
-    const total5Days = within5Days.length;
-    const activeCount = within5Days.filter(r => r.isActive).length;
-    const trialCount = within5Days.filter(r => r.isTrial).length;
+    const pendingCount = allRows.filter(r => r.isPending).length;
+    const expired = allRows.filter(r => r.isExpired).length;
+    const activeCount = allRows.filter(r => r.isActive).length;
+    const trialCount = allRows.filter(r => r.isTrial).length;
 
-    if (kpiVal) kpiVal.textContent = String(total5Days);
+    if (kpiVal) kpiVal.textContent = String(rows.length);
     if (kpiSub) {
         const parts = [];
         if (activeCount) parts.push(`${activeCount} ativa(s)`);
         if (trialCount) parts.push(`${trialCount} trial`);
-        kpiSub.textContent = parts.length ? parts.join(' | ') : 'Nenhuma no período';
+        if (pendingCount) parts.push(`${pendingCount} pendente(s)`);
+        if (expired) parts.push(`${expired} vencida(s)`);
+        kpiSub.textContent = parts.length ? parts.join(' | ') : '—';
     }
 
     if (sub) {
@@ -14262,8 +14002,7 @@ function renderSuperAdminRenewals() {
             : (filterValue === 'ATIVO' ? 'Clínicas ativas'
                 : (filterValue === 'TRIAL' ? 'Clínicas em trial'
                     : (filterValue === 'PENDENTE' ? 'Clínicas pendentes'
-                        : (filterValue === 'VENCIDA' ? 'Clínicas vencidas' 
-                            : (filterValue === '5DIAS' ? 'Vencem em até 5 dias' : 'Clínicas')))));
+                        : (filterValue === 'VENCIDA' ? 'Clínicas vencidas' : 'Clínicas'))));
         sub.textContent = `${label}: ${rows.length}`;
     }
 
@@ -14277,7 +14016,7 @@ function renderSuperAdminRenewals() {
     const statusBadgeHtml = (statusRaw) => {
         const status = String(statusRaw || 'PENDENTE').toUpperCase();
         if (status === 'ATIVO') return '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dcfce7; color:#166534; font-weight:700;">ATIVO</span>';
-        if (status === 'TRIAL' || status === 'TRAIL') return '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dbeafe; color:#1d4ed8; font-weight:700;">TRIAL</span>';
+        if (status === 'TRIAL') return '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dbeafe; color:#1d4ed8; font-weight:700;">TRIAL</span>';
         return '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#ffedd5; color:#c2410c; font-weight:700;">PENDENTE</span>';
     };
     const updateRenewalStatus = async (empresaId, newStatus) => {
@@ -14325,12 +14064,10 @@ function renderSuperAdminRenewals() {
                 : '—');
         const emp = (activeEmpresasList || []).find(e => String(e && e.id || '') === String(r.id || '')) || null;
         const planoVal = resolvePlanDisplayName(emp && emp.plano_tipo);
-        const statusValRaw = String(emp && emp.assinatura_status || 'PENDENTE').toUpperCase();
-        const statusVal = statusValRaw === 'TRAIL' ? 'TRIAL' : statusValRaw;
-        const planoDisplay = planoVal === 'TRAIL' ? 'TRIAL' : planoVal;
+        const statusVal = String(emp && emp.assinatura_status || 'PENDENTE').toUpperCase();
         tr.innerHTML = `
             <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);"><strong>${r.nome}</strong><br><small style="color: var(--text-muted);">${r.id}</small></td>
-            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${planoDisplay}</td>
+            <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${planoVal}</td>
             <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${vencBr}</td>
             <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${statusBadgeHtml(statusVal)}</td>
             <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color); text-align:right; ${(Number.isFinite(r.diffDays) && r.diffDays < 0) ? 'color: var(--danger-color); font-weight:700;' : ''}">${diasLabel}</td>
@@ -14381,14 +14118,8 @@ async function fetchDashboard({ dateStr, profSeqId }) {
     const kpiFiscalValorHoje = document.getElementById('kpiFiscalValorHoje');
     const dashFiscalSummary = document.getElementById('dashFiscalSummary');
     const dashFiscalRecentList = document.getElementById('dashFiscalRecentList');
-    const dashFiscalPanelWrapper = document.getElementById('dashFiscalPanelWrapper');
 
     try {
-        const hasNfse = await checkEmpresaHasNfseModule();
-        if (dashFiscalPanelWrapper) {
-            dashFiscalPanelWrapper.style.display = hasNfse ? 'block' : 'none';
-        }
-
         const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
 
         if (dashAgendaBody) {
@@ -18267,7 +17998,7 @@ async function markSelectedCommissionsPaid() {
 
     try {
         let q = db.from('financeiro_comissoes').update(payloadFull).in('id', idsToPay);
-        if (currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+        if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
         const { error } = await withTimeout(q, 15000, 'financeiro_comissoes:update');
         if (error) throw error;
         showToast('Comissões marcadas como pagas.');
@@ -18276,7 +18007,7 @@ async function markSelectedCommissionsPaid() {
     } catch (err) {
         try {
             let q2 = db.from('financeiro_comissoes').update(payloadFallback).in('id', idsToPay);
-            if (currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
+            if (!isSuperAdmin && currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
             const { error: e2 } = await withTimeout(q2, 15000, 'financeiro_comissoes:update2');
             if (e2) throw e2;
             showToast('Comissões marcadas como pagas.');
@@ -18311,7 +18042,7 @@ async function markSelectedCommissionsAdvanced() {
         const itemIds = Array.from(new Set(toAdvance.map(r => r.item_id).filter(Boolean).map(String)));
         if (itemIds.length) {
             let q = db.from('orcamento_itens').select('id,status').in('id', itemIds);
-            if (currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+            if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
             const { data, error } = await withTimeout(q, 15000, 'orcamento_itens:status_for_comm_advance');
             if (error) throw error;
             const statusDone = new Set(['finalizado', 'executado', 'atendido']);
@@ -18347,12 +18078,12 @@ async function markSelectedCommissionsAdvanced() {
     try {
         try {
             let q = db.from('financeiro_comissoes').update(payloadFull).in('id', ids);
-            if (currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+            if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
             const { error } = await withTimeout(q, 15000, 'financeiro_comissoes:advance');
             if (error) throw error;
         } catch (e1) {
             let q2 = db.from('financeiro_comissoes').update(payloadFallback).in('id', ids);
-            if (currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
+            if (!isSuperAdmin && currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
             const { error: e2 } = await withTimeout(q2, 15000, 'financeiro_comissoes:advance2');
             if (e2) throw e2;
         }
@@ -18461,18 +18192,18 @@ async function transferSelectedCommissionsToProfessional() {
 
         try {
             let q = db.from('financeiro_comissoes').update(payloadFull).in('id', ids);
-            if (currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
+            if (!isSuperAdmin && currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
             const { error } = await withTimeout(q, 15000, 'financeiro_comissoes:transfer:update');
             if (error) throw error;
         } catch (e1) {
             try {
                 let q2 = db.from('financeiro_comissoes').update(payloadFallback).in('id', ids);
-                if (currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
+                if (!isSuperAdmin && currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
                 const { error: e2 } = await withTimeout(q2, 15000, 'financeiro_comissoes:transfer:update2');
                 if (e2) throw e2;
             } catch (e2) {
                 let q3 = db.from('financeiro_comissoes').update(payloadMin).in('id', ids);
-                if (currentEmpresaId) q3 = q3.eq('empresa_id', currentEmpresaId);
+                if (!isSuperAdmin && currentEmpresaId) q3 = q3.eq('empresa_id', currentEmpresaId);
                 const { error: e3 } = await withTimeout(q3, 15000, 'financeiro_comissoes:transfer:update3');
                 if (e3) throw e3;
             }
@@ -18926,7 +18657,7 @@ window.editTenantUser = async function (usuario_id, empresa_id) {
 
     // Load permissions
     const perms = (u.permissoes && typeof u.permissoes === 'object') ? u.permissoes : {};
-    renderPermissionsGrid(perms, u.empresa_id || empId || currentEmpresaId);
+    renderPermissionsGrid(perms);
     if (normalizeRole(u.perfil) === 'admin') {
         applyAdminFullPermissionsToGrid();
     }
@@ -19172,8 +18903,6 @@ async function fetchAgendaDay({ empresaId, profSeqId, dateStr }) {
             .order('inicio', { ascending: true });
         const { data: ags, error: agErr } = await withTimeout(agQ, 15000, 'agenda_agendamentos');
         if (agErr) throw agErr;
-        
-        currentAgendaAgendamentos = ags || [];
 
         const dispQ = db.from('agenda_disponibilidade')
             .select('*')
@@ -19551,56 +19280,12 @@ if (agendaCard) {
 if (agendaDate) agendaDate.addEventListener('change', () => fetchAgendaForUI());
 if (agendaProfessional) agendaProfessional.addEventListener('change', () => fetchAgendaForUI());
 if (btnAgendaRefresh) btnAgendaRefresh.addEventListener('click', () => fetchAgendaForUI());
-function findNextAvailableAgendaSlotTime(dateStr, stepMins = 30) {
-    const now = new Date();
-    const parts = dateStr.split('-');
-    const yyyy = parseInt(parts[0], 10);
-    const MM = parseInt(parts[1], 10) - 1;
-    const dd = parseInt(parts[2], 10);
-    
-    let nextSlotTime = new Date(yyyy, MM, dd, now.getHours(), now.getMinutes(), 0, 0);
-
-    let m = nextSlotTime.getMinutes();
-    let rem = m % stepMins;
-    if (rem > 0) {
-        nextSlotTime.setMinutes(m + (stepMins - rem));
-    }
-
-    const msPerStep = stepMins * 60 * 1000;
-    const MAX_ITERATIONS = 48;
-    let iterations = 0;
-
-    while (iterations < MAX_ITERATIONS) {
-        const slotEnd = new Date(nextSlotTime.getTime() + msPerStep);
-        
-        const isOverlapping = currentAgendaAgendamentos.some(ag => {
-            if (ag.status === 'CANCELADO') return false;
-            const agStart = new Date(ag.inicio);
-            const agEnd = new Date(ag.fim);
-            return nextSlotTime < agEnd && slotEnd > agStart;
-        });
-
-        if (!isOverlapping) {
-            break;
-        }
-        
-        nextSlotTime = new Date(nextSlotTime.getTime() + msPerStep);
-        iterations++;
-    }
-
-    const hh = String(nextSlotTime.getHours()).padStart(2, '0');
-    const mm = String(nextSlotTime.getMinutes()).padStart(2, '0');
-    return `${hh}:${mm}`;
-}
-
 if (btnAgendaNew) btnAgendaNew.addEventListener('click', () => {
     if (!agendaDate || !agendaProfessional) return;
     const profSeqId = agendaProfessional.value;
     const dateStr = agendaDate.value;
     if (!profSeqId || !dateStr) { showToast('Selecione data e profissional.', true); return; }
-    
-    const nextTime = findNextAvailableAgendaSlotTime(dateStr, 30);
-    openAgendaModalNew({ dateStr, time: nextTime, step: 30, profSeqId: Number(profSeqId) });
+    openAgendaModalNew({ dateStr, time: '08:00', step: 30, profSeqId: Number(profSeqId) });
 });
 
 if (btnCloseModalAgenda) btnCloseModalAgenda.addEventListener('click', closeAgendaModal);
@@ -20663,11 +20348,8 @@ function renderSubSpecTable() {
             const rowStyle = (editingSubSpecIndex === index) ? "background-color: #fff4e5;" : "";
             tr.style.cssText += rowStyle;
 
-            let n = sub && sub.nome ? sub.nome : '';
-            n = n.replace(/^\d+\.\d+\s*-\s*/, '').trim();
-
             tr.innerHTML = `
-                <td style="padding: 8px;">${n}</td>
+                <td style="padding: 8px;">${sub.nome}</td>
                 <td style="padding: 8px; text-align: right;">
                     <button type="button" class="btn-icon" onclick="editSubSpec(${index})" title="Editar" style="padding: 4px; border: 1px solid #ddd; margin-right: 5px;">
                         <i class="ri-edit-line"></i>
@@ -20688,9 +20370,7 @@ window.editSubSpec = function (index) {
 
     editingSubSpecIndex = index;
     const nameInput = document.getElementById('subSpecNome');
-    let n = sub.nome || '';
-    n = n.replace(/^\d+\.\d+\s*-\s*/, '').trim();
-    nameInput.value = n;
+    nameInput.value = sub.nome;
     nameInput.focus();
 
     const btnAdd = document.getElementById('btnAddSubSpec');
@@ -21342,13 +21022,9 @@ window.editService = function (id) {
         if (subIdEl) subIdEl.value = directId;
         if (!subLabelEl) return;
         if (directId) {
-            let label = String(__subdivLookupById.get(directId) || '');
-            label = label.replace(/^\d+\.\d+\s*-\s*/, '').trim();
-            subLabelEl.value = label;
+            subLabelEl.value = String(__subdivLookupById.get(directId) || '');
         } else {
-            let label = String(s.subdivisao || '').trim();
-            label = label.replace(/^\d+\.\d+\s*-\s*/, '').trim();
-            subLabelEl.value = label;
+            subLabelEl.value = String(s.subdivisao || '').trim();
         }
     };
     initServSubdivisaoDbLookup(String(currentEmpresaId || ''));
@@ -21530,18 +21206,10 @@ function getSelectedBudgetService() {
 }
 
 function getOdontoSelectedTeethList() {
-    const raw = String(budItemOdontoTeeth && budItemOdontoTeeth.value || '').trim();
-    if (!raw) return [];
-    
-    // O mesmo regex usado em parseOdontoStringRobust para pegar dente ignorando faces
-    const parts = raw.match(/(?:[^,(]|\([^)]*\))+/g);
-    if (!parts) return [];
-    
-    return parts.map(p => {
-        const item = p.trim();
-        const match = item.match(/^(\d+)/);
-        return match ? match[1] : item;
-    }).filter(Boolean);
+    return String(budItemOdontoTeeth && budItemOdontoTeeth.value || '')
+        .split(',')
+        .map(s => String(s || '').trim())
+        .filter(Boolean);
 }
 
 function serviceRequiresOdonto(svc) {
@@ -21902,11 +21570,7 @@ function populateBudgetItemSubdivisaoDropdown() {
 
             spec.subdivisoes.forEach((sub, i) => {
                 const subCode = `${spec.seqid}.${i + 1}`;
-                let nomeClean = String(sub && sub.nome || '').trim();
-                // Remove existing prefix like "1.1 - ", "8.10 - ", etc. to avoid duplication
-                nomeClean = nomeClean.replace(/^\d+\.\d+\s*-\s*/, '').trim();
-                
-                const displayStr = `${subCode} - ${nomeClean}`;
+                const displayStr = `${subCode} - ${sub.nome}`;
                 const opt = document.createElement('option');
                 opt.value = displayStr;
                 opt.textContent = displayStr;
@@ -22062,146 +21726,6 @@ function updateBudgetItemFromService(serviceId) {
     return false;
 }
 
-function renderOdontoSelectionsMap() {
-    if (!odontogramaSvg) return;
-    odontogramaSvg.querySelectorAll('.tooth').forEach(g => {
-        const t = g.getAttribute('data-tooth');
-        if (odontoSelectionsMap.has(t)) {
-            g.classList.add('selected');
-        } else {
-            g.classList.remove('selected');
-        }
-    });
-}
-
-function parseOdontoStringIntoMap(valStr) {
-    odontoSelectionsMap.clear();
-    const parts = String(valStr || '').split(',').map(s => s.trim()).filter(Boolean);
-    
-    // Suporta formato antigo "18,17" e formato novo "18 (V,M), 17"
-    // Usamos vírgula para separar os dentes na raiz, então as faces dentro do parênteses não podem usar vírgula.
-    // O ideal seria usar vírgula e ter um regex forte, mas vamos adotar ';' ou espaço para separar faces se precisar,
-    // ou assumir que o sistema só usa "18 (V M)" ou "18 (V,M)" se ajustarmos o split.
-    // Vamos fazer um regex robusto para extrair `Dente (Faces)` ignorando a vírgula como split primário.
-}
-
-// Melhor função de parse para lidar com "18 (V, M), 17"
-function parseOdontoStringRobust(valStr) {
-    odontoSelectionsMap.clear();
-    const str = String(valStr || '').trim();
-    if (!str) return;
-    
-    // Divide por vírgula, mas IGNORA vírgulas dentro de parênteses
-    const parts = str.match(/(?:[^,(]|\([^)]*\))+/g);
-    if (!parts) return;
-
-    parts.forEach(p => {
-        const item = p.trim();
-        if (!item) return;
-        
-        const match = item.match(/^(\d+)(?:\s*\(([^)]+)\))?$/);
-        if (match) {
-            const tooth = match[1];
-            // Se tiver faces, divide por vírgula, ponto e vírgula ou espaço e limpa
-            const faces = match[2] ? match[2].split(/[,;\s]+/).map(f => f.trim()).filter(Boolean) : [];
-            odontoSelectionsMap.set(tooth, faces);
-        } else if (/^\d+$/.test(item)) {
-            odontoSelectionsMap.set(item, []);
-        }
-    });
-}
-
-function serializeOdontoMapToString() {
-    const arr = [];
-    // Para manter a ordem de inserção do Map
-    odontoSelectionsMap.forEach((faces, tooth) => {
-        if (faces && faces.length > 0) {
-            arr.push(`${tooth} (${faces.join(', ')})`);
-        } else {
-            arr.push(tooth);
-        }
-    });
-    return arr.join(', ');
-}
-
-function openOdontoFacesModal(toothId) {
-    currentEditingTooth = toothId;
-    currentToothFaces.clear();
-    
-    if (odontoSelectionsMap.has(toothId)) {
-        const savedFaces = odontoSelectionsMap.get(toothId) || [];
-        savedFaces.forEach(f => currentToothFaces.add(f));
-    }
-    
-    if (modalOdontoFacesTitle) {
-        modalOdontoFacesTitle.textContent = `Faces do Dente ${toothId}`;
-    }
-    
-    // Atualiza botões
-    odontoFaceBtns.forEach(btn => {
-        const face = btn.getAttribute('data-face');
-        if (currentToothFaces.has(face)) {
-            btn.classList.remove('btn-secondary');
-            btn.classList.add('btn-primary');
-        } else {
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-secondary');
-        }
-    });
-    
-    if (btnCancelFaces) {
-        btnCancelFaces.textContent = odontoSelectionsMap.has(toothId) ? 'Remover Dente' : 'Cancelar';
-    }
-    
-    if (modalOdontoFaces) {
-        modalOdontoFaces.classList.remove('hidden');
-    }
-}
-
-function bindOdontoFacesModalEvents() {
-    odontoFaceBtns.forEach(btn => {
-        if (btn.__boundFaces) return;
-        btn.__boundFaces = true;
-        btn.addEventListener('click', (e) => {
-            const face = btn.getAttribute('data-face');
-            if (currentToothFaces.has(face)) {
-                currentToothFaces.delete(face);
-                btn.classList.remove('btn-primary');
-                btn.classList.add('btn-secondary');
-            } else {
-                currentToothFaces.add(face);
-                btn.classList.remove('btn-secondary');
-                btn.classList.add('btn-primary');
-            }
-        });
-    });
-    
-    if (btnCancelFaces && !btnCancelFaces.__bound) {
-        btnCancelFaces.__bound = true;
-        btnCancelFaces.addEventListener('click', () => {
-            if (currentEditingTooth) {
-                // Remove o dente inteiro da seleção
-                odontoSelectionsMap.delete(currentEditingTooth);
-                renderOdontoSelectionsMap();
-            }
-            if (modalOdontoFaces) modalOdontoFaces.classList.add('hidden');
-            currentEditingTooth = null;
-        });
-    }
-    
-    if (btnConfirmFaces && !btnConfirmFaces.__bound) {
-        btnConfirmFaces.__bound = true;
-        btnConfirmFaces.addEventListener('click', () => {
-            if (currentEditingTooth) {
-                odontoSelectionsMap.set(currentEditingTooth, Array.from(currentToothFaces));
-                renderOdontoSelectionsMap();
-            }
-            if (modalOdontoFaces) modalOdontoFaces.classList.add('hidden');
-            currentEditingTooth = null;
-        });
-    }
-}
-
 function bindOdontogramaEvents() {
     if (btnOpenOdontograma && !btnOpenOdontograma.__bound) {
         btnOpenOdontograma.__bound = true;
@@ -22214,24 +21738,42 @@ function bindOdontogramaEvents() {
             }
             if (modalOdontograma) modalOdontograma.classList.remove('hidden');
             window.__odontoDraftStartVal = String(budItemOdontoTeeth && budItemOdontoTeeth.value || '');
-            parseOdontoStringRobust(window.__odontoDraftStartVal);
-            renderOdontoSelectionsMap();
+            const selected = new Set(String(budItemOdontoTeeth && budItemOdontoTeeth.value || '').split(',').filter(Boolean));
+            if (odontogramaSvg) {
+                odontogramaSvg.querySelectorAll('.tooth').forEach(g => {
+                    const t = g.getAttribute('data-tooth');
+                    if (selected.has(t)) g.classList.add('selected');
+                    else g.classList.remove('selected');
+                });
+            }
             syncBudgetItemCalcFromOdonto();
         });
     }
     if (btnCloseModalOdonto && !btnCloseModalOdonto.__bound) {
         btnCloseModalOdonto.__bound = true;
         btnCloseModalOdonto.addEventListener('click', () => {
-            parseOdontoStringRobust(window.__odontoDraftStartVal);
-            renderOdontoSelectionsMap();
+            if (odontogramaSvg) {
+                const selected = new Set(String(window.__odontoDraftStartVal || '').split(',').filter(Boolean));
+                odontogramaSvg.querySelectorAll('.tooth').forEach(g => {
+                    const t = g.getAttribute('data-tooth');
+                    if (selected.has(t)) g.classList.add('selected');
+                    else g.classList.remove('selected');
+                });
+            }
             if (modalOdontograma) modalOdontograma.classList.add('hidden');
         });
     }
     if (btnCancelOdonto && !btnCancelOdonto.__bound) {
         btnCancelOdonto.__bound = true;
         btnCancelOdonto.addEventListener('click', () => {
-            parseOdontoStringRobust(window.__odontoDraftStartVal);
-            renderOdontoSelectionsMap();
+            if (odontogramaSvg) {
+                const selected = new Set(String(window.__odontoDraftStartVal || '').split(',').filter(Boolean));
+                odontogramaSvg.querySelectorAll('.tooth').forEach(g => {
+                    const t = g.getAttribute('data-tooth');
+                    if (selected.has(t)) g.classList.add('selected');
+                    else g.classList.remove('selected');
+                });
+            }
             if (modalOdontograma) modalOdontograma.classList.add('hidden');
         });
     }
@@ -22242,34 +21784,23 @@ function bindOdontogramaEvents() {
                 ? e.target.closest('.tooth')
                 : null;
             if (!tooth) return;
-            const t = tooth.getAttribute('data-tooth');
-            if (!t) return;
-            
-            // Abre o modal de faces (adiciona o dente se já não estiver no Map)
-            if (!odontoSelectionsMap.has(t)) {
-                odontoSelectionsMap.set(t, []);
-            }
-            renderOdontoSelectionsMap();
-            openOdontoFacesModal(t);
+            tooth.classList.toggle('selected');
         });
     }
     if (btnConfirmOdonto && !btnConfirmOdonto.__bound) {
         btnConfirmOdonto.__bound = true;
         btnConfirmOdonto.addEventListener('click', () => {
-            const val = serializeOdontoMapToString();
+            const selected = odontogramaSvg
+                ? Array.from(odontogramaSvg.querySelectorAll('.tooth.selected')).map(el => el.getAttribute('data-tooth')).filter(Boolean)
+                : [];
+            const val = selected.join(',');
             if (budItemOdontoTeeth) budItemOdontoTeeth.value = val;
-            if (budItemOdontoDisplay) {
-                const elsMatch = val ? val.match(/(?:[^,(]|\([^)]*\))+/g) : [];
-                const list = elsMatch ? elsMatch.map(x => String(x).trim()) : [];
-                budItemOdontoDisplay.value = list.length ? list.join(' • ') : 'Nenhum dente selecionado';
-            }
+            if (budItemOdontoDisplay) budItemOdontoDisplay.value = selected.length ? selected.join(' • ') : 'Nenhum dente selecionado';
             window.__odontoDraftStartVal = '';
             syncBudgetItemCalcFromOdonto();
             if (modalOdontograma) modalOdontograma.classList.add('hidden');
         });
     }
-    
-    bindOdontoFacesModalEvents();
 }
 
 // Auto-fill Service Data in Add Item Panel (Delegated)
@@ -22322,7 +21853,7 @@ if (btnSaveAddItem) {
 
             const servId = servEl.value;
             const teethCsv = String(budItemOdontoTeeth && budItemOdontoTeeth.value || '').trim();
-            const teethList = getOdontoSelectedTeethList();
+            const teethList = teethCsv ? teethCsv.split(',').filter(Boolean) : [];
             const teethCount = teethList.length;
             const svc = (services || []).find(s => String(s && s.id || '') === servId) || null;
             const tipoCalc = String(svc && svc.tipo_calculo || '').trim().toLowerCase();
@@ -22411,8 +21942,7 @@ if (btnSaveAddItem) {
 
             // Use form field values as fallbacks in case servData lookup fails (e.g. type mismatch with DB IDs)
             const servicoDescricao = servData ? servData.descricao : (document.getElementById('budItemDescricao').value || servId);
-            let subdivisao = document.getElementById('budItemSubdivisao').value || (servData ? servData.subdivisao : '') || '-';
-            subdivisao = subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+            const subdivisao = document.getElementById('budItemSubdivisao').value || (servData ? servData.subdivisao : '') || '-';
 
             if (editingBudgetItemId) {
                 const idx = currentBudgetItems.findIndex(i => i.id === editingBudgetItemId);
@@ -22434,10 +21964,9 @@ if (btnSaveAddItem) {
                         status: currentBudgetItems[idx].status || 'Pendente'
                     };
                     if (porElemento) {
-                        const robustParts = teethCsv.match(/(?:[^,(]|\([^)]*\))+/g) || [];
-                        const firstTooth = robustParts[0] ? String(robustParts[0]).trim() : '';
+                        const firstTooth = teethList[0] ? String(teethList[0]) : '';
                         currentBudgetItems[idx] = { ...base, dentes: firstTooth };
-                        const rest = robustParts.slice(1).map(t => String(t).trim()).filter(Boolean);
+                        const rest = teethList.slice(1).map(t => String(t));
                         rest.forEach(t => {
                             currentBudgetItems.push({
                                 ...base,
@@ -22466,13 +21995,7 @@ if (btnSaveAddItem) {
                     status: 'Pendente'
                 };
                 if (porElemento) {
-                    // teethCsv tem o formato robusto "18 (V,M), 17"
-                    // Vamos quebrar exatamente pelos itens completos
-                    const robustParts = teethCsv.match(/(?:[^,(]|\([^)]*\))+/g) || [];
-                    
-                    robustParts.forEach(p => {
-                        const t = p.trim();
-                        if (!t) return;
+                    teethList.forEach(t => {
                         currentBudgetItems.push({
                             ...base,
                             id: generateId(),
@@ -22524,12 +22047,7 @@ function renderBudgetItemsTable() {
         const subtotal = (parseFloat(item.valor) || 0) * (parseInt(item.qtde) || 1);
         total += subtotal;
         const toothTag = String(item.dentes || '').trim();
-        const elsMatch = toothTag ? toothTag.match(/(?:[^,(]|\([^)]*\))+/g) : [];
-        const teethArr = elsMatch ? elsMatch.map(x => String(x).trim()) : [];
-        const toothDisplay = teethArr.length > 0 ? escapeHtml(teethArr.join(' • ')) : '—';
-        
-        let sub = item.subdivisao || '';
-        sub = sub.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+        const toothDisplay = toothTag ? escapeHtml(toothTag.split(',').filter(Boolean).join(' • ')) : '—';
 
         // Status badge logic
         const statusColors = {
@@ -22544,7 +22062,7 @@ function renderBudgetItemsTable() {
         tr.innerHTML = `
                 <td>${index + 1}</td>
                 <td><strong>${item.servicoDescricao}</strong></td>
-                <td>${sub}</td>
+                <td>${item.subdivisao}</td>
                 <td>${toothDisplay}</td>
                 <td>${item.qtde}</td>
                 <td>R$ ${(parseFloat(item.valor) || 0).toFixed(2)}</td>
@@ -22598,11 +22116,7 @@ function resolveBudgetCalcTransitionConflictsForPendingBudget(budgetId, nextStat
         const svc = services.find(s => String(s && s.id || '') === String(item && item.servicoId || ''));
         const tipoCalc = String(svc && svc.tipo_calculo || '').trim().toLowerCase();
         const porElemento = tipoCalc === 'por elemento' || tipoCalc === 'por_elemento' || tipoCalc === 'elemento';
-        
-        const rawDentes = String(item && item.dentes || '').trim();
-        const elsMatch = rawDentes ? rawDentes.match(/(?:[^,(]|\([^)]*\))+/g) : [];
-        const teeth = elsMatch ? elsMatch.map(x => String(x).trim()) : [];
-        
+        const teeth = String(item && item.dentes || '').split(',').filter(Boolean);
         const hasLegacyPack = teeth.length > 1 || toDec(item && item.qtde, 1) > 1;
         if (porElemento && hasLegacyPack) {
             conflicts.push({
@@ -22673,11 +22187,7 @@ window.editBudgetItem = function (itemId) {
     document.getElementById('budItemServicoId').value = item.servicoId || '';
     syncOdontoButtonForServiceId(item.servicoId || '');
     document.getElementById('budItemDescricao').value = item.servicoDescricao || '';
-    
-    let subValue = item.subdivisao || '';
-    subValue = subValue.replace(/^\d+\.\d+\s*-\s*/, '').trim();
-    document.getElementById('budItemSubdivisao').value = subValue;
-    
+    document.getElementById('budItemSubdivisao').value = item.subdivisao || '';
     document.getElementById('budItemValor').value = item.valor !== undefined ? formatCurrencyBR(item.valor) : '';
     document.getElementById('budItemQtde').value = String(item.qtde || 1);
     const qtdeEl = document.getElementById('budItemQtde');
@@ -22688,9 +22198,7 @@ window.editBudgetItem = function (itemId) {
     if (qtdeEl) qtdeEl.readOnly = fixo || porElemento;
     if (budItemOdontoTeeth) budItemOdontoTeeth.value = item.dentes ? String(item.dentes) : '';
     if (budItemOdontoDisplay) {
-        const rawList = String(item.dentes || '').trim();
-        const elsMatch = rawList ? rawList.match(/(?:[^,(]|\([^)]*\))+/g) : [];
-        const list = elsMatch ? elsMatch.map(x => String(x).trim()) : [];
+        const list = String(item.dentes || '').split(',').filter(Boolean);
         budItemOdontoDisplay.value = list.length ? list.join(' • ') : 'Nenhum dente selecionado';
     }
     document.getElementById('budItemExecutorId').value = item.profissionalId || '';
@@ -22812,11 +22320,7 @@ if (budgetForm) {
                 const tipoCalc = String(svc && svc.tipo_calculo || '').trim().toLowerCase();
                 const porElemento = tipoCalc === 'por elemento' || tipoCalc === 'por_elemento' || tipoCalc === 'elemento';
                 const fixo = tipoCalc === 'fixo';
-                
-                // Extrair dentes usando o Regex robusto
-                const rawDentes = String(item.dentes || '').trim();
-                const elsMatch = rawDentes ? rawDentes.match(/(?:[^,(]|\([^)]*\))+/g) : [];
-                const els = elsMatch ? elsMatch.map(x => String(x).trim()) : [];
+                const els = String(item.dentes || '').split(',').filter(Boolean);
 
                 return {
                     id: item.id || generateId(),
@@ -22825,11 +22329,11 @@ if (budgetForm) {
                     servico_id: item.servicoId,
                     valor: svc ? (Number(svc.valor) || 0) : item.valor,
                     qtde: (fixo || porElemento) ? 1 : item.qtde,
-                    elementos: porElemento ? (els[0] ? [els[0]] : []) : els,
+                    elementos: porElemento ? (els[0] ? [String(els[0])] : []) : els.map(x => String(x)),
                     protetico_id: proteticoObj ? parseInt(proteticoObj.seqid) : null,
                     valor_protetico: item.valorProtetico || 0,
                     profissional_id: executorObj ? parseInt(executorObj.seqid) : null,
-                    subdivisao: item.subdivisao ? item.subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim() : '',
+                    subdivisao: item.subdivisao || '',
                     status: item.status || 'Pendente'
                 };
             });
@@ -23041,15 +22545,12 @@ window.editBudget = function (id) {
         const els = item && item.elementos != null
             ? (Array.isArray(item.elementos) ? item.elementos : [])
             : [];
-            
-        let sub = item.subdivisao || (servData ? servData.subdivisao : '-');
-        sub = sub.replace(/^\d+\.\d+\s*-\s*/, '').trim();
 
         return {
             id: item.id,
             servicoId: item.servico_id,
             servicoDescricao: servData ? servData.descricao : 'Serviço Excluído/Desconhecido',
-            subdivisao: sub,
+            subdivisao: item.subdivisao || (servData ? servData.subdivisao : '-'),
             valor: item.valor,
             qtde: item.qtde,
             dentes: els.length ? els.map(x => String(x)).join(',') : '',
@@ -23168,15 +22669,11 @@ window.printBudget = function (id) {
         const dentes = formatOrcamentoItemElementos(item);
         const profNome = profData ? profData.nome : (item.proteticonome || '-');
         const executorNome = executorData ? executorData.nome : (item.executorNome || '-');
-        
-        let sub = item.subdivisao || (servData ? servData.subdivisao : '-');
-        sub = sub.replace(/^\d+\.\d+\s*-\s*/, '').trim();
-        
         const subtotal = (parseFloat(item.valor || 0) * parseInt(item.qtde || 1));
         return `
             <tr>
             <td>${idx + 1}</td>
-            <td>${servicoNome}<br><span style="font-size:10px;color:#6b7280;">${sub}</span></td>
+            <td>${servicoNome}</td>
             <td>${dentes || '-'}</td>
             <td style="text-align:center">${item.qtde || 1}</td>
             <td style="text-align:right">R$ ${parseFloat(item.valor || 0).toFixed(2)}</td>
@@ -23590,7 +23087,7 @@ window.printService = function (id) {
                                                     </div>
                                                     <div class="info-row">
                                                         <span class="label">Subdivis\u00e3o</span>
-                                                        <span class="value">${s.subdivisao ? s.subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim() : '-'}</span>
+                                                        <span class="value">${s.subdivisao || '-'}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -23642,13 +23139,12 @@ window.printServiceList = function (subFilter = '', orientation = 'landscape', f
         const bodyRows = chunk.map((s) => {
             const tipoCalculo = String(s && s.tipo_calculo || 'Fixo');
             const odontograma = (s && s.exige_elemento) ? 'SIM' : 'NÃO';
-            let sub = s.subdivisao ? s.subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim() : '-';
             return `
                 <tr>
                     <td>${s.seqid || ''}</td>
                     <td>${escapeHtml(String(s.descricao || ''))}</td>
                     <td>${s.ie === 'S' ? 'Serviço' : 'Estoque'}</td>
-                    <td>${escapeHtml(sub)}</td>
+                    <td>${escapeHtml(String(s.subdivisao || '-'))}</td>
                     <td>${escapeHtml(tipoCalculo)}</td>
                     <td>${odontograma}</td>
                     <td style="text-align: right;">R$ ${Number(s.valor || 0).toFixed(2)}</td>
@@ -24302,17 +23798,7 @@ if (userAdminForm) {
                 };
             });
             if (role === 'admin') {
-                // Ao invés de conceder todos os módulos cegamente, concedemos apenas os que estão visíveis na tela (pertencentes ao plano)
-                // Se for SuperAdmin, ele tem acesso irrestrito de qualquer forma pelo banco, mas para manter a consistência da UI, seguimos o que está renderizado.
-                systemModules.forEach(mod => {
-                    const hasRow = document.querySelector(`.perm-check[data-mod="${mod.id}"]`);
-                    permissions[mod.id] = {
-                        select: !!hasRow,
-                        insert: !!hasRow,
-                        update: !!hasRow,
-                        delete: !!hasRow
-                    };
-                });
+                permissions = buildFullPermissions();
             }
 
             if (id) {
@@ -24459,34 +23945,9 @@ function openPlanoConfigModal(item) {
     if (planoConfigModalTitle) planoConfigModalTitle.textContent = item ? 'Editar Plano' : 'Novo Plano';
     if (planoConfigId) planoConfigId.value = item && item.id ? String(item.id) : '';
     if (planoConfigTipoAssinatura) planoConfigTipoAssinatura.value = item && item.tipo_assinatura ? String(item.tipo_assinatura) : '';
-    
-    const planoConfigLegendaComercial = document.getElementById('planoConfigLegendaComercial');
-    if (planoConfigLegendaComercial) planoConfigLegendaComercial.value = item && item.legenda_comercial ? String(item.legenda_comercial) : '';
-    
     if (planoConfigValor) planoConfigValor.value = item && item.valor_plano ? String(item.valor_plano) : '';
-    
-    const modulosTxt = item && item.modulos_texto ? String(item.modulos_texto) : '';
-    const planoConfigModulosHidden = document.getElementById('planoConfigModulos');
-    if (planoConfigModulosHidden) planoConfigModulosHidden.value = modulosTxt;
+    if (planoConfigModulos) planoConfigModulos.value = item && item.modulos_texto ? String(item.modulos_texto) : '';
     if (planoConfigDestaque) planoConfigDestaque.checked = !!(item && item.destaque);
-    
-    const checkboxesContainer = document.getElementById('planoModulosCheckboxContainer');
-    if (checkboxesContainer) {
-        const selectedMods = modulosTxt.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-        checkboxesContainer.querySelectorAll('input[type="checkbox"]').forEach(chk => {
-            chk.checked = selectedMods.includes(chk.value.toLowerCase()) || selectedMods.includes(chk.parentElement.textContent.trim().toLowerCase());
-        });
-        
-        const updateHiddenInput = () => {
-            const checkedVals = Array.from(checkboxesContainer.querySelectorAll('input[type="checkbox"]:checked')).map(c => c.value);
-            if (planoConfigModulosHidden) planoConfigModulosHidden.value = checkedVals.join(', ');
-        };
-        
-        checkboxesContainer.querySelectorAll('input[type="checkbox"]').forEach(chk => {
-            chk.addEventListener('change', updateHiddenInput);
-        });
-    }
-
     planoConfigModal.classList.remove('hidden');
 }
 
@@ -24528,10 +23989,6 @@ if (btnSavePlanoConfigModal) btnSavePlanoConfigModal.addEventListener('click', a
     }
     const id = String(planoConfigId && planoConfigId.value || '').trim();
     const tipo = String(planoConfigTipoAssinatura && planoConfigTipoAssinatura.value || '').trim();
-    
-    const planoConfigLegendaComercial = document.getElementById('planoConfigLegendaComercial');
-    const legendaComercial = String(planoConfigLegendaComercial && planoConfigLegendaComercial.value || '').trim() || null;
-    
     const valor = String(planoConfigValor && planoConfigValor.value || '').trim();
     const modulos = String(planoConfigModulos && planoConfigModulos.value || '').trim();
     const destaque = !!(planoConfigDestaque && planoConfigDestaque.checked);
@@ -24541,7 +23998,6 @@ if (btnSavePlanoConfigModal) btnSavePlanoConfigModal.addEventListener('click', a
     }
     const payload = {
         tipo_assinatura: tipo,
-        legenda_comercial: legendaComercial,
         valor_plano: valor,
         modulos_texto: modulos,
         destaque
@@ -24606,7 +24062,6 @@ if (empresaForm) {
             const telefone = String((document.getElementById('empresaTelefone') || {}).value || '').trim();
             const celular = String((document.getElementById('empresaCelular') || {}).value || '').trim();
             const email = String((document.getElementById('empresaEmail') || {}).value || '').trim().toLowerCase();
-            const planoTipo = String((document.getElementById('empresaPlanoTipo') || {}).value || '').trim() || null;
 
             if (!email) {
                 showToast("E-mail da empresa é obrigatório.", true);
@@ -24614,12 +24069,6 @@ if (empresaForm) {
             }
 
             if (!oldId) {
-                if (!supervisorPin) {
-                    showToast("Senha do Supervisor é obrigatória ao criar nova empresa.", true);
-                    btnSave.disabled = false;
-                    btnSave.innerHTML = '<i class="ri-save-3-line"></i> Salvar Empresa';
-                    return;
-                }
                 const { data: { session } } = await db.auth.getSession();
                 if (!session) throw new Error("Sessão expirada.");
                 const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
@@ -24639,8 +24088,7 @@ if (empresaForm) {
                         telefone: telefone || null,
                         celular: celular || null,
                         logotipo: logo || null,
-                        assinatura_status: 'TRIAL',
-                        plano_tipo: planoTipo
+                        assinatura_status: 'TRIAL'
                     })
                 });
                 const result = await resp.json();
@@ -24652,89 +24100,30 @@ if (empresaForm) {
                 showToast(msg);
                 showToast(`📧 Login: ${email} | 🔑 Senha Inicial: 123456 (Será solicitado que você crie uma nova senha no primeiro acesso).`);
             } else {
-                if (oldId && oldId !== newId) {
-                    document.getElementById('empresaId').value = oldId;
-                    showToast('Não é permitido alterar o Identificador (ID) da empresa.', true);
-                    return;
-                }
-
-                const empresaData = {
-                    nome,
-                    email,
-                    telefone: telefone || null,
-                    celular: celular || null,
-                    logotipo: logo || null,
-                    plano_tipo: String((document.getElementById('empresaPlanoTipo') || {}).value || '').trim() || null,
-                    data_vencimento: String((document.getElementById('empresaDataVencimento') || {}).value || '').trim() || null,
-                    assinatura_status: String((document.getElementById('empresaAssinaturaStatus') || {}).value || '').trim() || null
-                };
-                
-                if (supervisorPin) {
-                    empresaData.supervisor_pin = supervisorPin;
-                }
-
-                const { error } = await db.from('empresas').update(empresaData).eq('id', oldId);
-                if (error) throw error;
-                showToast("Empresa salva com sucesso!");
-
-                // [INÍCIO] Sincronização automática de módulos para Admins após mudança de plano
-                try {
-                    if (empresaData.plano_tipo) {
-                    let allowedModules = null;
-                    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empresaData.plano_tipo);
-                    
-                    let planData = null;
-                    if (isUuid) {
-                        const { data } = await db.from('config_planos').select('modulos_texto').eq('id', empresaData.plano_tipo).maybeSingle();
-                        planData = data;
-                    } else {
-                        const { data } = await db.from('config_planos').select('modulos_texto').ilike('tipo_assinatura', empresaData.plano_tipo).maybeSingle();
-                        planData = data;
-                    }
-
-                    if (planData && planData.modulos_texto) {
-                        allowedModules = planData.modulos_texto.toLowerCase().split(',').map(s => s.trim());
-                    }
-
-                    const newAdminPerms = {};
-                    (systemModules || []).forEach(mod => {
-                        let isAllowed = true;
-                        if (allowedModules) {
-                            isAllowed = allowedModules.includes(mod.label.toLowerCase()) || allowedModules.includes(mod.id.toLowerCase());
-                        }
-                        newAdminPerms[mod.id] = { select: isAllowed, insert: isAllowed, update: isAllowed, delete: isAllowed };
-                    });
-
-                    const { error: permError } = await db.from('usuario_empresas')
-                        .update({ permissoes: newAdminPerms })
-                        .eq('empresa_id', oldId)
-                        .eq('perfil', 'admin');
-                    
-                    if (permError) {
-                        console.error("Erro ao sincronizar permissões do Admin após mudança de plano:", permError);
-                    } else {
-                        console.log(`Permissões sincronizadas para Admins da clínica ${oldId} conforme o plano ${empresaData.plano_tipo}`);
-                    }
-                }
-                } catch (syncErr) {
-                    console.error("Erro na rotina de sincronização de permissões:", syncErr);
-                }
-                // [FIM] Sincronização automática
-                
-                // Atualiza imediatamente a variável global se tivermos uma lista,
-                // garantindo que a renderização da UI não espere um recarregamento lento.
-                if (activeEmpresasList) {
-                    const idx = activeEmpresasList.findIndex(e => e.id === oldId);
-                    if (idx !== -1) {
-                        activeEmpresasList[idx] = { ...activeEmpresasList[idx], ...empresaData };
-                    }
-                }
-
-                showList('empresas');
-                if (typeof renderSuperAdminRenewals === 'function') {
-                    renderSuperAdminRenewals();
-                }
+            if (oldId && oldId !== newId) {
+                document.getElementById('empresaId').value = oldId;
+                showToast('Não é permitido alterar o Identificador (ID) da empresa.', true);
+                return;
             }
+
+            const empresaData = {
+                nome,
+                email,
+                telefone: telefone || null,
+                celular: celular || null,
+                logotipo: logo || null,
+                supervisor_pin: supervisorPin || null,
+                plano_tipo: String((document.getElementById('empresaPlanoTipo') || {}).value || '').trim() || null,
+                data_vencimento: String((document.getElementById('empresaDataVencimento') || {}).value || '').trim() || null,
+                assinatura_status: String((document.getElementById('empresaAssinaturaStatus') || {}).value || '').trim() || null
+            };
+
+            const { error } = await db.from('empresas').update(empresaData).eq('id', oldId);
+            if (error) throw error;
+            showToast("Empresa salva com sucesso!");
+            }
+
+            showList('empresas');
         } catch (err) {
             console.error("Error saving empresa:", err);
             showToast(err.message, true);
@@ -24776,7 +24165,7 @@ async function fetchConfigPlanos() {
     try {
         const { data, error } = await db
             .from('config_planos')
-            .select('*')
+            .select('id, tipo_assinatura, valor_plano, modulos_texto, destaque')
             .order('destaque', { ascending: false })
             .order('tipo_assinatura', { ascending: true });
         if (error) throw error;
@@ -24795,19 +24184,10 @@ function resolvePlanDisplayName(rawPlan) {
     if (!value) return '—';
     const key = normalizeKey(value);
     const list = Array.isArray(configPlanosList) ? configPlanosList : [];
-    
-    // Tenta achar pelo ID (caso UUID)
-    const byId = list.find(p => String(p.id).toLowerCase() === value.toLowerCase());
-    if (byId && byId.tipo_assinatura) return String(byId.tipo_assinatura);
-    
-    // Tenta achar pelo nome
     const byTipo = list.find(p => normalizeKey(p && p.tipo_assinatura || '') === key);
     if (byTipo && byTipo.tipo_assinatura) return String(byTipo.tipo_assinatura);
-    
-    // Tenta achar pelo valor
     const byValor = list.find(p => normalizeKey(p && p.valor_plano || '') === key);
     if (byValor && byValor.tipo_assinatura) return String(byValor.tipo_assinatura);
-    
     return value;
 }
 
@@ -24817,11 +24197,9 @@ function renderConfigPlanos() {
     const rows = Array.isArray(configPlanosList) ? [...configPlanosList] : [];
     if (rows.length === 0) {
         configPlanosEmptyState.classList.remove('hidden');
-        configPlanosTableBody.parentElement.style.display = 'none'; // Esconde a tabela se vazia
         return;
     }
     configPlanosEmptyState.classList.add('hidden');
-    configPlanosTableBody.parentElement.style.display = ''; // Mostra a tabela
     rows.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -25352,22 +24730,6 @@ function initFinancialParamsForm() {
         if (boxes[provider]) boxes[provider].classList.remove('hidden');
     };
 
-    const verifyPlanNfseModule = async () => {
-        try {
-            const hasNfse = await checkEmpresaHasNfseModule();
-            const wrapper = document.getElementById('panelEmissaoFiscalWrapper');
-            if (wrapper) {
-                if (!hasNfse) {
-                    wrapper.style.display = 'none';
-                } else {
-                    wrapper.style.display = 'block';
-                }
-            }
-        } catch (e) {
-            console.error("Erro ao verificar permissão do módulo NFSe no plano:", e);
-        }
-    };
-
     const refreshAutoRevenueIfNeeded = async () => {
         const manual = toDec((document.getElementById('fpFaturamento12m') || {}).value, 0);
         if (manual > 0) {
@@ -25383,7 +24745,6 @@ function initFinancialParamsForm() {
 
     const loadData = async () => {
         try {
-            await verifyPlanNfseModule();
             const params = await fetchCurrentCompanyFinancialParams();
             financialParamsCache = params;
             financialParamsCostsRows = (params.custos_operacionais || []).slice();
@@ -25423,13 +24784,11 @@ function initFinancialParamsForm() {
             setText('fpFiscalUf', fc.uf || '');
             setText('fpFiscalCodigoIbgeMunicipio', fc.codigo_ibge_municipio || '');
             setText('select_provedor_nfe', fc.provedor_nfe || 'FOCUS_NFE');
-            setText('fpFiscalFocusModo', fc.credenciais && fc.credenciais.focus_modo || 'HOMOLOGACAO');
             setText('fpFiscalFocusToken', fc.credenciais && fc.credenciais.focus_token || '');
             setText('fpFiscalNfeIoApiKey', fc.credenciais && fc.credenciais.nfeio_api_key || '');
             setText('fpFiscalPlugNotasApiKey', fc.credenciais && fc.credenciais.plugnotas_api_key || '');
             setText('fpFiscalEmissorCertA1', fc.credenciais && fc.credenciais.emissor_cert_a1 || '');
             setText('fpFiscalEmissorCertSenha', fc.credenciais && fc.credenciais.emissor_cert_senha || '');
-            
             applyFiscalProviderUi();
             await refreshAutoRevenueIfNeeded();
             renderFinancialCostsTable();
@@ -25543,13 +24902,6 @@ function initFinancialParamsForm() {
             providerEl.__boundProviderUi = true;
             providerEl.addEventListener('change', applyFiscalProviderUi);
         }
-        
-        const toggleEmissao = document.getElementById('toggleEmissaoFiscal');
-        if (toggleEmissao && !toggleEmissao.__boundToggleUi) {
-            toggleEmissao.__boundToggleUi = true;
-            toggleEmissao.addEventListener('change', applyFiscalToggleUi);
-        }
-        
         const fiscalCepEl = document.getElementById('fpFiscalCep');
         if (fiscalCepEl && !fiscalCepEl.__boundFiscalCep) {
             fiscalCepEl.__boundFiscalCep = true;
@@ -25600,7 +24952,6 @@ function initFinancialParamsForm() {
                         gordura_percentual: toDec((document.getElementById('fpGordura') || {}).value, 0)
                     },
                     fiscal_config: {
-                        emissao_habilitada: true, // Sempre verdadeiro se o painel está visível e sendo salvo
                         razao_social: String((document.getElementById('fpFiscalRazaoSocial') || {}).value || '').trim(),
                         cnpj: String((document.getElementById('fpFiscalCnpj') || {}).value || '').trim(),
                         inscricao_municipal: String((document.getElementById('fpFiscalInscricaoMunicipal') || {}).value || '').trim(),
@@ -25608,7 +24959,6 @@ function initFinancialParamsForm() {
                         codigo_servico: String((document.getElementById('fpFiscalCodigoServico') || {}).value || '04.01').trim() || '04.01',
                         provedor_nfe: String((document.getElementById('select_provedor_nfe') || {}).value || 'FOCUS_NFE').trim() || 'FOCUS_NFE',
                         credenciais: {
-                            focus_modo: String((document.getElementById('fpFiscalFocusModo') || {}).value || 'HOMOLOGACAO').trim(),
                             focus_token: String((document.getElementById('fpFiscalFocusToken') || {}).value || '').trim(),
                             nfeio_api_key: String((document.getElementById('fpFiscalNfeIoApiKey') || {}).value || '').trim(),
                             plugnotas_api_key: String((document.getElementById('fpFiscalPlugNotasApiKey') || {}).value || '').trim(),
@@ -25654,17 +25004,6 @@ function initFinancialParamsForm() {
         });
     }
     loadData();
-
-    const abortBtn = document.getElementById('btnAbortFinancialParams');
-    if (abortBtn) {
-        abortBtn.style.display = financialOnboardingLocked ? 'inline-flex' : 'none';
-        if (!abortBtn.__boundAbortFp) {
-            abortBtn.__boundAbortFp = true;
-            abortBtn.addEventListener('click', () => {
-                if (db) db.auth.signOut().then(() => window.location.replace('index.html'));
-            });
-        }
-    }
 }
 
 function initMyCompanyForm() {
@@ -26805,7 +26144,6 @@ function getFiscalProviderFromConfig(fiscalCfg) {
 function getFiscalProviderCredentials(fiscalCfg) {
     const c = fiscalCfg && fiscalCfg.credenciais ? fiscalCfg.credenciais : {};
     return {
-        focus_modo: String(c.focus_modo || 'HOMOLOGACAO').trim(),
         focus_token: String(c.focus_token || '').trim(),
         nfeio_api_key: String(c.nfeio_api_key || '').trim(),
         plugnotas_api_key: String(c.plugnotas_api_key || '').trim(),
@@ -26816,61 +26154,17 @@ function getFiscalProviderCredentials(fiscalCfg) {
 
 const OCC_NFE_ADAPTERS = {
     async FOCUS_NFE(ctx) {
+        const now = new Date().toISOString();
         const ref = String(ctx && ctx.payload && ctx.payload.referencia_id || '').trim();
         const token = String(ctx && ctx.credentials && ctx.credentials.focus_token || '').trim();
-        const modo = String(ctx && ctx.credentials && ctx.credentials.focus_modo || 'HOMOLOGACAO').trim();
-        const nfeData = ctx.jsonBase || {};
-        
-        if (!token) {
-            throw new Error("Token da Focus NFe não configurado para esta clínica.");
-        }
-
-        try {
-            // Em vez de usar supabase.functions.invoke, vamos usar o db.functions.invoke que já está inicializado no escopo global
-            const { data, error } = await db.functions.invoke('focus-nfe-api', {
-                body: {
-                    token: token,
-                    modo: modo,
-                    ref: ref,
-                    nfeData: nfeData
-                }
-            });
-
-            if (error) {
-                console.error("Erro na Edge Function focus-nfe-api:", error);
-                throw new Error("Erro de comunicação com o servidor fiscal.");
-            }
-
-            if (!data.success) {
-                const errorMsg = data.error || 'Erro desconhecido da Focus NFe';
-                const details = data.details ? JSON.stringify(data.details) : '';
-                throw new Error(`Focus NFe recusou a emissão: ${errorMsg} ${details}`);
-            }
-
-            const responseData = data.data || {};
-            const isProcessando = responseData.status === 'processando';
-            const status_nota = isProcessando ? 'PROCESSANDO' : (responseData.status === 'autorizado' ? 'CONCLUIDO' : 'ERRO');
-
-            return {
-                status_nota: status_nota,
-                // Corrige a geração da URL do PDF: usa a URL retornada pela Focus NFe na simulação
-                pdf_url: responseData.url || (responseData.caminho_xml_nota_fiscal ? `https://api.focusnfe.com.br${responseData.caminho_xml_nota_fiscal.replace('.xml', '.pdf')}` : ''),
-                xml_retorno: JSON.stringify(responseData),
-                mensagem_sefaz: isProcessando ? 'Focus NFe: Nota em processamento.' : 'Focus NFe: retorno integrado com sucesso.',
-                numero_nota: String(responseData.numero || ''),
-                chave_acesso: String(responseData.cnpj_prestador || '') + String(responseData.numero || '') // Simplificação
-            };
-        } catch (err) {
-            console.error("Falha ao chamar a Edge Function da Focus NFe:", err);
-            return {
-                status_nota: 'ERRO',
-                pdf_url: '',
-                xml_retorno: err.message,
-                mensagem_sefaz: 'Erro na integração com Focus NFe: ' + err.message,
-                numero_nota: '',
-                chave_acesso: ''
-            };
-        }
+        return {
+            status_nota: 'CONCLUIDO',
+            pdf_url: token ? 'https://focusnfe.com.br/exemplo_nota.pdf' : 'https://focusnfe.com.br/exemplo_nota.pdf',
+            xml_retorno: `<focusnfe><status>CONCLUIDO</status><referencia>${escapeHtml(ref)}</referencia><data>${now}</data></focusnfe>`,
+            mensagem_sefaz: 'Focus NFe: envio processado em modo de integração controlada.',
+            numero_nota: `FCS-${ref}-${String(now).slice(0, 10).replace(/-/g, '')}`,
+            chave_acesso: `FOCUS-${ref}-${String(now).replace(/\D/g, '').slice(0, 24)}`
+        };
     },
     async NFE_IO(ctx) {
         const now = new Date().toISOString();
@@ -26963,12 +26257,10 @@ function buildFocusNfeJson({ budgetRef, patient, fiscal, ibgeCode, valorBruto, d
             razao_social: String(fiscal && fiscal.razao_social || '').trim(),
             cnpj: String(fiscal && fiscal.cnpj || '').replace(/\D/g, ''),
             inscricao_municipal: String(fiscal && fiscal.inscricao_municipal || '').trim(),
-            codigo_municipio: String(fiscal && fiscal.codigo_ibge_municipio || '').trim(),
             regime_tributario: String(fiscal && fiscal.regime_tributario || '').trim()
         },
         tomador: {
             nome: String(patient && patient.nome || 'Paciente').trim(),
-            razao_social: String(patient && patient.nome || 'Paciente').trim(),
             cpf: String(patient && patient.cpf || '').replace(/\D/g, ''),
             endereco: {
                 logradouro: String(patient && patient.endereco || '').trim(),
@@ -26976,18 +26268,18 @@ function buildFocusNfeJson({ budgetRef, patient, fiscal, ibgeCode, valorBruto, d
                 bairro: String(patient && patient.bairro || '').trim(),
                 cidade: String(patient && patient.cidade || '').trim(),
                 uf: String(patient && patient.uf || '').trim().toUpperCase(),
-                codigo_municipio: String(ibgeCode || '').trim(),
+                codigo_municipio_ibge: String(ibgeCode || '').trim(),
                 cep: String(patient && patient.cep || '').replace(/\D/g, '')
             },
             email: String(patient && patient.email || '').trim()
         },
         servico: {
             item_lista_servico: codigoServico,
-            codigo_tributario_municipio: codigoServico,
+            codigo_servico: codigoServico,
             discriminacao: String(discriminacaoServico || `Serviços Odontológicos ref. ao Orçamento #${budgetRef}`),
             valor_servicos: Number(valor.toFixed(2)),
             iss_retido: false,
-            codigo_municipio: String(fiscal && fiscal.codigo_ibge_municipio || '').trim()
+            municipio_prestacao: String(fiscal && fiscal.codigo_ibge_municipio || '').trim()
         },
         referencia: {
             transacao_id: '',
@@ -27029,17 +26321,6 @@ async function saveFinanceiroNotaTeste(payload) {
 }
 
 async function renderFinanceiroNotasGrid() {
-    const wrapper = document.getElementById('financeiroEmissaoNotasWrapper');
-    const hasNfse = await checkEmpresaHasNfseModule();
-    if (wrapper) {
-        if (!hasNfse) {
-            wrapper.style.display = 'none';
-            return;
-        } else {
-            wrapper.style.display = 'block';
-        }
-    }
-
     if (!finNotasBody) return;
     const txRowsRaw = (transactions || [])
         .filter(t => String(t && t.tipo || '').toUpperCase() === 'CREDITO' && String(t && t.categoria || '').toUpperCase() === 'PAGAMENTO')
@@ -27209,9 +26490,6 @@ window.emitirNotaTesteFinanceiro = async function (budgetRef) {
         const provider = getFiscalProviderFromConfig(fiscalCfg);
         const credentials = getFiscalProviderCredentials(fiscalCfg);
         const providerResult = await dispatchFiscalHubNfe({ provider, credentials, payload: notaPayload, jsonBase: jsonTeste });
-        if (providerResult && providerResult.status_nota === 'ERRO') {
-            throw new Error(providerResult.mensagem_sefaz || providerResult.xml_retorno);
-        }
         await updateFinanceiroNotaProviderResult(notaPayload, providerResult, provider);
         showToast(`🟢 ${provider.replace('_', ' ')} -> Dados validados com sucesso! JSON gerado e retorno fiscal persistido.`);
         void renderFinanceiroNotasGrid();
@@ -27227,17 +26505,6 @@ window.emitirNotaTesteFinanceiro = async function (budgetRef) {
 
 async function fetchTransactions(patientId = null) {
     try {
-        const nfseWrapper = document.getElementById('financeiroEmissaoNotasWrapper');
-        if (nfseWrapper) {
-            checkEmpresaHasNfseModule().then(hasNfse => {
-                nfseWrapper.style.display = hasNfse ? 'block' : 'none';
-            });
-        }
-
-        // Mostra o card do extrato para os resultados da busca
-        const cardExtrato = document.getElementById('finExtratoCard');
-        if (cardExtrato) cardExtrato.style.display = 'block';
-
         if (finTransacoesBody) {
             finTransacoesBody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando...</td></tr>';
         }
@@ -27247,7 +26514,7 @@ async function fetchTransactions(patientId = null) {
             .select('*')
             .order('data_transacao', { ascending: false });
 
-        if (currentEmpresaId) {
+        if (!isSuperAdmin && currentEmpresaId) {
             query = query.eq('empresa_id', currentEmpresaId);
         }
 
@@ -27267,10 +26534,6 @@ async function fetchTransactions(patientId = null) {
             transactions = [];
             renderTable([], 'financeiro');
             if (finNotasBody) finNotasBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:1rem; color:var(--text-muted);">Nenhum atendimento financeiro disponível para emissão.</td></tr>';
-            
-            // Garantir que a área de NFS-e seja ocultada mesmo se não houver dados, caso não haja permissão
-            await renderFinanceiroNotasGrid();
-
             if (window.__dpDebug) {
                 const body = document.getElementById('finTransacoesBody');
                 window.__dpDebug.lastRenderRows = body ? body.children.length : null;
@@ -27573,209 +26836,6 @@ async function deleteTransaction(id) {
         btnFinVerTodos.addEventListener('click', () => {
             if (finPainelSaldo) finPainelSaldo.classList.add('hidden');
             fetchTransactions();
-        });
-    }
-
-    const btnFiltrarExtrato = document.getElementById('btnFiltrarExtrato');
-    if (btnFiltrarExtrato) {
-        btnFiltrarExtrato.addEventListener('click', async () => {
-            const start = document.getElementById('extratoFilterStart').value;
-            const end = document.getElementById('extratoFilterEnd').value;
-            const pacText = document.getElementById('extratoFilterPaciente').value.trim().toLowerCase();
-            const cat = document.getElementById('extratoFilterCategoria').value;
-
-            if (finTransacoesBody) {
-                finTransacoesBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 2rem; color: var(--text-muted);">Filtrando transações...</td></tr>';
-            }
-
-            // Removendo a montagem do "query" antigo daqui, tudo vai pra queryBase lá embaixo
-            try {
-                // O supabase falha em queries muito complexas com dados nulos, vamos apenas buscar tudo da empresa 
-                // e fazer a filtragem de datas e formas de pagamento localmente, igual fazemos com paciente.
-                // Isso garante 100% de precisão e evita erros do backend.
-                let queryBase = db.from('financeiro_transacoes')
-                    .select('*')
-                    .order('data_transacao', { ascending: false });
-                    
-                if (currentEmpresaId) {
-                    queryBase = queryBase.eq('empresa_id', currentEmpresaId);
-                }
-
-                const { data, error } = await queryBase;
-                if (error) {
-                    console.error("Supabase Error na queryBase:", error);
-                    throw error;
-                }
-                
-                // Filtros locais (Memória) - Totalmente precisos e imunes a falhas de timeout de DB
-                let localData = data || [];
-                
-                // Filtro 1: Data Inicial
-                if (start) {
-                    const startVal = start + 'T00:00:00';
-                    localData = localData.filter(t => t.data_transacao >= startVal);
-                }
-                
-                // Filtro 2: Data Final
-                if (end) {
-                    const endVal = end + 'T23:59:59';
-                    localData = localData.filter(t => t.data_transacao <= endVal);
-                }
-                
-                // Filtro 3: Categoria (Forma de Pagamento)
-                if (cat !== 'TODAS') {
-                    // Para evitar problemas com acentos e palavras diferentes (ex: Cartão de Débito vs Cartão Débito)
-                    // Normalizamos removendo acentos E a palavra "de " antes de comparar
-                    const normalizeStr = (str) => {
-                        let n = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-                        return n.replace(" de ", " ");
-                    };
-                    const catLower = normalizeStr(cat);
-                    
-                    localData = localData.filter(t => {
-                        const formaPgto = normalizeStr(t.forma_pagamento || '');
-                        return formaPgto.includes(catLower);
-                    });
-                }
-                
-                // Precisamos formatar e popular os nomes dos pacientes assim como no fetchTransactions
-                let localTransactions = localData.map(t => {
-                    // Garantir que as variáveis de contexto existam
-                    const listPat = window.patients || (typeof patients !== 'undefined' ? patients : []);
-                    const listBud = window.budgets || (typeof budgets !== 'undefined' ? budgets : []);
-                    
-                    let pat = listPat.find(p => String(p.seqid) === String(t.paciente_id)) || listPat.find(p => String(p.id) === String(t.paciente_id));
-                    let obsDisplay = typeof replaceObsBudgetTag === 'function' ? replaceObsBudgetTag(t.observacoes || '') : (t.observacoes || '');
-                    if (!pat) {
-                        try {
-                            const mId = String(t.observacoes || '').match(/\[Orçamento\s+([0-9a-f\-]{8,})\]/i);
-                            const mSeq = String(t.observacoes || '').match(/\[Orçamento\s*#(\d+)\]/i);
-                            let b = null;
-                            if (mId && mId[1]) b = listBud.find(x => String(x.id) === String(mId[1]));
-                            if (!b && mSeq && mSeq[1]) b = listBud.find(x => String(x.seqid) === String(mSeq[1]));
-                            if (b) {
-                                pat = listPat.find(p => String(p.id) === String(b.pacienteid || b.paciente_id));
-                                obsDisplay = typeof replaceObsBudgetTag === 'function' ? replaceObsBudgetTag(t.observacoes || '') : (t.observacoes || '');
-                            }
-                        } catch { }
-                    }
-                    
-                    const pNomeOriginal = pat ? pat.nome : '—';
-                    // Trim e Upper no nome do paciente conforme solicitado
-                    const pNomeFormatado = pNomeOriginal !== '—' ? pNomeOriginal.trim().toUpperCase() : '—';
-                    
-                    return {
-                        ...t,
-                        paciente_nome: pNomeFormatado,
-                        observacoes_display: obsDisplay
-                    };
-                });
-                
-                // Filtro dinâmico pelo nome do paciente (ignorando case)
-                if (pacText) {
-                    localTransactions = localTransactions.filter(t => t.paciente_nome.includes(pacText.toUpperCase()));
-                }
-                
-        // A tabela localTransactions do extrato vai usar o id de extrato finTransacoesTable 
-        // para renderizar corretamente
-        if (finTransacoesBody) {
-                    finTransacoesBody.innerHTML = ''; // Limpa a tabela antes de preencher
-                    if (localTransactions.length === 0) {
-                        finTransacoesBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 2rem; color: var(--text-muted);">Nenhuma transação encontrada.</td></tr>';
-                    } else {
-                        // Reutiliza a lógica visual de renderTable mas injeta direto no extrato
-                        localTransactions.forEach((t, i) => {
-                            const tr = document.createElement('tr');
-                            const budgetId = t.observacoes ? t.observacoes.match(/\[Orçamento\s+#?([0-9a-fA-F\-]+)\]/i) : null;
-                            const budgetText = budgetId ? `Orçamento ${budgetId[1].substring(0,6)}...` : '—';
-                            
-                            tr.innerHTML = `
-                                <td>${i + 1}</td>
-                                <td>${budgetText}</td>
-                                <td><strong>${escapeHtml(t.paciente_nome)}</strong></td>
-                                <td>${new Date(t.data_transacao).toLocaleString('pt-BR')}</td>
-                                <td>${escapeHtml(t.forma_pagamento || '—')}</td>
-                                <td><strong style="color: ${t.tipo === 'CREDITO' ? 'var(--success-color)' : 'var(--danger-color)'};">R$ ${parseFloat(t.valor).toFixed(2).replace('.',',')}</strong></td>
-                                <td><span class="badge ${t.tipo === 'CREDITO' ? 'badge-success' : 'badge-danger'}">${t.tipo}</span></td>
-                                <td><div style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(t.observacoes_display || t.observacoes || '')}">${escapeHtml(t.observacoes_display || t.observacoes || '—')}</div></td>
-                                <td><button class="btn btn-icon btn-danger" onclick="deleteTransaction('${t.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button></td>
-                            `;
-                            finTransacoesBody.appendChild(tr);
-                        });
-                    }
-                }
-            } catch (err) {
-                console.error("Erro no filtro de extrato:", err);
-                
-                // Captura erros de timeout do Supabase ou problemas de rede para dar um aviso melhor
-                const errMsg = err && err.message ? err.message : '';
-                if (errMsg.includes('timeout') || errMsg.includes('FetchError')) {
-                    showToast("Sua internet ou o servidor demorou a responder. Tente novamente.", true);
-                } else {
-                    showToast("Falha ao filtrar o extrato.", true);
-                }
-                
-                if (finTransacoesBody) {
-                    finTransacoesBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 2rem; color: var(--text-muted);">Erro ao carregar dados. Tente novamente.</td></tr>';
-                }
-            }
-        });
-    }
-
-    // Input dinâmico: filtra automaticamente quando altera os campos
-    const extratoFilterPaciente = document.getElementById('extratoFilterPaciente');
-    const extratoFilterStart = document.getElementById('extratoFilterStart');
-    const extratoFilterEnd = document.getElementById('extratoFilterEnd');
-    const extratoFilterCategoria = document.getElementById('extratoFilterCategoria');
-
-    if (extratoFilterStart && extratoFilterEnd) {
-        // Default: 1º dia do mês até hoje (apenas se os campos estiverem vazios ao carregar a página)
-        if (!extratoFilterStart.value || !extratoFilterEnd.value) {
-            const today = new Date();
-            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-            
-            extratoFilterStart.value = firstDay.toISOString().split('T')[0];
-            extratoFilterEnd.value = today.toISOString().split('T')[0];
-            extratoFilterEnd.min = extratoFilterStart.value;
-        }
-
-        extratoFilterStart.addEventListener('change', () => {
-            const startVal = extratoFilterStart.value;
-            const endVal = extratoFilterEnd.value;
-            
-            // Regra: Atualiza o mínimo permitido na data final
-            if (startVal) {
-                extratoFilterEnd.min = startVal;
-                // A data fim SÓ deve ser alterada automaticamente se ela for menor que a inicial
-                if (endVal && endVal < startVal) {
-                    extratoFilterEnd.value = startVal;
-                }
-            }
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
-        });
-
-        extratoFilterEnd.addEventListener('change', () => {
-            const startVal = extratoFilterStart.value;
-            const endVal = extratoFilterEnd.value;
-            
-            // Proteção extra: não deixa a final ser menor que a inicial
-            if (startVal && endVal && endVal < startVal) {
-                extratoFilterEnd.value = startVal;
-                showToast("A data final não pode ser menor que a data inicial.", true);
-            }
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
-        });
-    }
-
-    if (extratoFilterPaciente) {
-        extratoFilterPaciente.addEventListener('input', () => {
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
-        });
-    }
-
-    if (extratoFilterCategoria) {
-        extratoFilterCategoria.addEventListener('change', () => {
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
         });
     }
 
@@ -29155,7 +28215,7 @@ async function viewCancelledBudgets() {
             .select('*')
             .order('data_cancelamento', { ascending: false });
 
-        if (currentEmpresaId) {
+        if (!isSuperAdmin && currentEmpresaId) {
             query = query.eq('empresa_id', currentEmpresaId);
         }
         if (window.__dpDebug) window.__dpDebug.lastStep = 'cancelados: querying';
@@ -29206,246 +28266,4 @@ async function showCancelDetails(logId) {
         showToast("Erro ao carregar detalhes.", true);
     }
 }
-
-// ============================================================
-// MODULO: IMPRESSAO DE EXTRATO DE TRANSACOES
-// ============================================================
-window.openPrintExtratoFilter = function() {
-    let modal = document.getElementById('modalPrintExtrato');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'modalPrintExtrato';
-        modal.style.position = 'fixed';
-        modal.style.inset = '0';
-        modal.style.background = 'rgba(0,0,0,0.5)';
-        modal.style.zIndex = '10000';
-        modal.style.display = 'flex';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-        
-        // Define default dates: first day of month to today
-        const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-        const currentDay = today.toISOString().split('T')[0];
-
-        modal.innerHTML = `
-            <div class="card" style="width: 420px; max-width: 90vw; padding: 1.5rem; background: #fff; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.2rem;">
-                    <h3 style="margin: 0; color: var(--text-dark);"><i class="ri-printer-line"></i> Imprimir Extrato</h3>
-                    <button class="btn-icon" onclick="document.getElementById('modalPrintExtrato').style.display='none'" style="color: var(--text-muted); border: none; background: transparent; cursor: pointer; font-size: 1.2rem;"><i class="ri-close-line"></i></button>
-                </div>
-                
-                <div class="form-group">
-                    <label>Período Inicial</label>
-                    <input type="date" id="printExtratoStart" class="form-control" value="${firstDay}">
-                </div>
-                <div class="form-group">
-                    <label>Período Final</label>
-                    <input type="date" id="printExtratoEnd" class="form-control" value="${currentDay}">
-                </div>
-                <div class="form-group">
-                    <label>Tipo de Transação</label>
-                    <select id="printExtratoTipo" class="form-control">
-                        <option value="">Todas (Receitas e Despesas)</option>
-                        <option value="RECEITA">Apenas Receitas</option>
-                        <option value="DESPESA">Apenas Despesas</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Categoria (Opcional)</label>
-                    <input type="text" id="printExtratoCategoria" class="form-control" placeholder="Ex: Clínica, Protético, etc.">
-                </div>
-                
-                <div style="display: flex; gap: 1rem; margin-top: 1.8rem;">
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('modalPrintExtrato').style.display='none'">Cancelar</button>
-                    <button class="btn btn-primary" style="flex: 1;" onclick="executePrintExtrato()"><i class="ri-printer-fill"></i> Gerar Impressão</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }
-    modal.style.display = 'flex';
-};
-
-window.executePrintExtrato = async function() {
-    const start = document.getElementById('printExtratoStart').value;
-    const end = document.getElementById('printExtratoEnd').value;
-    const tipo = document.getElementById('printExtratoTipo').value;
-    const categoria = document.getElementById('printExtratoCategoria').value.trim().toLowerCase();
-    
-    if (!start || !end) {
-        showToast('Preencha as datas inicial e final', true);
-        return;
-    }
-    
-    document.getElementById('modalPrintExtrato').style.display = 'none';
-    const loader = document.getElementById('bootLoader');
-    if (loader) {
-        loader.textContent = 'Gerando Extrato...';
-        loader.style.display = 'flex';
-    }
-    
-    try {
-        let query = db.from('financeiro_transacoes')
-            .select('*')
-            .gte('data_transacao', start)
-            .lte('data_transacao', end)
-            .order('data_transacao', { ascending: true });
-            
-        if (typeof currentEmpresaId !== 'undefined' && currentEmpresaId) {
-            query = query.eq('empresa_id', currentEmpresaId);
-        }
-            
-        if (tipo) {
-            query = query.eq('tipo', tipo);
-        }
-        
-        const { data, error } = await query;
-        if (error) throw error;
-        
-        let filteredData = data || [];
-        if (categoria) {
-            filteredData = filteredData.filter(t => (t.categoria || '').toLowerCase().includes(categoria));
-        }
-        
-        if (!filteredData || filteredData.length === 0) {
-            showToast('Nenhuma transação encontrada para os filtros selecionados.', true);
-            if (loader) loader.style.display = 'none';
-            return;
-        }
-        
-        const formatDataBR = (d) => {
-            if (!d) return '';
-            const p = d.split('-');
-            if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
-            return d;
-        };
-        
-        let totalReceita = 0;
-        let totalDespesa = 0;
-        
-        let trHtml = '';
-        filteredData.forEach(t => {
-            const val = parseFloat(t.valor) || 0;
-            if (t.tipo === 'RECEITA') totalReceita += val;
-            if (t.tipo === 'DESPESA') totalDespesa += val;
-            
-            // Tentar pegar nome do paciente do cache
-            let pNome = '';
-            if (t.paciente_id && typeof patients !== 'undefined' && Array.isArray(patients)) {
-                const p = patients.find(x => String(x.id) === String(t.paciente_id) || String(x.seqid) === String(t.paciente_id));
-                if (p) pNome = p.nome;
-            }
-            
-            const desc = t.observacoes ? t.observacoes : (pNome ? 'Paciente: ' + pNome : '-');
-            const color = t.tipo === 'RECEITA' ? '#166534' : '#991b1b';
-            
-            trHtml += `
-                <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${formatDataBR(t.data_transacao)}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${t.categoria || '-'}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${desc}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${t.forma_pagamento || '-'}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: ${color}; font-weight: 600; text-align: right;">${formatCurrencyBRL(val)}</td>
-                </tr>
-            `;
-        });
-        
-        const saldo = totalReceita - totalDespesa;
-        const saldoColor = saldo >= 0 ? '#166534' : '#991b1b';
-        
-        const printHtml = `
-            <!DOCTYPE html>
-            <html lang="pt-BR">
-            <head>
-                <meta charset="UTF-8">
-                <title>Extrato de Transações</title>
-                <style>
-                    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; margin: 0; padding: 20px; font-size: 13px; }
-                    .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #cbd5e1; }
-                    .header h1 { margin: 0 0 5px 0; color: #0f172a; font-size: 20px; }
-                    .header p { margin: 0; color: #64748b; font-size: 14px; }
-                    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-                    th { background-color: #f8fafc; color: #475569; font-weight: 600; text-align: left; padding: 10px 8px; border-bottom: 2px solid #e2e8f0; }
-                    .totals { display: flex; justify-content: flex-end; gap: 30px; margin-top: 20px; padding-top: 15px; border-top: 2px solid #cbd5e1; }
-                    .total-box { text-align: right; }
-                    .total-box div:first-child { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-                    .total-box div:last-child { font-size: 18px; font-weight: 700; margin-top: 4px; }
-                    @media print {
-                        body { padding: 0; }
-                        button { display: none !important; }
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1>Extrato de Transações</h1>
-                    <p>Período: ${formatDataBR(start)} a ${formatDataBR(end)}</p>
-                    ${categoria ? `<p>Filtro Categoria: ${categoria}</p>` : ''}
-                    ${tipo ? `<p>Filtro Tipo: ${tipo === 'RECEITA' ? 'Receitas' : 'Despesas'}</p>` : ''}
-                </div>
-                
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 90px;">Data</th>
-                            <th style="width: 150px;">Categoria</th>
-                            <th>Descrição / Observação</th>
-                            <th style="width: 130px;">Forma de Pag.</th>
-                            <th style="width: 120px; text-align: right;">Valor</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${trHtml}
-                    </tbody>
-                </table>
-                
-                <div class="totals">
-                    <div class="total-box">
-                        <div>Total Entradas</div>
-                        <div style="color: #166534;">${formatCurrencyBRL(totalReceita)}</div>
-                    </div>
-                    <div class="total-box">
-                        <div>Total Saídas</div>
-                        <div style="color: #991b1b;">${formatCurrencyBRL(totalDespesa)}</div>
-                    </div>
-                    <div class="total-box">
-                        <div>Saldo do Período</div>
-                        <div style="color: ${saldoColor};">${formatCurrencyBRL(saldo)}</div>
-                    </div>
-                </div>
-                
-                <div style="margin-top: 40px; text-align: center;">
-                    <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px;">Imprimir Extrato</button>
-                </div>
-                
-                <script>
-                    window.onload = function() {
-                        setTimeout(function() { window.print(); }, 500);
-                    };
-                </script>
-            </body>
-            </html>
-        `;
-
-        
-        const printWin = window.open('', '_blank');
-        if (printWin) {
-            printWin.document.open();
-            printWin.document.write(printHtml);
-            printWin.document.close();
-        } else {
-            showToast('O bloqueador de pop-ups impediu a abertura da impressão.', true);
-        }
-        
-    } catch (e) {
-        console.error(e);
-        showToast('Erro ao gerar extrato: ' + (e.message || ''), true);
-    } finally {
-        if (loader) {
-            loader.style.display = 'none';
-            loader.textContent = 'Carregando...';
-        }
-    }
-};
 
