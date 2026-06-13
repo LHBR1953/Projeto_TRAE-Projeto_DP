@@ -30,6 +30,7 @@ function buildFullPermissions() {
         atendimento: { select: true, insert: true, update: true, delete: true },
         agenda: { select: true, insert: true, update: true, delete: true },
         protese: { select: true, insert: true, update: true, delete: true },
+        tickets: { select: true, insert: true, update: true, delete: true },
     };
 }
 

@@ -1,0 +1,411 @@
+1004: if (nameEl) nameEl.textContent = nome || 'Ã¢â‚¬â€';
+2721: lines.push('| Tabela | empresa_id existe | empresa_id NOT NULL | FK empresa_idÃ¢â€ â€™empresas | ON DELETE p/ empresas | Integridade |');
+2725: const has = r.has_empresa_id ? 'SIM' : 'NÃO';
+2726: const nn = r.empresa_id_not_null ? 'SIM' : 'NÃO';
+2727: const fk = r.empresa_id_has_fk_to_empresas ? 'SIM' : 'NÃO';
+2728: const del = String(r.empresas_fk_delete_rules || '') || 'Ã¢â‚¬â€';
+2729: const integ = String(r.integridade_multiempresa || '') || 'Ã¢â‚¬â€';
+3930: return row && row.nome ? String(row.nome) : 'Ã¢â‚¬â€';
+4827: <div><strong>ID do Item:</strong> ${escapeHtml(String(itemId || 'Ã¢â‚¬â€'))} Ã¢â‚¬Â¢ <strong>ID do Modelo:</strong> ${escapeHtml(String(modelId || 'Ã¢â‚¬â€'))}</div>
+4828: <div><strong>ID do Serviço:</strong> ${escapeHtml(String(serviceId || 'Ã¢â‚¬â€'))} Ã¢â‚¬Â¢ <strong>Serviço:</strong> ${escapeHtml(serviceDesc || 'Ã¢â‚¬â€')}</div>
+4829: <div><strong>Modelo:</strong> ${escapeHtml(modelName || 'Ã¢â‚¬â€')} Ã¢â‚¬Â¢ <strong>Itens:</strong> ${escapeHtml(String(mItems.length))}</div>
+4830: <div class="checkout-build-line"><strong>Checkout Build:</strong> 20260413-01 Ã¢â‚¬Â¢ <strong>Biosseg:</strong> ${escapeHtml(includeBiosseg ? 'ON' : 'OFF')} Ã¢â‚¬Â¢ <strong>Base:</strong> ${escapeHtml(String(baseItems.length))} Ã¢â‚¬Â¢ <strong>Biosseg Itens:</strong> ${escapeHtml(String(biossegItems.length))}</div>
+4831: <div>${escapeHtml(`Atendimento: ${String(agendamentoId || itemId || 'Ã¢â‚¬â€')}`)}</div>
+5673: <td><strong>${String(item && item.nome || 'Ã¢â‚¬â€')}</strong> ${areaTag} ${statusTag}${isBuy ? ` <span class="inventory-buy-badge"><i class="ri-shopping-cart-line"></i> Comprar</span>` : (isLow ? ` <span class="inventory-alert"><i class="ri-alarm-warning-line"></i> Mínimo</span>` : '')}</td>
+5674: <td>${String(item && item.unidade || 'Ã¢â‚¬â€')}</td>
+5878: <td><strong>${String(model && model.nome_modelo || 'Ã¢â‚¬â€')}</strong></td>
+5964: + prioritized.map(i => `<option value="${String(i.id)}">Ã¢Â­Â ${String(i.nome || 'Ã¢â‚¬â€')}</option>`).join('')
+5965: + normalItems.map(i => `<option value="${String(i.id)}">${String(i.nome || 'Ã¢â‚¬â€')}</option>`).join('');
+6046: <td>${(canModelUpdate && mi && mi.id && !mi.__inherited) ? `<button class="btn-icon delete-btn js-model-item-del" data-id="${String(mi && mi.id || '')}" title="Remover"><i class="ri-delete-bin-line"></i></button>` : 'Ã¢â‚¬â€'}</td>
+6159: <td><strong>${String(srv && srv.descricao || 'Ã¢â‚¬â€')}</strong></td>
+6224: <td>${String(srv && srv.descricao || 'Ã¢â‚¬â€')}</td>
+6226: <td>${selected ? modelCount : 'Ã¢â‚¬â€'}</td>
+6300: const dtTxt = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleString('pt-BR') : 'Ã¢â‚¬â€';
+6305: <td>${tipo || 'Ã¢â‚¬â€'}</td>
+6307: <td>${String(log && log.atendimento_id || 'Ã¢â‚¬â€')}</td>
+6308: <td>${((tipo === 'SAIDA' || tipo === 'ENTRADA') && canStockAction('logs', 'estorno', log)) ? `<button class="btn-icon js-log-estorno" data-id="${String(log && log.id || '')}" title="Estornar"><i class="ri-arrow-go-back-line"></i></button>` : 'Ã¢â‚¬â€'}</td>
+6335: return 'Ã¢â‚¬â€';
+6347: const contactLine = contactParts.join(' Ã¢â‚¬Â¢ ');
+6528: <td>${String(r.dataHora || 'Ã¢â‚¬â€')}</td>
+6529: <td>${String(r.material || 'Ã¢â‚¬â€')}</td>
+6530: <td>${String(r.tipo || 'Ã¢â‚¬â€')}</td>
+6533: <td>${String(r.atendimento || 'Ã¢â‚¬â€')}</td>
+6558: 'Data/Hora': String(r.dataHora || 'Ã¢â‚¬â€'),
+6559: 'Material': String(r.material || 'Ã¢â‚¬â€'),
+6560: 'Tipo': String(r.tipo || 'Ã¢â‚¬â€'),
+6563: 'Atendimento': String(r.atendimento || 'Ã¢â‚¬â€')
+6714: const pacienteNome = resolvePacienteNameById(pacienteId) || 'Ã¢â‚¬â€';
+6715: const procedimento = resolveItemDescricao(it, srv) || 'Ã¢â‚¬â€';
+6716: const subdiv = resolveServicoSubdivision(srv) || 'Ã¢â‚¬â€';
+6720: return dt && Number.isFinite(dt.getTime()) ? dt.toLocaleString('pt-BR') : 'Ã¢â‚¬â€';
+6859: const executorNome = getProfessionalNameBySeqId(executorId) || 'Ã¢â‚¬â€';
+6861: const pacienteNome = resolvePacienteNameById(pacienteId) || 'Ã¢â‚¬â€';
+6864: const dtTxt = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleDateString('pt-BR') : 'Ã¢â‚¬â€';
+6874: atendimento: `${pacienteNome} Ã¢â‚¬Â¢ ${dtTxt}`,
+6876: procedimento: resolveItemDescricao(it, srv) || 'Ã¢â‚¬â€',
+6910: atendimento: String(r && r.atendimento || 'Ã¢â‚¬â€'),
+6912: procedimento: String(r && r.procedimento || 'Ã¢â‚¬â€'),
+6927: r.executor = getProfessionalNameBySeqId(r.executor_id) || 'Ã¢â‚¬â€';
+6976: produto: String(i && i.nome || 'Ã¢â‚¬â€'),
+6977: unidade: String(i && i.unidade || 'Ã¢â‚¬â€'),
+6987: const diffTxt = r.diferenca == null ? 'Ã¢â‚¬â€' : formatNumberBR(toDec(r.diferenca, 0), 2);
+6989: <td>${escapeHtml(String(r.produto || 'Ã¢â‚¬â€'))}</td>
+6990: <td>${escapeHtml(String(r.unidade || 'Ã¢â‚¬â€'))}</td>
+7021: const diffTxt = row.diferenca == null ? 'Ã¢â‚¬â€' : formatNumberBR(toDec(row.diferenca, 0), 2);
+7033: <td><strong>${escapeHtml(String(r.subdivisao || 'Ã¢â‚¬â€'))}</strong></td>
+7055: <td>${escapeHtml(String(r.paciente || 'Ã¢â‚¬â€'))}</td>
+7056: <td>${escapeHtml(String(r.procedimento || 'Ã¢â‚¬â€'))}</td>
+7057: <td>${escapeHtml(String(r.subdivisao || 'Ã¢â‚¬â€'))}</td>
+7058: <td>${escapeHtml(String(r.materiais || 'Ã¢â‚¬â€'))}</td>
+7060: <td>${escapeHtml(String(r.data_hora || 'Ã¢â‚¬â€'))}</td>
+7115: <td>${escapeHtml(String(r.produto || 'Ã¢â‚¬â€'))}</td>
+7116: <td>${escapeHtml(String(r.unidade || 'Ã¢â‚¬â€'))}</td>
+7118: <td class="num">${r.saldo_fisico == null ? 'Ã¢â‚¬â€' : toDec(r.saldo_fisico, 0).toFixed(2)}</td>
+7119: <td class="num">${r.diferenca == null ? 'Ã¢â‚¬â€' : toDec(r.diferenca, 0).toFixed(2)}</td>
+7135: <td>${escapeHtml(String(r.subdivisao || 'Ã¢â‚¬â€'))}</td>
+7154: <td>${escapeHtml(String(r.paciente || 'Ã¢â‚¬â€'))}</td>
+7155: <td>${escapeHtml(String(r.procedimento || 'Ã¢â‚¬â€'))}</td>
+7156: <td>${escapeHtml(String(r.subdivisao || 'Ã¢â‚¬â€'))}</td>
+7157: <td>${escapeHtml(String(r.materiais || 'Ã¢â‚¬â€'))}</td>
+7159: <td>${escapeHtml(String(r.data_hora || 'Ã¢â‚¬â€'))}</td>
+7397: const dtTxt = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleString('pt-BR') : 'Ã¢â‚¬â€';
+7412: atendimento: String(log && log.atendimento_id || 'Ã¢â‚¬â€')
+7825: <div style="font-size:11px; color:#64748b;">Clique no gráfico e use Ã¢â€ Â Ã¢â€ â€˜ Ã¢â€ â€™ Ã¢â€ â€œ para navegar</div>
+7831: <span style="background:#fff7ed; color:#9a3412; border:1px solid #fdba74; border-radius:999px; padding:4px 10px; font-size:12px;"><strong>Ã¢â€”Â</strong> Fixo Acumulado (${escapeHtml(dayLabel)}): ${escapeHtml(formatCurrencyBRL(fixedAccum))}</span>
+7832: <span style="background:#fff1f2; color:#9f1239; border:1px solid #fda4af; border-radius:999px; padding:4px 10px; font-size:12px;"><strong>Ã¢â€”Â</strong> Meta Total (${escapeHtml(dayLabel)}): ${escapeHtml(formatCurrencyBRL(totalCost))}</span>
+7833: <span style="background:#ecfeff; color:#155e75; border:1px solid #67e8f9; border-radius:999px; padding:4px 10px; font-size:12px;"><strong>Ã¢â€”Â</strong> Faturamento Acumulado (${escapeHtml(dayLabel)}): ${escapeHtml(formatCurrencyBRL(lastPerf))}</span>
+7834: <span style="background:#ede9fe; color:#5b21b6; border:1px solid #c4b5fd; border-radius:999px; padding:4px 10px; font-size:12px; font-weight:800;"><strong>Ã¢â€”Â</strong> Margem de Retenção Operacional: ${escapeHtml(formatNumberBR(margemRetencaoPercent, 2))}% (${escapeHtml(formatCurrencyBRL(margemRetencaoValor))})</span>
+7835: <span style="background:${saldoAtual >= 0 ? '#f0fdf4' : '#fef2f2'}; color:${saldoAtual >= 0 ? '#166534' : '#991b1b'}; border:1px solid ${saldoAtual >= 0 ? '#86efac' : '#fecaca'}; border-radius:999px; padding:4px 10px; font-size:12px;"><strong>Ã¢â€”Â</strong> Saldo Acumulado (${escapeHtml(dayLabel)}): ${escapeHtml(formatCurrencyBRL(saldoAtual))}</span>
+7896: <div style="font-size:14px; font-weight:800; color:#0f172a; margin-bottom:8px;">Análise Técnica/Gerencial (${escapeHtml(firstDay)} a ${escapeHtml(lastDay)} Ã¢â‚¬Â¢ ${dayCount} ${dayCount === 1 ? 'dia' : 'dias'})</div>
+7898: <p><strong>Fixo Acumulado:</strong> ${escapeHtml(formatCurrencyBRL(fixedAc))} Ã¢â‚¬â€ pedágio estrutural do período.</p>
+7899: <p><strong>Meta Total:</strong> ${escapeHtml(formatCurrencyBRL(custoAc))} Ã¢â‚¬â€ custo total a cobrir (fixo + variáveis).</p>
+7900: <p><strong>Faturamento Acumulado:</strong> ${escapeHtml(formatCurrencyBRL(faturamentoAc))} Ã¢â‚¬â€ tração comercial do período.</p>
+7901: <p><strong>Margem de Retenção Operacional:</strong> ${escapeHtml(formatNumberBR(margemRetencao, 2))}% (${escapeHtml(formatCurrencyBRL(margemRetencaoValor))}) Ã¢â‚¬â€ gordura operacional antes do lucro líquido.</p>
+7902: <p><strong>Saldo Acumulado:</strong> ${escapeHtml(formatCurrencyBRL(saldoAc))} Ã¢â‚¬â€ resultado operacional do período.</p>
+7903: <p><strong>Variáveis Acumuladas:</strong> ${escapeHtml(formatCurrencyBRL(variavelAc))} Ã¢â‚¬â€ comissões + imposto/taxa + materiais/protéticos.</p>
+8007: <td>${escapeHtml(String(r.dataHora || 'Ã¢â‚¬â€'))}</td>
+8008: <td>${escapeHtml(String(r.material || 'Ã¢â‚¬â€'))}</td>
+8009: <td>${escapeHtml(String(r.tipo || 'Ã¢â‚¬â€'))}</td>
+8012: <td>${escapeHtml(String(r.atendimento || 'Ã¢â‚¬â€'))}</td>
+8047: <div style="font-size:11px; color:var(--text-muted);">Clique na grade e use Ã¢â€ Â Ã¢â€ â€˜ Ã¢â€ â€™ Ã¢â€ â€œ, PgUp/PgDn</div>
+8149: return { inventory_id: id, produto: String(i && i.nome || 'Ã¢â‚¬â€'), unidade: String(i && i.unidade || 'Ã¢â‚¬â€'), saldo_sistema: sistema, saldo_fisico: fis, diferenca: diff, estoque_minimo: min, abaixo_minimo: low };
+8197: const diffTxt = r.diferenca == null ? 'Ã¢â‚¬â€' : formatNumberBR(toDec(r.diferenca, 0), 2);
+8199: `<td class="${r.abaixo_minimo ? 'inventory-balance-low' : ''}"><strong>${escapeHtml(String(r.produto || 'Ã¢â‚¬â€'))}</strong></td>`,
+8200: `<td>${escapeHtml(String(r.unidade || 'Ã¢â‚¬â€'))}</td>`,
+8220: const diffTxt = row.diferenca == null ? 'Ã¢â‚¬â€' : formatNumberBR(toDec(row.diferenca, 0), 2);
+8242: return { nome: String(i && i.nome || 'Ã¢â‚¬â€'), unidade: String(i && i.unidade || 'Ã¢â‚¬â€'), atual, min, comprar, neg, custo_unit: custoUnit, valor_reposicao: valorReposicao };
+8272: `<td class="${r.neg ? 'inventory-balance-low' : ''}"><strong>${escapeHtml(String(r.nome || 'Ã¢â‚¬â€'))}</strong>${r.neg ? ' <span style="color:#dc2626;font-size:11px;">(NEGATIVO)</span>' : ''}</td>`,
+8273: `<td>${escapeHtml(String(r.unidade || 'Ã¢â‚¬â€'))}</td>`,
+8300: `<td>${escapeHtml(String(r.dataHora || 'Ã¢â‚¬â€'))}</td>`,
+8301: `<td><strong>${escapeHtml(String(r.material || 'Ã¢â‚¬â€'))}</strong></td>`,
+8302: `<td>${escapeHtml(String(r.tipo || 'Ã¢â‚¬â€'))}</td>`,
+8305: `<td>${escapeHtml(String(r.atendimento || 'Ã¢â‚¬â€'))}</td>`
+8329: `<td><strong>${escapeHtml(String(r.subdivisao || 'Ã¢â‚¬â€'))}</strong></td>`,
+8366: `<td>${escapeHtml(String(r.paciente || 'Ã¢â‚¬â€'))}</td>`,
+8367: `<td><strong>${escapeHtml(String(r.procedimento || 'Ã¢â‚¬â€'))}</strong></td>`,
+8368: `<td>${escapeHtml(String(r.subdivisao || 'Ã¢â‚¬â€'))}</td>`,
+8369: `<td>${escapeHtml(String(r.materiais || 'Ã¢â‚¬â€'))}</td>`,
+8371: `<td>${escapeHtml(String(r.data_hora || 'Ã¢â‚¬â€'))}</td>`
+8394: return { nome: String(i && i.nome || 'Ã¢â‚¬â€'), unidade: String(i && i.unidade || 'Ã¢â‚¬â€'), atual, min, low: atual <= min, custo_unit: unit, valor_total: atual * unit };
+8408: `<td class="${r.low ? 'inventory-balance-low' : ''}"><strong>${escapeHtml(String(r.nome || 'Ã¢â‚¬â€'))}</strong></td>`,
+8409: `<td>${escapeHtml(String(r.unidade || 'Ã¢â‚¬â€'))}</td>`,
+8438: return { model_id: mid, nome_modelo: String(m && m.nome_modelo || 'Ã¢â‚¬â€'), itens: items.length, custo: cost, composicao };
+8451: `<td><strong>${escapeHtml(String(r.nome_modelo || 'Ã¢â‚¬â€'))}</strong></td>`,
+8454: `<td>${escapeHtml(String(r.composicao || 'Ã¢â‚¬â€'))}</td>`,
+8567: `<td${style}>${escapeHtml(String(r.atendimento || 'Ã¢â‚¬â€'))}</td>`,
+8568: `<td${style}>${escapeHtml(String(r.executor || 'Ã¢â‚¬â€'))}</td>`,
+8570: `<td${style}><strong>${escapeHtml(String(r.procedimento || 'Ã¢â‚¬â€'))}</strong><br><span style="font-size:11px;color:#64748b;">${escapeHtml(String(r.subdivisao || 'Sem Subdivisão'))}</span></td>`,
+8638: <td>${escapeHtml(String(r.dataHora || 'Ã¢â‚¬â€'))}</td>
+8639: <td>${escapeHtml(String(r.material || 'Ã¢â‚¬â€'))}</td>
+8640: <td>${escapeHtml(String(r.tipo || 'Ã¢â‚¬â€'))}</td>
+8643: <td>${escapeHtml(String(r.atendimento || 'Ã¢â‚¬â€'))}</td>
+8660: <td>${escapeHtml(String(r.produto || 'Ã¢â‚¬â€'))}</td>
+8661: <td>${escapeHtml(String(r.unidade || 'Ã¢â‚¬â€'))}</td>
+8663: <td class="num">${r.saldo_fisico == null ? 'Ã¢â‚¬â€' : toDec(r.saldo_fisico, 0).toFixed(2)}</td>
+8664: <td class="num">${r.diferenca == null ? 'Ã¢â‚¬â€' : toDec(r.diferenca, 0).toFixed(2)}</td>
+8679: <td>${escapeHtml(String(r.nome || 'Ã¢â‚¬â€'))}</td>
+8680: <td>${escapeHtml(String(r.unidade || 'Ã¢â‚¬â€'))}</td>
+8697: <td>${escapeHtml(String(r.subdivisao || 'Ã¢â‚¬â€'))}</td>
+8715: <td>${escapeHtml(String(r.paciente || 'Ã¢â‚¬â€'))}</td>
+8716: <td>${escapeHtml(String(r.procedimento || 'Ã¢â‚¬â€'))}</td>
+8717: <td>${escapeHtml(String(r.subdivisao || 'Ã¢â‚¬â€'))}</td>
+8718: <td>${escapeHtml(String(r.materiais || 'Ã¢â‚¬â€'))}</td>
+8720: <td>${escapeHtml(String(r.data_hora || 'Ã¢â‚¬â€'))}</td>
+8734: <td>${escapeHtml(String(r.nome || 'Ã¢â‚¬â€'))}</td>
+8735: <td>${escapeHtml(String(r.unidade || 'Ã¢â‚¬â€'))}</td>
+8753: <td>${escapeHtml(String(r.nome_modelo || 'Ã¢â‚¬â€'))}</td>
+8780: <td>${escapeHtml(String(r.atendimento || 'Ã¢â‚¬â€'))}</td>
+8782: <td>${escapeHtml(String(r.procedimento || 'Ã¢â‚¬â€'))}</td>
+9056: <td>${String(i && i.nome || 'Ã¢â‚¬â€')}</td>
+9057: <td>${String(i && i.unidade || 'Ã¢â‚¬â€')}</td>
+9112: return `<tr><td>${getInventoryNameById(mi && mi.inventory_id)}</td><td>${String(inv && inv.unidade || 'Ã¢â‚¬â€')}</td><td class="num">${toDec(mi && mi.quantidade_sugerida, 1).toFixed(2)}</td></tr>`;
+9203: <input type="text" class="readonly-input" readonly value="${String(item && item.nome || 'Ã¢â‚¬â€')}">
+9214: <label for="inventoryNfUnidadeCompra">Unidade de Compra (NF) <span title="Ã°Å¸â€™Â¡ Recomendamos converter para a menor unidade de consumo (g, ml, un) para que o custo por procedimento seja exato." style="cursor:help; margin-left:4px;"><i class="ri-question-line"></i></span></label>
+9923: <td>${String(i && i.nome || 'Ã¢â‚¬â€')}</td>
+9924: <td>${String(i && i.unidade || 'Ã¢â‚¬â€')}</td>
+10266: const criadoEm = b.created_at ? formatDateTime(b.created_at) : 'Ã¢â‚¬â€';
+10342: <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);" title="${escapeHtml(obsBudgetSeq ? `ref: observação (orç=${obsBudgetSeq})${refOrc && refOrc !== obsBudgetSeq ? ` (referencia_id=${refOrc})` : ''}` : (orcIdCol ? `ref: orcamento_id${refOrc && refOrc !== orcIdCol ? ` (referencia_id=${refOrc})` : ''}` : (refOrc ? 'ref: referencia_id' : 'ref: seq')))}">${escapeHtml(budgetId || 'Ã¢â‚¬â€')}</td>
+10343: <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);"><strong>${t.paciente_nome || 'Ã¢â‚¬â€'}</strong></td>
+10346: <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${t.forma_pagamento || 'Ã¢â‚¬â€'}</td>
+10349: <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${obsRaw}">${obsRaw || 'Ã¢â‚¬â€'}</td>
+10591: // Load professionals Ã¢â‚¬â€ exclude Proteticos (they appear only in item lines)
+10958: summary.textContent = `${nome} Ã¢â‚¬Â¢ ${rows.length} agendamentos futuros`;
+10967: const dateStr = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleDateString('pt-BR') : 'Ã¢â‚¬â€';
+10968: const timeStr = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Ã¢â‚¬â€';
+10975: <td>${escapeHtml(prof || 'Ã¢â‚¬â€')}</td>
+11017: if (summary) summary.textContent = 'Ã¢â‚¬â€';
+11486: const nome = escapeHtml(String(r.nome || 'Ã¢â‚¬â€'));
+11487: const email = escapeHtml(String(r.email || 'Ã¢â‚¬â€'));
+11488: const meses = (r.meses_sem_pagamento != null) ? String(r.meses_sem_pagamento) : 'Ã¢â‚¬â€';
+11489: const ultimo = r.ultimo_pagamento_em ? formatDateTime(r.ultimo_pagamento_em) : 'Ã¢â‚¬â€';
+11545: marketingActiveCampaign.textContent = row && row.nome ? String(row.nome) : 'Ã¢â‚¬â€';
+11548: marketingActiveCampaign.textContent = 'Ã¢â‚¬â€';
+11602: return 'Ã¢â‚¬â€';
+11612: <td><strong>${escapeHtml(String(r && r.nome || 'Ã¢â‚¬â€'))}</strong></td>
+11613: <td>${escapeHtml(String(r && r.assunto || 'Ã¢â‚¬â€'))}</td>
+11615: <td style="text-align:center; font-weight:900;">${ativo ? 'SIM' : 'NÃO'}</td>
+11660: if (kpiMkAtivos) kpiMkAtivos.textContent = String(k.ativos ?? 'Ã¢â‚¬â€');
+11661: if (kpiMk7a8) kpiMk7a8.textContent = String(k.m7_8 ?? 'Ã¢â‚¬â€');
+11662: if (kpiMk9a11) kpiMk9a11.textContent = String(k.m9_11 ?? 'Ã¢â‚¬â€');
+11663: if (kpiMk12a17) kpiMk12a17.textContent = String(k.m12_17 ?? 'Ã¢â‚¬â€');
+11664: if (kpiMk18) kpiMk18.textContent = String(k.m18_plus ?? 'Ã¢â‚¬â€');
+12461: const hora = dt ? formatTimeHHMM(dt) : 'Ã¢â‚¬â€';
+12462: const data = dt ? dt.toLocaleDateString('pt-BR') : 'Ã¢â‚¬â€';
+12466: const pacNome = pac ? String(pac.nome || '') : (seq ? `Orçamento #${seq}` : 'Ã¢â‚¬â€');
+12467: const formaLabel = String(p.forma_pagamento || 'Ã¢â‚¬â€');
+12469: return { data, hora, orc: seq || 'Ã¢â‚¬â€', paciente: pacNome, forma: formaLabel, valor };
+12475: const f = String(r.forma || 'Ã¢â‚¬â€');
+12481: .join(' | ') || 'Ã¢â‚¬â€';
+12521: <td style="width:90px; text-align:center;">${escapeHtml(String(r.orc || 'Ã¢â‚¬â€'))}</td>
+12563: <div class="sub">Período: <strong>${escapeHtml(humanStart)}</strong> a <strong>${escapeHtml(humanEnd)}</strong> Ã¢â‚¬Â¢ Forma: <strong>${escapeHtml(filtroForma)}</strong></div>
+12564: <div class="sub">Unidade: ${escapeHtml(String(currentEmpresaId || 'Ã¢â‚¬â€'))}</div>
+12589: <div class="footer">Documento interno Ã¢â‚¬Â¢ Pagamentos de Pacientes</div>
+12638: <div class="sub">Unidade: ${escapeHtml(String(currentEmpresaId || 'Ã¢â‚¬â€'))}</div>
+12662: <div class="footer">Documento interno Ã¢â‚¬Â¢ ${escapeHtml(title)}</div>
+12752: subtitle: `Cross table por paciente Ã¢â‚¬Â¢ Ano ${year}`,
+12804: subtitle: `Cross table por profissional (Comissões PAGA + ANTECIPADA) Ã¢â‚¬Â¢ Ano ${year}`,
+12860: const pacNome = paciente ? String(paciente.nome || '') : (seq ? `Orçamento #${seq}` : 'Ã¢â‚¬â€');
+12872: const forma = String(p.forma_pagamento || 'Ã¢â‚¬â€');
+12874: const hora = dt ? formatTimeHHMM(dt) : 'Ã¢â‚¬â€';
+12885: const itemLabel = sub ? `${servLabel} Ã¢â‚¬â€ ${sub}` : servLabel;
+12890: orcSeq: seq || 'Ã¢â‚¬â€',
+12892: profissional: execProf ? String(execProf.nome || '') : 'Ã¢â‚¬â€',
+12903: const f = String(r.forma || 'Ã¢â‚¬â€');
+12909: .join(' | ') || 'Ã¢â‚¬â€';
+12920: <td style="width:90px; text-align:center;">${escapeHtml(String(r.orcSeq || 'Ã¢â‚¬â€'))}</td>
+12953: <div class="sub">Data: <strong>${escapeHtml(humanDate)}</strong> Ã¢â‚¬Â¢ Profissional: <strong>${escapeHtml(profName)}</strong></div>
+12954: <div class="sub">Unidade: ${escapeHtml(String(currentEmpresaId || 'Ã¢â‚¬â€'))}</div>
+12980: <div class="footer">Documento interno Ã¢â‚¬Â¢ Movimentação Diária</div>
+13048: const itemLabel = sub ? `${desc} Ã¢â‚¬â€ ${sub}` : desc;
+13144: ? `<div>${escapeHtml(ini)}-${escapeHtml(fim)} Ã¢â‚¬Â¢ ${slot}min</div>`
+13204: const st = a.status || 'Ã¢â‚¬â€';
+13209: ? (tit && normalizeKey(tit) !== normalizeKey(pacienteNome) ? `${pacienteNome} Ã¢â‚¬â€ ${tit}` : pacienteNome)
+13264: .join(' | ') || 'Ã¢â‚¬â€';
+13328: const hora = dt ? formatTimeHHMM(dt) : 'Ã¢â‚¬â€';
+13332: const pacNome = pac ? String(pac.nome || '') : (seq ? `Orçamento #${seq}` : 'Ã¢â‚¬â€');
+13333: const forma = String(p.forma_pagamento || 'Ã¢â‚¬â€');
+13344: const f = String(r.forma || 'Ã¢â‚¬â€');
+13350: .join(' | ') || 'Ã¢â‚¬â€';
+13419: const itemLabel = r.item_descricao ? String(r.item_descricao) : (serv ? String(serv.descricao || serv.nome || 'Ã¢â‚¬â€') : 'Ã¢â‚¬â€');
+13421: const st = String(r.status || 'Ã¢â‚¬â€');
+13424: <td>${escapeHtml(String(prof || 'Ã¢â‚¬â€'))}</td>
+13464: <td>${escapeHtml(String(r.budgetSeq || 'Ã¢â‚¬â€'))}</td>
+13466: <td>${escapeHtml(String(r.itemStatus || 'Ã¢â‚¬â€'))}</td>
+13497: <div class="sub">Data: <strong>${humanDate}</strong> Ã¢â‚¬Â¢ Profissional: <strong>${escapeHtml(profName)}</strong></div>
+13502: <div class="sub">Unidade: ${escapeHtml(String(currentEmpresaId || 'Ã¢â‚¬â€'))}</div>
+13513: ? `<div class="kpi"><label>Total Comissões</label><div>${commissionsTotal == null ? 'Ã¢â‚¬â€' : escapeHtml(formatCurrencyBRL(commissionsTotal))}</div></div>`
+13535: <div class="sub">Total: <strong>${escapeHtml(formatCurrencyBRL(paymentsTotal))}</strong> Ã¢â‚¬Â¢ ${escapeHtml(paymentsFormaSummary)}</div>
+13553: <div class="footer">Documento interno Ã¢â‚¬Â¢ Fechamento Diário</div>
+13574: if (atendimentoSummary) atendimentoSummary.textContent = 'Ã¢â‚¬â€';
+13775: if (k === 'EMEXECUCAO' || k === 'EMEXECUÇÃO') return 'EMEXECUCAO';
+13800: return list.length ? list.join(' Ã¢â‚¬Â¢ ') : '';
+13931: const itemLabel = sub ? `${desc} Ã¢â‚¬â€ ${sub}` : desc;
+13963: itemStatus: 'Ã¢â‚¬â€',
+13974: const extra = placeholders ? ` Ã¢â‚¬Â¢ ${placeholders} agendamentos sem itens` : '';
+13975: atendimentoSummary.textContent = `${profName} Ã¢â‚¬â€ ${dateStr.split('-').reverse().join('/')} Ã¢â‚¬Â¢ ${real} itens${extra}`;
+14242: const nome = e && e.nome ? String(e.nome) : id || 'Ã¢â‚¬â€';
+14356: : 'Ã¢â‚¬â€';
+14361: : 'Ã¢â‚¬â€');
+14484: const st = String(a.status || a.status_agendamento || 'Ã¢â‚¬â€');
+14490: kpiAgendadosSub.textContent = parts.length ? parts.join(' | ') : 'Ã¢â‚¬â€';
+14502: const hora = inicio ? formatTimeHHMM(inicio) : 'Ã¢â‚¬â€';
+14504: const pacNome = a.paciente_nome || a.paciente || a.pacientenome || (Number.isFinite(pid) ? (patientNameBySeqid.get(pid) || '') : '') || 'Ã¢â‚¬â€';
+14505: const profNome = a.profissional_nome || getProfessionalNameBySeqId(a.profissional_id) || 'Ã¢â‚¬â€';
+14506: const st = a.status || a.status_agendamento || 'Ã¢â‚¬â€';
+14535: const f = String(t.forma_pagamento || 'Ã¢â‚¬â€');
+14575: if (kpiOrcamentosHojeSub) kpiOrcamentosHojeSub.textContent = `Unidade: ${currentEmpresaId || 'Ã¢â‚¬â€'}`;
+14661: if (kpiFiscalNotasHoje) kpiFiscalNotasHoje.textContent = 'Ã¢â‚¬â€';
+14662: if (kpiFiscalValorHoje) kpiFiscalValorHoje.textContent = 'Ã¢â‚¬â€';
+15218: const pacNome = pac ? String(pac.nome || '') : 'Ã¢â‚¬â€';
+15220: const orcSeq = b ? String(b.seqid || '') : 'Ã¢â‚¬â€';
+15221: const exec = String(o.tipo_execucao || 'Ã¢â‚¬â€');
+15223: ? (labById.get(String(o.laboratorio_id || ''))?.nome || 'Ã¢â‚¬â€')
+15224: : (profById.get(String(o.protetico_id || ''))?.nome || 'Ã¢â‚¬â€');
+15225: const fase = String(o.fase_atual || 'Ã¢â‚¬â€');
+15226: const prazo = o.prazo_previsto ? String(o.prazo_previsto) : 'Ã¢â‚¬â€';
+15227: const st = String(o.status_geral || 'Ã¢â‚¬â€');
+15439: const st = String(o.status_geral || 'Ã¢â‚¬â€');
+15440: const ph = String(o.fase_atual || 'Ã¢â‚¬â€');
+15860: const label = `${desc} Ã¢â‚¬â€ ${formatCurrencyBRL(valorItem)} | Prot: ${formatCurrencyBRL(valorProt)}`;
+15902: const desc = serv ? serv.descricao : (it.descricao || 'Ã¢â‚¬â€');
+16108: const dt = dtIso ? formatDateTime(dtIso) : 'Ã¢â‚¬â€';
+16109: const tipo = isCust ? `CUSTÓDIA Ã‚Â· ${String(ev.acao || '')}` : String(ev.tipo_evento || '');
+16146: <td style="font-weight:800;">${escapeHtml(r.tipo || 'Ã¢â‚¬â€')}</td>
+16147: <td>${escapeHtml(r.fase || 'Ã¢â‚¬â€')}</td>
+16148: <td>${escapeHtml(r.de || 'Ã¢â‚¬â€')}</td>
+16149: <td>${escapeHtml(r.para || 'Ã¢â‚¬â€')}</td>
+16413: const pacNome = pac ? String(pac.nome || '') : 'Ã¢â‚¬â€';
+16415: const orcSeq = b && b.seqid != null ? String(b.seqid) : 'Ã¢â‚¬â€';
+16416: const exec = String(o.tipo_execucao || 'Ã¢â‚¬â€');
+16418: ? ((proteseLabs || []).find(l => String(l.id) === String(o.laboratorio_id || ''))?.nome || 'Ã¢â‚¬â€')
+16419: : ((professionals || []).find(p => String(p.id) === String(o.protetico_id || ''))?.nome || 'Ã¢â‚¬â€');
+16424: const itemDesc = serv ? serv.descricao : (it ? (it.descricao || 'Ã¢â‚¬â€') : 'Ã¢â‚¬â€');
+16429: const status = String(o.status_geral || 'Ã¢â‚¬â€');
+16430: const fase = String(o.fase_atual || 'Ã¢â‚¬â€');
+16431: const prazo = o.prazo_previsto ? String(o.prazo_previsto) : 'Ã¢â‚¬â€';
+16432: const prioridade = String(o.prioridade || 'Ã¢â‚¬â€');
+16468: tipo: `CUSTÓDIA Ã‚Â· ${String(r.acao || '')}`,
+16493: const dt = r.created_at ? formatDateTime(r.created_at) : 'Ã¢â‚¬â€';
+16498: <td>${escapeHtml(r.tipo || 'Ã¢â‚¬â€')}</td>
+16499: <td>${escapeHtml(r.fase || 'Ã¢â‚¬â€')}</td>
+16500: <td>${escapeHtml(r.de || 'Ã¢â‚¬â€')}</td>
+16501: <td>${escapeHtml(r.para || 'Ã¢â‚¬â€')}</td>
+16551: <div class="item"><label>Orçamento</label><span>${orcSeq !== 'Ã¢â‚¬â€' ? `#${orcSeq}` : 'Ã¢â‚¬â€'}</span></div>
+16594: <div class="footer">Documento interno Ã¢â‚¬Â¢ Produção Protética</div>
+16607: const pacNome = pac ? String(pac.nome || '') : 'Ã¢â‚¬â€';
+16610: ? ((proteseLabs || []).find(l => String(l.id) === String(o.laboratorio_id || ''))?.nome || 'Ã¢â‚¬â€')
+16611: : ((professionals || []).find(p => String(p.id) === String(o.protetico_id || ''))?.nome || 'Ã¢â‚¬â€');
+16681: const dt = r.ts ? formatDateTime(r.ts) : 'Ã¢â‚¬â€';
+16690: <td class="nowrap" style="font-weight: 900;">${escapeHtml(r.evento || 'Ã¢â‚¬â€')}</td>
+16691: <td class="nowrap">${escapeHtml(r.fase || 'Ã¢â‚¬â€')}</td>
+16692: <td>${escapeHtml(r.de || 'Ã¢â‚¬â€')}</td>
+16693: <td>${escapeHtml(r.para || 'Ã¢â‚¬â€')}</td>
+16704: <title>Impressão Simples Ã¢â‚¬â€ OP</title>
+16726: <div class="title">Impressão Simples Ã¢â‚¬â€ Ordem Protética</div>
+16728: <div class="sub">Executor: <strong>${escapeHtml(String(executor || 'Ã¢â‚¬â€'))}</strong></div>
+16809: ? ((proteseLabs || []).find(l => String(l.id) === String(o.laboratorio_id || ''))?.nome || 'Ã¢â‚¬â€')
+16810: : ((professionals || []).find(p => String(p.id) === String(o.protetico_id || ''))?.nome || 'Ã¢â‚¬â€');
+16987: <div style="font-size: 28px; letter-spacing: 0.12em; font-weight: 900; margin: 6px 0 10px 0;">${code || 'Ã¢â‚¬â€'}</div>
+16988: <div style="color: var(--text-muted); font-size: 12px;">Validade: ${exp ? formatDateTime(exp) : 'Ã¢â‚¬â€'}</div>
+17405: const dt = r.confirmed_at ? formatDateTime(r.confirmed_at) : 'Ã¢â‚¬â€';
+17413: <div style="font-weight:800;">${acao} Ã¢â‚¬Â¢ ${de} Ã¢â€ â€™ ${para}</div>
+17502: <td style="padding: 0.6rem; border-bottom: 1px solid var(--border-color);">${(l.prazo_padrao_dias != null) ? `${l.prazo_padrao_dias}d` : 'Ã¢â‚¬â€'}</td>
+17689: if (!r) return 'Ã¢â‚¬â€';
+17693: return lab ? lab.nome : 'Ã¢â‚¬â€';
+17696: return p ? p.nome : 'Ã¢â‚¬â€';
+17715: const opSeq = ord ? `#${ord.seqid}` : 'Ã¢â‚¬â€';
+17717: const orcSeq = bud && bud.seqid != null ? `#${bud.seqid}` : 'Ã¢â‚¬â€';
+17719: const pacNome = pac ? String(pac.nome || '') : 'Ã¢â‚¬â€';
+17721: const venc = r.vencimento ? String(r.vencimento) : 'Ã¢â‚¬â€';
+17723: const st = String(r.status || 'Ã¢â‚¬â€');
+17736: ${canMarkPaid ? `<button class="btn btn-sm btn-primary" onclick="openProtesePayablePay('${r.id}')"><i class="ri-check-line"></i> Pagar</button>` : '<span style="color: var(--text-muted);">Ã¢â‚¬â€</span>'}
+17758: const st = String(r.status || 'Ã¢â‚¬â€');
+17761: const statusSummary = Object.entries(byStatus).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}: ${v}`).join(' | ') || 'Ã¢â‚¬â€';
+17765: const opSeq = ord ? `#${ord.seqid}` : 'Ã¢â‚¬â€';
+17767: const orcSeq = bud && bud.seqid != null ? `#${bud.seqid}` : 'Ã¢â‚¬â€';
+17769: const pacNome = pac ? String(pac.nome || '') : 'Ã¢â‚¬â€';
+17771: const venc = r.vencimento ? String(r.vencimento) : 'Ã¢â‚¬â€';
+17773: const st = String(r.status || 'Ã¢â‚¬â€');
+17779: <td>${escapeHtml(String(destNome || 'Ã¢â‚¬â€'))}</td>
+17814: <div class="sub">Unidade: <strong>${escapeHtml(String(currentEmpresaId || 'Ã¢â‚¬â€'))}</strong> Ã¢â‚¬Â¢ Gerado em: ${escapeHtml(new Date().toLocaleString('pt-BR'))}</div>
+17815: <div class="sub">Filtros Ã¢â‚¬Â¢ Status: <strong>${escapeHtml(statusLabel)}</strong> Ã¢â‚¬Â¢ Destinatário: <strong>${escapeHtml(destLabel)}</strong> Ã¢â‚¬Â¢ Busca: <strong>${escapeHtml(q || 'Ã¢â‚¬â€')}</strong></div>
+17876: const opLabel = ord && ord.seqid != null ? `OP #${ord.seqid}` : 'OP Ã¢â‚¬â€';
+17877: const orcLabel = bud && bud.seqid != null ? `Orçamento #${bud.seqid}` : 'Orçamento Ã¢â‚¬â€';
+17878: const pacLabel = pac ? `Paciente: ${pac.nome}` : 'Paciente: Ã¢â‚¬â€';
+17880: let itemDesc = 'Item: Ã¢â‚¬â€';
+17900: <div>${opLabel} Ã¢â‚¬Â¢ ${orcLabel}</div>
+17930: ? ((proteseLabs || []).find(l => String(l.id) === String(currentProtesePayable.laboratorio_id || ''))?.nome || 'Ã¢â‚¬â€')
+17931: : ((professionals || []).find(p => String(p.id) === String(currentProtesePayable.protetico_id || ''))?.nome || 'Ã¢â‚¬â€');
+18458: commTransferSummary.textContent = `${rows.length} comissão(ões) Ã¢â‚¬Â¢ ${profName} Ã¢â‚¬Â¢ ${Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
+18626: const headerTitle = isAdvance ? 'RECIBO DE ANTECIPAÇÃO DE COMISSÃO' : 'RECIBO DE COMISSÃO';
+18698: ? String(commStatus.options[commStatus.selectedIndex].text || statusVal || 'Ã¢â‚¬â€')
+18699: : (statusVal || 'Ã¢â‚¬â€');
+18719: const humanStart = start ? start.split('-').reverse().join('/') : 'Ã¢â‚¬â€';
+18720: const humanEnd = end ? end.split('-').reverse().join('/') : 'Ã¢â‚¬â€';
+18809: <div class="sub">Status: <strong>${escapeHtml(statusLabel)}</strong> Ã¢â‚¬Â¢ Período: <strong>${escapeHtml(humanStart)}</strong> a <strong>${escapeHtml(humanEnd)}</strong></div>
+18810: <div class="sub">Profissional: <strong>${escapeHtml(profLabel)}</strong> Ã¢â‚¬Â¢ Unidade: ${escapeHtml(String(currentEmpresaId || 'Ã¢â‚¬â€'))}</div>
+18832: <div class="footer">Documento interno Ã¢â‚¬Â¢ Comissões</div>
+18865: if (confirm('Não é possível excluir este registro pois ele possui movimentações vinculadas. Sugerimos apenas inativar.\n\nSe este usuário NÃO tiver movimentações, você pode continuar para revogar o acesso.\n\nDeseja prosseguir?')) {
+19029: if (!id || id === 'Ã¢â‚¬â€') return 'Ã¢â‚¬â€';
+19161: if (agendaSummary) agendaSummary.textContent = 'Ã¢â‚¬â€';
+19285: if (agendaSummary) agendaSummary.textContent = `${profName} Ã¢â‚¬â€ ${dateStr.split('-').reverse().join('/')} Ã¢â‚¬â€ Sem disponibilidade cadastrada.`;
+19294: const t = Number.isFinite(start.getTime()) ? formatTimeHHMM(start) : 'Ã¢â‚¬â€';
+19347: if (agendaSummary) agendaSummary.textContent = `${profName} Ã¢â‚¬â€ ${dateStr.split('-').reverse().join('/')}`;
+20974: <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);"><strong>${item.paciente_nome || 'Ã¢â‚¬â€'}</strong></td>
+20976: <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${item.categoria || 'Ã¢â‚¬â€'}</td>
+20977: <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${item.forma_pagamento || 'Ã¢â‚¬â€'}</td>
+20982: <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.observacoes || ''}">${item.observacoes || 'Ã¢â‚¬â€'}</td>
+21834: No OCC, <strong>Orçamento</strong> é o Ã¢â‚¬Å“objeto de negócioÃ¢â‚¬Â que organiza o atendimento do paciente em <strong>itens (procedimentos)</strong> e define as regras de <strong>pagamento, liberação, consumo no financeiro e comissão</strong>, conforme o campo <strong>Tipo</strong> do orçamento.
+21844: <li>Pode registrar Ã¢â‚¬Å“consumoÃ¢â‚¬Â no financeiro (débito do serviço).</li>
+21851: <li>É um orçamento Ã¢â‚¬Å“sem cobrançaÃ¢â‚¬Â (refação/ajuste).</li>
+21856: <li>Pode ser executado pelo mesmo profissional ou outro (você escolhe o executor no item), mas como o tipo é Ã¢â‚¬Å“RetrabalhoÃ¢â‚¬Â, não há comissão para ninguém.</li>
+21870: <li>Hoje o OCC não faz abatimento automático de comissão paga só porque você criou um orçamento Ã¢â‚¬Å“RetrabalhoÃ¢â‚¬Â.</li>
+21871: <li>Se a intenção for Ã¢â‚¬Å“corrigirÃ¢â‚¬Â o que já foi pago, o caminho previsto é via estorno/controle de comissões (com governança; pode exigir autorização quando já está Ã¢â‚¬Å“PAGAÃ¢â‚¬Â).</li>
+21892: openHelp('Ajuda Ã¢â‚¬â€ Orçamentos', getBudgetsHelpHtml());
+22321: budItemOdontoDisplay.value = list.length ? list.join(' Ã¢â‚¬Â¢ ') : 'Nenhum dente selecionado';
+22586: const toothDisplay = teethArr.length > 0 ? escapeHtml(teethArr.join(' Ã¢â‚¬Â¢ ')) : 'Ã¢â‚¬â€';
+22678: 'Ã¢Å¡Â Ã¯Â¸Â ALERTA VERMELHO',
+22751: budItemOdontoDisplay.value = list.length ? list.join(' Ã¢â‚¬Â¢ ') : 'Nenhum dente selecionado';
+22799: // ROTEAMENTO DA AÇÃO: Cancelar ou Salvar?
+23151: confirmMsg = `Ã¢Å¡Â Ã¯Â¸Â ATENÇÃO - CANCELAMENTO ${analysis.cancelCase === 3 ? 'CRÍTICO' : 'FINANCEIRO'}:\n\n` +
+23701: const odontograma = (s && s.exige_elemento) ? 'SIM' : 'NÃO';
+23731: <th>DESCRIÇÃO</th>
+23733: <th>SUBDIVISÃO</th>
+23742: ? `Quantidade total de itens: ${filtered.length} Ã¢â‚¬Â¢ Página ${pageIndex + 1} de ${pages.length}`
+23852: <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 10px;">SUBDIVISÃO</th>
+24721: showToast(`Ã°Å¸â€œÂ§ Login: ${email} | Ã°Å¸â€â€˜ Senha Inicial: 123456 (Será solicitado que você crie uma nova senha no primeiro acesso).`);
+24863: if (!value) return 'Ã¢â‚¬â€';
+24896: <td style="font-weight:700;">${String(item && item.tipo_assinatura || 'Ã¢â‚¬â€')}</td>
+24897: <td>${String(item && item.valor_plano || 'Ã¢â‚¬â€')}</td>
+24898: <td>${String(item && item.modulos_texto || 'Ã¢â‚¬â€')}</td>
+24899: <td>${item && item.destaque ? '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dbeafe; color:#1d4ed8; font-weight:700;">SIM</span>' : 'NÃO'}</td>
+24933: <td style="font-weight:700;">${String(emp && emp.nome || 'Ã¢â‚¬â€')}</td>
+24935: <td>${emp && emp.data_vencimento ? String(emp.data_vencimento).slice(0, 10) : 'Ã¢â‚¬â€'}</td>
+25131: hint.textContent = `${base} Ã¢â‚¬Â¢ Exceção à Regra`;
+25176: <div style="font-size:24px;">Ã¢Å¡Â Ã¯Â¸Â</div>
+25177: <div style="font-size:18px; font-weight:900; color:#991b1b;">Ã¢Å¡Â Ã¯Â¸Â Atenção: Perigo na Margem de Retenção!</div>
+26216: title.textContent = `Orçamento #${b.seqid || budgetId.slice(0, 8)} Ã¢â‚¬â€ ${b.pacientenome || ''}`;
+26297: //  PATIENT DETAIL REPORT Ã¢â‚¬â€ Print / Export PDF
+26328: ${val.includes('Ã¢â‚¬â€') ? `<div style="font-size:11px; color:#6b7280; margin-top:2px;">${val.split('Ã¢â‚¬â€')[1].trim()}</div>` : ''}
+26333: ${boolCard('Em tratamento médico?', a.emTratamentoMedico ? 'Sim' + (a.tratamentoDesc ? ' Ã¢â‚¬â€ ' + a.tratamentoDesc : '') : 'Não')}
+26334: ${boolCard('Toma medicação?', a.tomaMedicacao ? 'Sim' + (a.medicacaoDesc ? ' Ã¢â‚¬â€ ' + a.medicacaoDesc : '') : 'Não')}
+26335: ${boolCard('Tem alergia?', a.temAlergia ? 'Sim' + (a.alergiaDesc ? ' Ã¢â‚¬â€ ' + a.alergiaDesc : '') : 'Não')}
+26349: <span>Ã°Å¸â€œâ€¦ ${formatDateTime(ev.created_at)}</span>
+26350: <span>Ã°Å¸â€˜Â¤ ${ev.profissionais?.nome || 'Não informado'}</span>
+26432: <td style="padding:8px; border-bottom:1px solid #e5e7eb;">${t.forma_pagamento || 'Ã¢â‚¬â€'}</td>
+26455: <title>Ficha Clínica Ã¢â‚¬â€ ${patient.nome}</title>
+26492: /* thead repeating header Ã¢â‚¬â€ only shows in print */
+26498: /* Page number footer Ã¢â‚¬â€ Chrome 128+, Firefox, Edge */
+26550: <span class="ph-clinic">Ã°Å¸Â¦Â· Prontuári.io</span>
+26551: <span class="ph-patient">FICHA CLÍNICA Ã¢â‚¬â€ ${patient.nome}</span>
+26561: <span>Ã°Å¸Â¦Â· Prontuári.io Ã¢â‚¬â€ Documento gerado automaticamente em ${hoje}</span>
+26573: <div class="clinic-name">Ã°Å¸Â¦Â· Prontuári.io</div>
+26587: <div class="patient-id">ID ${patient.seqid || patient.id.slice(0, 8)} Ã‚Â· CPF: ${patient.cpf || 'Não informado'}</div>
+26594: <div class="section-icon">Ã°Å¸â€œâ€¹</div>
+26601: <div class="val">${patient.datanascimento ? formatDate(patient.datanascimento) : 'Ã¢â‚¬â€'}</div>
+26605: <div class="val">${patient.celular || 'Ã¢â‚¬â€'}</div>
+26609: <div class="val">${patient.email || 'Ã¢â‚¬â€'}</div>
+26613: <div class="val" style="color:#16a34a;">Ã¢â€”Â Ativo</div>
+26617: <div class="val">${enderecoFull || 'Ã¢â‚¬â€'}</div>
+26625: <div class="section-icon">Ã¢ÂÂ¤Ã¯Â¸Â</div>
+26635: <div class="section-icon">Ã°Å¸â€œÂ</div>
+26645: <div class="section-icon">Ã°Å¸â€™Â°</div>
+26655: <div class="section-icon">Ã°Å¸â€™Âµ</div>
+26687: //  FINANCEIRO MODULE Ã¢â‚¬â€ TRANSACTIONS & WALLET
+26719: if (k.includes('ERRO') || k.includes('REJEIT')) return { icon: 'Ã°Å¸â€Â´', label: 'Erro' };
+26720: if (k.includes('EMIT') || k.includes('APROV') || k.includes('SUCESS') || k.includes('SIMULAD') || k.includes('CONCLUID')) return { icon: 'Ã°Å¸Å¸Â¢', label: 'Concluída' };
+26721: if (k.includes('PROC') || k.includes('VALID') || k.includes('FILA') || k.includes('PEND')) return { icon: 'Ã°Å¸Å¸Â¡', label: 'Em processamento' };
+26722: return { icon: 'Ã¢Å¡Âª', label: 'Sem nota' };
+27142: patientName: String(patient && patient.nome || sample && sample.paciente_nome || budget && budget.pacientenome || 'Ã¢â‚¬â€'),
+27145: descricao: itens.length ? itens.map(it => String(it && (it.descricao || it.servicodescricao || it.nome) || '').trim()).filter(Boolean).slice(0, 3).join(' Ã¢â‚¬Â¢ ') : `Serviços Odontológicos ref. ao Orçamento #${ref}`,
+27167: return `<li>${escapeHtml(d)} Ã¢â‚¬â€ ${escapeHtml(formatNumberBR(q, 2))} x ${escapeHtml(formatCurrencyBRL(u))} = <strong>${escapeHtml(formatCurrencyBRL(q * u))}</strong></li>`;
+27284: showToast(`Ã°Å¸Å¸Â¢ ${provider.replace('_', ' ')} -> Dados validados com sucesso! JSON gerado e retorno fiscal persistido.`);
+27507: paciente_nome: pat ? pat.nome : (pacienteNomeFallback || 'Ã¢â‚¬â€'),
+27731: const pNomeOriginal = pat ? pat.nome : 'Ã¢â‚¬â€';
+27733: const pNomeFormatado = pNomeOriginal !== 'Ã¢â‚¬â€' ? pNomeOriginal.trim().toUpperCase() : 'Ã¢â‚¬â€';
+27758: const budgetText = budgetId ? `Orçamento ${budgetId[1].substring(0,6)}...` : 'Ã¢â‚¬â€';
+27765: <td>${escapeHtml(t.forma_pagamento || 'Ã¢â‚¬â€')}</td>
+27768: <td><div style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(t.observacoes_display || t.observacoes || '')}">${escapeHtml(t.observacoes_display || t.observacoes || 'Ã¢â‚¬â€')}</div></td>
+28136: const profNome = prof ? prof.nome : 'Ã¢â‚¬â€';
+28172: <p><strong>Paciente:</strong> ${budget.pacientenome || 'Ã¢â‚¬â€'}</p>
+28643: // Se houver QUALQUER pagamento que NÃO seja dinheiro, aplica imposto

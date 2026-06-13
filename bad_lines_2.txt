@@ -1,0 +1,44 @@
+2725: const has = r.has_empresa_id ? 'SIM' : 'NÃO';
+2726: const nn = r.empresa_id_not_null ? 'SIM' : 'NÃO';
+2727: const fk = r.empresa_id_has_fk_to_empresas ? 'SIM' : 'NÃO';
+9214: <label for="inventoryNfUnidadeCompra">Unidade de Compra (NF) <span title="Ã°Å¸â€™Â¡ Recomendamos converter para a menor unidade de consumo (g, ml, un) para que o custo por procedimento seja exato." style="cursor:help; margin-left:4px;"><i class="ri-question-line"></i></span></label>
+11615: <td style="text-align:center; font-weight:900;">${ativo ? 'SIM' : 'NÃO'}</td>
+13775: if (k === 'EMEXECUCAO' || k === 'EMEXECUÇÃO') return 'EMEXECUCAO';
+16109: const tipo = isCust ? `CUSTÓDIA Ã‚Â· ${String(ev.acao || '')}` : String(ev.tipo_evento || '');
+16468: tipo: `CUSTÓDIA Ã‚Â· ${String(r.acao || '')}`,
+18626: const headerTitle = isAdvance ? 'RECIBO DE ANTECIPAÇÃO DE COMISSÃO' : 'RECIBO DE COMISSÃO';
+18865: if (confirm('Não é possível excluir este registro pois ele possui movimentações vinculadas. Sugerimos apenas inativar.\n\nSe este usuário NÃO tiver movimentações, você pode continuar para revogar o acesso.\n\nDeseja prosseguir?')) {
+21834: No OCC, <strong>Orçamento</strong> é o Ã¢â‚¬Å“objeto de negócioÃ¢â‚¬Â que organiza o atendimento do paciente em <strong>itens (procedimentos)</strong> e define as regras de <strong>pagamento, liberação, consumo no financeiro e comissão</strong>, conforme o campo <strong>Tipo</strong> do orçamento.
+21844: <li>Pode registrar Ã¢â‚¬Å“consumoÃ¢â‚¬Â no financeiro (débito do serviço).</li>
+21851: <li>É um orçamento Ã¢â‚¬Å“sem cobrançaÃ¢â‚¬Â (refação/ajuste).</li>
+21856: <li>Pode ser executado pelo mesmo profissional ou outro (você escolhe o executor no item), mas como o tipo é Ã¢â‚¬Å“RetrabalhoÃ¢â‚¬Â, não há comissão para ninguém.</li>
+21870: <li>Hoje o OCC não faz abatimento automático de comissão paga só porque você criou um orçamento Ã¢â‚¬Å“RetrabalhoÃ¢â‚¬Â.</li>
+21871: <li>Se a intenção for Ã¢â‚¬Å“corrigirÃ¢â‚¬Â o que já foi pago, o caminho previsto é via estorno/controle de comissões (com governança; pode exigir autorização quando já está Ã¢â‚¬Å“PAGAÃ¢â‚¬Â).</li>
+22678: 'Ã¢Å¡Â Ã¯Â¸Â ALERTA VERMELHO',
+22799: // ROTEAMENTO DA AÇÃO: Cancelar ou Salvar?
+23151: confirmMsg = `Ã¢Å¡Â Ã¯Â¸Â ATENÇÃO - CANCELAMENTO ${analysis.cancelCase === 3 ? 'CRÍTICO' : 'FINANCEIRO'}:\n\n` +
+23701: const odontograma = (s && s.exige_elemento) ? 'SIM' : 'NÃO';
+23731: <th>DESCRIÇÃO</th>
+23733: <th>SUBDIVISÃO</th>
+23852: <th style="text-align:left; border-bottom:1px solid #e5e7eb; padding:6px 10px;">SUBDIVISÃO</th>
+24721: showToast(`Ã°Å¸â€œÂ§ Login: ${email} | Ã°Å¸â€â€˜ Senha Inicial: 123456 (Será solicitado que você crie uma nova senha no primeiro acesso).`);
+24899: <td>${item && item.destaque ? '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#dbeafe; color:#1d4ed8; font-weight:700;">SIM</span>' : 'NÃO'}</td>
+25176: <div style="font-size:24px;">Ã¢Å¡Â Ã¯Â¸Â</div>
+25177: <div style="font-size:18px; font-weight:900; color:#991b1b;">Ã¢Å¡Â Ã¯Â¸Â Atenção: Perigo na Margem de Retenção!</div>
+26349: <span>Ã°Å¸â€œâ€¦ ${formatDateTime(ev.created_at)}</span>
+26350: <span>Ã°Å¸â€˜Â¤ ${ev.profissionais?.nome || 'Não informado'}</span>
+26550: <span class="ph-clinic">Ã°Å¸Â¦Â· Prontuári.io</span>
+26561: <span>Ã°Å¸Â¦Â· Prontuári.io — Documento gerado automaticamente em ${hoje}</span>
+26573: <div class="clinic-name">Ã°Å¸Â¦Â· Prontuári.io</div>
+26587: <div class="patient-id">ID ${patient.seqid || patient.id.slice(0, 8)} Ã‚Â· CPF: ${patient.cpf || 'Não informado'}</div>
+26594: <div class="section-icon">Ã°Å¸â€œâ€¹</div>
+26625: <div class="section-icon">Ã¢ÂÂ¤Ã¯Â¸Â</div>
+26635: <div class="section-icon">Ã°Å¸â€œÂ</div>
+26645: <div class="section-icon">Ã°Å¸â€™Â°</div>
+26655: <div class="section-icon">Ã°Å¸â€™Âµ</div>
+26719: if (k.includes('ERRO') || k.includes('REJEIT')) return { icon: 'Ã°Å¸â€Â´', label: 'Erro' };
+26720: if (k.includes('EMIT') || k.includes('APROV') || k.includes('SUCESS') || k.includes('SIMULAD') || k.includes('CONCLUID')) return { icon: 'Ã°Å¸Å¸Â¢', label: 'Concluída' };
+26721: if (k.includes('PROC') || k.includes('VALID') || k.includes('FILA') || k.includes('PEND')) return { icon: 'Ã°Å¸Å¸Â¡', label: 'Em processamento' };
+26722: return { icon: 'Ã¢Å¡Âª', label: 'Sem nota' };
+27284: showToast(`Ã°Å¸Å¸Â¢ ${provider.replace('_', ' ')} -> Dados validados com sucesso! JSON gerado e retorno fiscal persistido.`);
+28643: // Se houver QUALQUER pagamento que NÃO seja dinheiro, aplica imposto

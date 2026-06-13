@@ -1,0 +1,743 @@
+
+# 🛡️ REGRAS DE OURO DE DESENVOLVIMENTO - SISTEMA OCC
+
+Você é um Engenheiro de Software Sênior atuando no sistema OCC (Odonto Connect Cloud). Seu principal objetivo é garantir a estabilidade do código atual e seguir regras estritas de alteração.
+
+## 🛑 DIRETRIZES DE ATUAÇÃO (MUITO IMPORTANTE)
+1. **Atuação Cirúrgica:** Altere APENAS as linhas de código ou funções explicitamente solicitadas pelo usuário. Nunca reescreva, limpe ou altere arquivos, funções ou estilos adjacentes que não fazem parte do escopo da tarefa atual.
+2. **Proibido Inventar Campos:** Nunca deduza ou invente nomes de colunas ou tabelas. Se houver dúvida sobre uma coluna no Supabase/PostgreSQL, pergunte ou solicite uma verificação antes de escrever o código.
+3. **Preservação de Funcionalidades:** Módulos de relatórios, filtros, faturamento, NFSe e agendamentos estão em produção e funcionando. Qualquer alteração não autorizada nesses módulos que resulte em quebra de funcionalidade será considerada uma falha grave.
+
+## 🗄️ DICIONÁRIO DE DADOS (ESTRUTURA REAL DO BANCO)
+
+Antes de gerar qualquer query Supabase, certifique-se de usar os campos exatos listados abaixo:
+
+### 🗄️ Tabela: agenda_agendamentos
+* `id` : uuid
+* `seqid` : bigint
+* `empresa_id` : text
+* `profissional_id` : bigint
+* `paciente_id` : bigint
+* `inicio` : timestamp with time zone
+* `fim` : timestamp with time zone
+* `status` : text
+* `titulo` : text
+* `observacoes` : text
+* `criado_por` : uuid
+* `created_at` : timestamp with time zone
+* `updated_at` : timestamp with time zone
+
+### 🗄️ Tabela: agenda_disponibilidade
+* `id` : uuid
+* `seqid` : bigint
+* `empresa_id` : text
+* `profissional_id` : bigint
+* `dia_semana` : integer
+* `hora_inicio` : time without time zone
+* `hora_fim` : time without time zone
+* `slot_minutos` : integer
+* `ativo` : boolean
+* `created_at` : timestamp with time zone
+* `updated_at` : timestamp with time zone
+
+### 🗄️ Tabela: auditoria_log
+* `id` : uuid
+* `empresa_id` : text
+* `usuario_id` : uuid
+* `data_hora` : timestamp with time zone
+* `valor_antigo` : jsonb
+* `valor_novo` : jsonb
+
+### 🗄️ Tabela: config_planos
+* `id` : uuid
+* `tipo_assinatura` : text
+* `valor_plano` : text
+* `modulos_texto` : text
+* `destaque` : boolean
+* `created_at` : timestamp with time zone
+* `updated_at` : timestamp with time zone
+* `legenda_comercial` : text
+
+### 🗄️ Tabela: empresas
+* `id` : text (Nota: No front-end, o ID ativo pode vir no formato híbrido 'emp_165f9d072a')
+* `nome` : text
+* `created_at` : timestamp with time zone
+* `logotipo` : text (Nota: O caminho do logo em texto ou URL é guardado neste campo)
+* `supervisor_pin` : text
+* `telefone` : text
+* `celular` : text
+* `email` : text
+* `identificador` : text
+* `assinatura_status` : text
+* `plano_tipo` : text
+* `data_vencimento` : date
+* `financeiro_params` : jsonb
+* `idioma_preferencial` : character varying (10)
+* `moeda_simbolo` : character varying (10)
+* `pais` : character varying (100)
+* `modulos_contratados` : text
+* `tempo_consulta_padrao` : integer
+* `horario_inicio_semana` : text
+* `horario_fim_semana` : text
+* `horario_inicio_sabado` : text
+* `horario_fim_sabado` : text
+* `domingo_fechado` : boolean
+
+### 🗄️ Tabela: especialidade_subdivisoes
+* `id` : text
+* `especialidade_id` : text
+* `nome` : text
+* `empresa_id` : text
+* `created_at` : timestamp with time zone
+
+### 🗄️ Tabela: especialidade_subdivisoes_template
+* `id` : integer
+* `especialidade_seqid` : integer
+* `nome` : text
+* `ativa` : boolean
+
+### 🗄️ Tabela: especialidades
+* `id` : text
+* `seqid` : integer
+* `nome` : text
+* `subdivisoes` : jsonb
+* `empresa_id` : text
+
+### 🗄️ Tabela: especialidades_template
+* `id` : text
+* `seqid` : integer
+* `nome` : text
+* `ativa` : boolean
+
+### 🗄️ Tabela: financeiro_apuracao_servicos
+* `id` : uuid
+* `orcamento_id` : text
+* `orcamento_item_id` : text
+* `profissional_id` : text
+* `valor_bruto_servico` : numeric
+* `valor_custo_protetico` : numeric
+* `valor_custo_insumos` : numeric
+* `percentual_comissao_aplicado` : numeric
+* `valor_comissao_calculado` : numeric
+* `lucro_liquido_gerado` : numeric
+* `data_apuracao` : timestamp with time zone
+
+### 🗄️ Tabela: financeiro_comissoes
+* `id` : uuid
+* `seqid` : bigint
+* `profissional_id` : bigint
+* `item_id` : text
+* `valor_comissao` : numeric
+* `status` : text
+* `data_geracao` : timestamp with time zone
+* `transacao_estorno_id` : uuid
+* `empresa_id` : text
+* `data_pagamento` : timestamp with time zone
+* `pago_por` : uuid
+* `recibo_id` : uuid
+* `observacoes` : text
+* `criado_por` : uuid
+* `estornado_em` : timestamp with time zone
+* `estornado_por` : uuid
+* `transfer_group_id` : uuid
+
+### 🗄️ Tabela: financeiro_notas
+* `id` : bigint
+* `empresa_id` : character varying
+* `transacao_id` : character varying
+* `referencia_id` : character varying
+* `paciente_id` : character varying
+* `paciente_nome` : character varying
+* `status_nota` : character varying
+* `valor` : numeric
+* `json_envio_teste` : jsonb
+* `created_at` : timestamp without time zone
+* `pdf_url` : text
+* `xml_retorno` : text
+* `mensagem_sefaz` : text
+* `numero_nota` : character varying (50)
+* `chave_acesso` : character varying (100)
+* [⚠️ REGRA CRÍTICA]: Consultas de permissão/status nesta tabela de NFSe DEVEM usar obrigatoriamente .maybeSingle() para evitar exceções fatais PGRST116 no JavaScript.
+
+### 🗄️ Tabela: financeiro_transacoes
+* `id` : uuid
+* `seqid` : bigint
+* `paciente_id` : bigint
+* `tipo` : text
+* `categoria` : text
+* `valor` : numeric
+* `data_transacao` : timestamp with time zone
+* `forma_pagamento` : text
+* `referencia_id` : bigint
+* `paciente_destino_id` : bigint
+* `observacoes` : text
+* `notificado_email` : boolean
+* `empresa_id` : text
+* `criado_por` : uuid
+* `orcamento_id` : text
+* `orcamento_pagamento_id` : uuid
+
+### 🗄️ Tabela: inventory
+* `id` : uuid
+* `nome` : text
+* `unidade` : text
+* `estoque_atual` : numeric
+* `estoque_minimo` : numeric
+* `created_at` : timestamp with time zone
+* `eh_consumivel` : boolean
+* `empresa_id` : text
+* `codigo_barras` : text
+* `ativo` : boolean
+* `preco_custo` : numeric
+* `unidade_medida` : text
+* `fator_conversao` : numeric
+* `tipo_inventario` : text
+* `area` : text
+* `categoria` : text
+
+### 🗄️ Tabela: inventory_logs
+* `id` : uuid
+* `inventory_id` : uuid
+* `tipo` : text
+* `quantidade` : numeric
+* `responsavel_id` : uuid
+* `data_hora` : timestamp with time zone
+* `empresa_id` : text
+* `atendimento_id` : text
+* `valor_total_nf` : numeric
+* `orcamento_item_id` : text
+* `is_biosseguranca` : boolean
+
+### 🗄️ Tabela: inventory_template
+* `id` : text
+* `nome` : text
+* `codigo_barras` : text
+* `unidade` : text
+* `unidade_medida` : text
+* `fator_conversao` : numeric
+* `preco_custo` : numeric
+* `estoque_atual` : numeric
+* `estoque_minimo` : numeric
+* `eh_consumivel` : boolean
+* `ativo` : boolean
+* `tipo_inventario` : text
+* `area` : text
+* `categoria` : text
+* `created_at` : timestamp with time zone
+
+### 🗄️ Tabela: laboratorios_proteticos
+* `id` : uuid
+* `empresa_id` : text
+* `seqid` : bigint
+* `nome` : text
+* `contato` : text
+* `telefone` : text
+* `email` : text
+* `prazo_padrao_dias` : integer
+* `ativo` : boolean
+* `created_at` : timestamp with time zone
+* `created_by` : uuid
+
+### 🗄️ Tabela: marketing_campanhas
+* `id` : uuid
+* `empresa_id` : text
+* `nome` : text
+* `assunto` : text
+* `corpo` : text
+* `rodape` : text
+* `ativo` : boolean
+* `target_min_meses` : integer
+* `target_max_meses` : integer
+* `dias_reenvio` : integer
+* `limite_dia` : integer
+* `janela_conversao_dias` : integer
+* `created_at` : timestamp with time zone
+* `updated_at` : timestamp with time zone
+* `target_status` : text
+
+### 🗄️ Tabela: marketing_envios
+* `id` : uuid
+* `empresa_id` : text
+* `campanha_id` : uuid
+* `paciente_id` : bigint
+* `paciente_nome` : text
+* `paciente_email` : text
+* `status` : text
+* `erro` : text
+* `enviado_em` : timestamp with time zone
+* `created_at` : timestamp with time zone
+* `smtp_message_id` : text
+* `smtp_response` : text
+* `smtp_accepted` : jsonb
+* `smtp_rejected` : jsonb
+
+### 🗄️ Tabela: marketing_smtp_config
+* `empresa_id` : text
+* `host` : text
+* `port` : integer
+* `username` : text
+* `password` : text
+* `from_email` : text
+* `from_name` : text
+* `enabled` : boolean
+* `created_at` : timestamp with time zone
+* `updated_at` : timestamp with time zone
+* `brevo_api_key` : text
+
+### 🗄️ Tabela: model_items
+* `id` : uuid
+* `model_id` : uuid
+* `inventory_id` : uuid
+* `quantidade_sugerida` : numeric
+
+### 🗄️ Tabela: model_items_template
+* `id` : text
+* `model_id` : text
+* `inventory_id` : text
+* `quantidade_sugerida` : numeric
+* `created_at` : timestamp with time zone
+
+### 🗄️ Tabela: occ_audit_log
+* `id` : uuid
+* `empresa_id` : text
+* `table_name` : text
+* `action` : text
+* `row_id` : text
+* `old_data` : jsonb
+* `new_data` : jsonb
+* `actor_user_id` : uuid
+* `actor_email` : text
+* `created_at` : timestamp with time zone
+
+### 🗄️ Tabela: occ_empresa_imports
+* `empresa_id` : text
+* `kind` : text
+* `imported_at` : timestamp with time zone
+* `imported_by` : uuid
+
+### 🗄️ Tabela: orcamento_cancelados
+* `id` : uuid
+* `orcamento_id` : text
+* `orcamento_seqid` : bigint
+* `paciente_id` : bigint
+* `paciente_nome` : text
+* `empresa_id` : text
+* `total_pago_na_epoca` : numeric
+* `comissoes_pagas_detalhe` : text
+* `comissoes_estornadas_detalhe` : text
+* `motivo_cancelamento` : text
+* `cancelado_por_nome` : text
+* `cancelado_por_id` : uuid
+* `data_cancelamento` : timestamp with time zone
+* `criado_em` : timestamp with time zone
+
+### 🗄️ Tabela: orcamento_itens
+* `id` : text
+* `orcamento_id` : text
+* `empresa_id` : text
+* `servico_id` : text
+* `valor` : numeric
+* `qtde` : integer
+* `valor_protetico` : numeric
+* `created_at` : timestamp with time zone
+* `profissional_id` : bigint
+* `status` : text
+* `protetico_id` : bigint
+* `subdivisao` : text
+* `autorizado_por` : text
+* `protese_tipo_execucao` : text
+* `protese_laboratorio_id` : uuid
+* `elementos` : jsonb
+* `descricao_atendimento` : text
+* `orcamento_id_novo` : text
+
+### 🗄️ Tabela: orcamento_pagamentos
+* `id` : uuid
+* `seqid` : bigint
+* `orcamento_id` : text
+* `valor_pago` : numeric
+* `data_pagamento` : timestamp with time zone
+* `forma_pagamento` : text
+* `status_pagamento` : text
+* `empresa_id` : text
+* `observacoes` : text
+* `criado_em` : timestamp with time zone
+
+### 🗄️ Tabela: orcamentos
+* `id` : text
+* `seqid` : integer
+* `pacienteid` : text
+* `pacientenome` : text
+* `pacientecelular` : text
+* `pacienteemail` : text
+* `status` : text
+* `itens` : jsonb
+* `created_at` : timestamp with time zone
+* `empresa_id` : text
+* `profissional_id` : bigint
+* `tipo` : text
+* `observacoes` : text
+* `protocolo_fiscal` : character varying (50)
+* `nota_fiscal_externa` : character varying (50)
+
+### 🗄️ Tabela: ordens_proteticas
+* `id` : uuid
+* `empresa_id` : text
+* `seqid` : bigint
+* `paciente_id` : text
+* `orcamento_id` : text
+* `orcamento_item_id` : text
+* `tipo_execucao` : text
+* `protetico_id` : text
+* `laboratorio_id` : uuid
+* `fase_atual` : text
+* `status_geral` : text
+* `prioridade` : text
+* `prazo_previsto` : date
+* `observacoes` : text
+* `created_at` : timestamp with time zone
+* `created_by` : uuid
+* `updated_at` : timestamp with time zone
+* `origem_trabalho` : text
+* `material_tipo` : text
+* `prova_motivo` : text
+* `prova_custo_responsabilidade` : text
+* `prova_reprovada_at` : timestamp with time zone
+* `entregue_at` : timestamp with time zone
+* `reprovacao_custodia_evento_id` : uuid
+* `aprovacao_paciente_custodia_evento_id` : uuid
+
+### 🗄️ Tabela: ordens_proteticas_anexos
+* `id` : uuid
+* `empresa_id` : text
+* `ordem_id` : uuid
+* `tipo` : text
+* `nome_arquivo` : text
+* `mime_type` : text
+* `conteudo_base64` : text
+* `created_at` : timestamp with time zone
+* `created_by` : uuid
+
+### 🗄️ Tabela: ordens_proteticas_custodia_eventos
+* `id` : uuid
+* `empresa_id` : text
+* `ordem_id` : uuid
+* `token_id` : uuid
+* `acao` : text
+* `de_local` : text
+* `para_local` : text
+* `recebedor_nome` : text
+* `recebedor_doc` : text
+* `assinatura_base64` : text
+* `user_agent` : text
+* `confirmed_at` : timestamp with time zone
+* `created_at` : timestamp with time zone
+
+### 🗄️ Tabela: ordens_proteticas_custodia_tokens
+* `id` : uuid
+* `empresa_id` : text
+* `ordem_id` : uuid
+* `token` : text
+* `challenge_hash` : text
+* `acao` : text
+* `de_local` : text
+* `para_local` : text
+* `status` : text
+* `expires_at` : timestamp with time zone
+* `confirmed_at` : timestamp with time zone
+* `created_at` : timestamp with time zone
+* `created_by` : uuid
+
+### 🗄️ Tabela: ordens_proteticas_eventos
+* `id` : uuid
+* `empresa_id` : text
+* `ordem_id` : uuid
+* `tipo_evento` : text
+* `fase_resultante` : text
+* `de_local` : text
+* `para_local` : text
+* `nota` : text
+* `created_at` : timestamp with time zone
+* `created_by` : uuid
+
+### 🗄️ Tabela: paciente_documentos
+* `id` : uuid
+* `paciente_id` : text
+* `tipo` : text
+* `nome_arquivo` : text
+* `conteudo_base64` : text
+* `empresa_id` : text
+* `created_at` : timestamp with time zone
+* `created_by` : uuid
+
+### 🗄️ Tabela: paciente_evolucao
+* `id` : uuid
+* `paciente_id` : text
+* `profissional_id` : text
+* `descricao` : text
+* `dente_regiao` : text
+* `empresa_id` : text
+* `created_at` : timestamp with time zone
+* `created_by` : uuid
+* `user_ip` : text
+* `origem` : text
+* `orcamento_id` : text
+* `orcamento_item_id` : text
+* `auto_gerado` : boolean
+
+### 🗄️ Tabela: paciente_tokens
+* `id` : uuid
+* `paciente_id` : text
+* `token` : text
+* `expires_at` : timestamp with time zone
+* `created_at` : timestamp with time zone
+
+### 🗄️ Tabela: pacientes
+* `id` : text
+* `seqid` : integer
+* `nome` : text
+* `cpf` : text
+* `datanascimento` : date
+* `sexo` : text
+* `profissao` : text
+* `telefone` : text
+* `celular` : text
+* `email` : text
+* `cep` : text
+* `endereco` : text
+* `numero` : text
+* `complemento` : text
+* `bairro` : text
+* `cidade` : text
+* `uf` : text
+* `anamnese` : jsonb
+* `created_at` : timestamp with time zone
+* `empresa_id` : text
+* `nao_receber_campanhas` : boolean
+* `numero_prontuario` : text
+* `codigo_ibge` : character varying
+* `status_whatsapp` : text
+
+### 🗄️ Tabela: pagamentos_log
+* `id` : bigint
+* `empresa_id` : character varying
+* `status` : character varying
+* `valor` : numeric
+* `transacao_id` : character varying
+* `created_at` : timestamp without time zone
+
+### 🗄️ Tabela: portal_mensagens
+* `id` : uuid
+* `empresa_id` : text
+* `paciente_id` : text
+* `remetente` : text
+* `conteudo` : text
+* `lida` : boolean
+* `created_at` : timestamp with time zone
+* `tipo_mensagem` : text
+
+### 🗄️ Tabela: profissionais
+* `id` : text
+* `seqid` : integer
+* `nome` : text
+* `celular` : text
+* `email` : text
+* `tipo` : text
+* `especialidadeid` : text
+* `status` : text
+* `photo` : text
+* `comissions` : jsonb
+* `created_at` : timestamp with time zone
+* `empresa_id` : text
+* `tempo_consulta` : integer
+* [⚠️ REGRA DE NEGÓCIO]: O OCC não possui limites para o número de dentistas cadastrados por cliente/empresa. Nunca remova ou trave a quantidade nesta tabela.
+
+### 🗄️ Tabela: profissional_usuarios
+* `id` : uuid
+* `empresa_id` : text
+* `usuario_id` : uuid
+* `profissional_id` : text
+* `created_at` : timestamp with time zone
+* `created_by` : uuid
+
+### 🗄️ Tabela: protese_contas_pagar
+* `id` : uuid
+* `seqid` : bigint
+* `empresa_id` : text
+* `ordem_id` : uuid
+* `orcamento_id` : text
+* `orcamento_item_id` : text
+* `destinatario_tipo` : text
+* `protetico_id` : text
+* `laboratorio_id` : uuid
+* `valor` : numeric
+* `vencimento` : date
+* `status` : text
+* `pago_em` : timestamp with time zone
+* `pago_por` : uuid
+* `transacao_id` : uuid
+* `created_at` : timestamp with time zone
+* `created_by` : uuid
+
+### 🗄️ Tabela: service_mapping
+* `service_id` : text
+* `model_id` : uuid
+
+### 🗄️ Tabela: service_mapping_template
+* `service_id` : text
+* `model_id` : text
+* `created_at` : timestamp with time zone
+
+### 🗄️ Tabela: servicos
+* `id` : text
+* `seqid` : integer
+* `descricao` : text
+* `valor` : numeric
+* `ie` : text
+* `subdivisao` : text
+* `created_at` : timestamp with time zone
+* `empresa_id` : text
+* `subdivisao_id` : text
+* `exige_elemento` : boolean
+* `tipo_calculo` : text
+* `origem` : text
+
+### 🗄️ Tabela: servicos_template
+* `id` : text
+* `descricao` : text
+* `valor` : numeric
+* `ie` : text
+* `tipo_calculo` : text
+* `exige_elemento` : boolean
+* `subdivisao` : text
+* `created_at` : timestamp with time zone
+
+### 🗄️ Tabela: suporte_tickets
+* `id` : uuid
+* `emp_id` : text
+* `nome_empresa` : character varying (255)
+* `usuario_nome` : character varying (255)
+* `titulo` : character varying (255)
+* `categoria` : character varying (100)
+* `descricao` : text
+* `status` : character varying (50)
+* `data_criacao` : timestamp with time zone
+* `resposta_admin` : text
+
+### 🗄️ Tabela: usage_models
+* `id` : uuid
+* `nome_modelo` : text
+* `created_at` : timestamp with time zone
+* `empresa_id` : text
+* `include_biosseguranca` : boolean
+* `servico_id` : text
+
+### 🗄️ Tabela: usage_models_template
+* `id` : text
+* `nome_modelo` : text
+* `include_biosseguranca` : boolean
+* `created_at` : timestamp with time zone
+* `area` : text
+* `ativo` : boolean
+
+### 🗄️ Tabela: usuario_empresas
+* `id` : uuid
+* `usuario_id` : uuid
+* `empresa_id` : text
+* `perfil` : text
+* `created_at` : timestamp with time zone
+* `user_email` : text
+* `permissoes` : jsonb
+* `require_password_change` : boolean
+
+### 🗄️ Tabela: v_financeiro_apuracao_detalhada (VIEW)
+* `Data` : date
+* `Dentista` : text
+* `Paciente` : text
+* `Servico` : text
+* `Valor Bruto` : numeric
+* `Custo Protético` : numeric
+* `Custo Insumos` : numeric
+* `% Comis.` : numeric
+* `Valor Comissão` : numeric
+* `Lucro Líquido` : numeric
+* `Doc_Origem` : text
+
+### 🗄️ Tabela: view_saldo_paciente (VIEW)
+* `paciente_id` : bigint
+* `saldo_atual` : numeric
+
+### 🗄️ Tabela: view_saude_sistema (VIEW)
+* `categoria` : text
+* `item` : text
+* `valor` : integer
+* `detalhe` : jsonb
+* `status` : text
+
+### 🗄️ Tabela: vw_dashboard_rentabilidade_real (VIEW)
+* `empresa_id` : text
+* `orcamento_item_id` : text
+* `procedimento` : text
+* `subdivisao` : text
+* `valor_cobrado` : numeric
+* `custo_material` : numeric
+* `custo_bio` : numeric
+* `margem_liquida` : numeric
+
+### 🗄️ Tabela: vw_inventory_logs_enriched (VIEW)
+* `inventory_log_id` : text
+* `empresa_id` : text
+* `inventory_id` : text
+* `orcamento_item_ref` : text
+* `atendimento_id` : text
+* `tipo` : text
+* `quantidade` : numeric
+* `data_hora` : timestamp with time zone
+* `material` : text
+* `preco_custo_unit` : numeric
+* `valor_movimentado` : numeric
+* `subdivisao` : text
+* `procedimento` : text
+* `paciente` : text
+* `flg_biosseguranca` : integer
+
+### 🗄️ Tabela: vw_kpi_giro_estoque_trae (VIEW)
+* `empresa_id` : text
+* `orcamento_item_id` : text
+* `qtd_prevista_total` : numeric
+* `qtd_consumida_total` : numeric
+* `delta_qtd` : numeric
+* `custo_previsto` : numeric
+* `custo_consumido` : numeric
+* `delta_custo` : numeric
+
+### 🗄️ Tabela: vw_kpi_recuperacao_custos_biosseg_mensal (VIEW)
+* `empresa_id` : text
+* `competencia_mes` : date
+* `valor_recuperado_biosseg` : numeric
+* `movimentos_biosseg` : integer
+
+### 🗄️ Tabela: vw_lucratividade_servicos (VIEW)
+* `empresa_id` : text
+* `servico` : text
+* `preco_venda` : numeric
+* `custo_insumos` : numeric
+* `lucro_estimado` : numeric
+
+
+## 📊 PADRONIZAÇÃO DE VISUAIS E RELATÓRIOS
+* **Títulos de Relatórios:** Todos os relatórios devem seguir o padrão de cabeçalho unificado do OCC (Logotipo à esquerda, Nome da Clínica centralizado, Título do Relatório em Caixa Alta H2, e Data/Hora de emissão à direita).
+* **Filtros de Data:** Sempre utilize o formato ISO (`YYYY-MM-DD`) nas queries de busca de datas e trate o timezone local do cliente.
+
+
+## 🎨 PADRONIZAÇÃO DE COMPONENTES E INTERFACE (UI/UX)
+
+[⚠️ DIRETRIZ VISUAL CRÍTICA]: É expressamente PROIBIDO renderizar campos editáveis (inputs, selects, textareas) soltos diretamente na página principal de um módulo durante ações de criação ou edição (CRUD). 
+
+Siga estritamente as regras de interface abaixo:
+
+1. **Uso Obrigatório de Modal + PANEL:** Toda ação de inclusão (Create) ou edição (Update) de registros deve abrir obrigatoriamente um modal em overlay centralizado na tela. O conteúdo do formulário deve estar envelopado dentro de um componente estruturado de **PANEL**.
+2. **Botões de Ação Padronizados:** Todo PANEL de edição/cadastro deve conter, no rodapé ou canto inferior direito, duas opções de clique claras e em caixa alta:
+   * **CANCELAR:** Para fechar o modal imediatamente e descartar as alterações, sem dar refresh na página e sem perder o contexto anterior do usuário.
+   * **SALVAR:** Para processar a query assíncrona no Supabase e salvar os dados de forma segura.
+3. **Comportamento Visual:** O modal deve possuir um fundo escurecido semi-transparente (backdrop blur ou overlay escuro) para dar foco total ao PANEL de edição, impedindo que o usuário clique em elementos da página de fundo enquanto o formulário estiver aberto.

@@ -1,0 +1,1 @@
+ALTER TABLE orcamentos ADD COLUMN IF NOT EXISTS nota_fiscal_externa VARCHAR(50);

@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Portal do Paciente - OCC</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#10b981">
+  <link rel="apple-touch-icon" href="/assets/image_cb64a0_192.png">
+  <link rel="stylesheet" href="/styles.css">
+  
+  <!-- Injeção do vConsole para debug no celular -->
+  <!-- <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
+  <script>
+    var vConsole = new window.VConsole();
+  </script> -->
+  <style>
+    /* Esconder vConsole em caso de cache agressivo */
+    #__vconsole, .vc-switch { display: none !important; }
+
+    body {
+      background: var(--bg-light);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      font-family: 'Inter', sans-serif;
+      text-align: center;
+      padding: 40px 20px;
+      box-sizing: border-box;
+    }
+    .clinica-header {
+      width: 100%;
+      max-width: 400px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .clinica-nome {
+      color: #0f172a;
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.5px;
+    }
+    .portal-card {
+      background: #fff;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      max-width: 400px;
+      width: 100%;
+    }
+    .install-prompt {
+      display: none;
+      margin-top: 20px;
+      padding: 15px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      color: #166534;
+    }
+    .btn-install {
+      background: #10b981;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 10px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="clinica-header" id="clinicaHeader" style="display: none;">
+    <h1 class="clinica-nome" style="font-size: 16px; color: #64748b; font-weight: 500; margin-bottom: 4px;">Sua clínica</h1>
+    <h2 class="clinica-nome" id="nomeClinicaHeader" style="font-size: 24px; color: #0f172a; font-weight: 700;"></h2>
+  </div>
+
+  <div class="portal-card">
+    <h2 style="margin-top: 0; color: #334155; font-size: 18px; font-weight: 600;">Portal do Paciente</h2>
+    <p id="statusMsg">Validando seu acesso seguro...</p>
+    
+    <div id="patientInterface" style="display: none; margin-top: 20px; text-align: left; width: 100%;">
+      <h3 style="color: #1e3a8a; font-size: 20px; margin-bottom: 5px;">Olá, <span id="patientName"></span>!</h3>
+      <p id="boas-vindas-topo" style="color: #334155; font-size: 14px; margin-top: 0;">Bem-vindo(a) ao seu espaço de saúde OCC.</p>
+      
+      <div style="margin-top: 20px; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h4 id="btn-agendamentos" style="margin: 0 0 10px 0; color: #475569; font-size: 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+          Meus Próximos Agendamentos <span style="font-size: 12px; color: #94a3b8;">▼</span>
+        </h4>
+        <div id="appointmentsContainer">
+          <p style="margin: 0; color: #64748b; font-size: 13px;">Nenhuma consulta marcada para os próximos dias.</p>
+        </div>
+      </div>
+
+      <div style="margin-top: 15px; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h4 id="btn-orcamentos" style="margin: 0 0 10px 0; color: #475569; font-size: 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+          Meus Orçamentos <span style="font-size: 12px; color: #94a3b8;">▼</span>
+        </h4>
+        <div id="budgetsContainer">
+            <p style="margin: 0; color: #64748b; font-size: 13px;">Você não possui orçamentos pendentes.</p>
+          </div>
+        </div>
+
+        <div style="margin-top: 15px; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <h4 id="btn-chat" style="margin: 0 0 10px 0; color: #475569; font-size: 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Chat com a Clínica <span style="font-size: 12px; color: #94a3b8;">▼</span>
+          </h4>
+          <div id="chatContainer" style="display: none; flex-direction: column; gap: 10px; height: 500px;">
+            <div id="chatMessages" style="flex: 1; overflow-y: auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px; text-align: center;">Carregando mensagens...</p>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <input type="file" id="chatFileInput" style="display: none" accept=".pdf" onchange="uploadArquivoChat(this)">
+              <textarea id="chatInput" placeholder="Digite sua mensagem..." rows="2" style="width: 100%; padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; outline: none; font-family: inherit; box-sizing: border-box; resize: none;"></textarea>
+              <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                <button id="btnAnexo" onclick="document.getElementById('chatFileInput').click()" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 0 16px; border-radius: 6px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; height: 42px;" title="Anexar PDF">📎</button>
+                <button id="btnSendChat" style="flex: 1; background: #3b82f6; color: white; border: none; padding: 0 15px; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; height: 42px; display: flex; align-items: center; justify-content: center; font-family: inherit;">Enviar</button>
+              </div>
+            </div>
+            <div style="font-size: 10px; color: #64748b; text-align: center; margin-top: 4px;">
+              Os arquivos enviados ficam disponíveis para a clínica por apenas 10 dias por motivos de segurança.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    
+    <div id="installContainer" class="install-prompt">
+      <p>Instale nosso aplicativo para acesso rápido e fácil direto da tela inicial do seu celular!</p>
+      <button id="btn-instalar-app" class="btn-install">Instalar App OCC</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // PWA Install Prompt Logic
+    let deferredPrompt;
+    const installContainer = document.getElementById('installContainer');
+    const btnInstall = document.getElementById('btn-instalar-app');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installContainer.style.display = 'block';
+    });
+
+    btnInstall.addEventListener('click', async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          installContainer.style.display = 'none';
+        }
+        deferredPrompt = null;
+      }
+    });
+
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(reg => console.log('SW registrado com sucesso', reg.scope))
+          .catch(err => console.log('Falha ao registrar SW', err));
+      });
+    }
+
+    // Token Validation Logic
+    document.addEventListener('DOMContentLoaded', async () => {
+      // 1º PASSO CONFIGURAÇÃO: Inicializar o cliente Supabase primeiro!
+      const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
+      const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
+      const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+      const statusMsg = document.getElementById('statusMsg');
+      const patientInterface = document.getElementById('patientInterface');
+      const patientNameEl = document.getElementById('patientName');
+
+      // Função principal para carregar dados do paciente
+      async function carregarDadosPortal(pacienteUuid, empresaIdPaciente, nomeCompleto, pacienteSeqId) {
+        // Limpa resíduos e variáveis antigas do navegador por segurança
+        sessionStorage.removeItem('orcamentos_cache');
+        localStorage.removeItem('orcamentos_cache');
+
+        console.log('DEBUG INTEGRIDADE - pacienteUuid usado no filtro:', pacienteUuid);
+        if (!pacienteUuid || pacienteUuid === 'undefined' || pacienteUuid === '') {
+          console.error('ERRO CRÍTICO: pacienteUuid está inválido! Requisição de orçamentos abortada por segurança.');
+          statusMsg.textContent = "Erro interno: ID do paciente não identificado.";
+          statusMsg.style.display = 'block';
+          statusMsg.style.color = "#dc2626";
+          return;
+        }
+
+        // Sucesso! Oculta a mensagem de status e mostra a interface
+        statusMsg.style.display = 'none';
+        
+        // Pega apenas o primeiro nome
+        const primeiroNome = (nomeCompleto || 'Paciente').split(' ')[0];
+        
+        let nomeClinica = '';
+        if (empresaIdPaciente) {
+          try {
+            // Busca o nome real da clínica usando a coluna correta
+            const { data: empresa } = await supabase 
+              .from('empresas') 
+              .select('nome') 
+              .eq('id', empresaIdPaciente) 
+              .single(); 
+            
+            if (empresa && empresa.nome) {
+              nomeClinica = empresa.nome;
+            }
+          } catch (e) {
+            console.error('Erro ao buscar nome da clínica:', e);
+          }
+        }
+
+        // Injeta dinamicamente nos elementos substituindo o texto fixo "OCC" 
+        const boasVindasEl = document.getElementById('boas-vindas-topo');
+        if (boasVindasEl) {
+          boasVindasEl.textContent = `Bem-vindo(a) ao seu espaço de saúde.`;
+        }
+        
+        const clinicaHeader = document.getElementById('clinicaHeader');
+        const nomeClinicaHeader = document.getElementById('nomeClinicaHeader');
+        if (clinicaHeader && nomeClinicaHeader && nomeClinica) {
+          nomeClinicaHeader.textContent = nomeClinica;
+          clinicaHeader.style.display = 'block';
+        } else if (clinicaHeader) {
+          clinicaHeader.style.display = 'block';
+        }
+        
+        const btnInstalar = document.getElementById('btn-instalar-app');
+        if (btnInstalar) {
+          btnInstalar.textContent = nomeClinica ? `Instalar App ${nomeClinica}` : 'Instalar App OCC';
+        }
+        
+        patientNameEl.textContent = primeiroNome;
+        patientInterface.style.display = 'block';
+
+        // Busca de Orçamentos Reais
+        try {
+          const budgetsContainer = document.getElementById('budgetsContainer');
+          budgetsContainer.innerHTML = ''; // Limpa totalmente o HTML do container ANTES da busca, zerando a memória visual
+
+          const { data: orcamentos, error: orcError } = await supabase
+            .from('orcamentos')
+            .select('id, seqid, empresa_id, pacienteid, status, created_at, itens')
+            .eq('pacienteid', pacienteUuid); // Filtro obrigatório também no código!
+
+          console.log('DADOS BRUTOS DO SUPABASE:', orcamentos);
+          console.log('Quantidade de orcamentos encontrados:', orcamentos ? orcamentos.length : 0);
+
+          // Uma única busca centralizada no início da função
+          const { data: todosOsPagamentosDaClinica, error: erroPagCentral } = await supabase 
+            .from('orcamento_pagamentos') 
+            .select('*'); 
+          
+          // Log crucial para matarmos a charada no ato 
+          console.log("🔍 [V35] CARGA CENTRAL DE PAGAMENTOS RETORNOU:", todosOsPagamentosDaClinica); 
+          if (erroPagCentral) console.error("❌ Erro na carga central:", erroPagCentral); 
+
+          if (orcError) {
+            console.error("Erro ao buscar orçamentos:", orcError);
+            budgetsContainer.innerHTML = '<p style="margin: 0; color: #dc2626; font-size: 13px;">Erro ao carregar orçamentos.</p>';
+          } else if (orcamentos && orcamentos.length > 0) {
+            
+            for (const orc of orcamentos) {
+              // Escopo Local Absoluto: todas as variáveis de cálculo dentro do for/loop.
+              // Garante que o valor de um orçamento nunca vaze para o outro.
+              
+              // 1. Calcula o valor orçado buscando na tabela orcamento_itens,
+              // pois a coluna 'itens' na raiz pode estar vazia ou defasada
+              // O RLS vai garantir que esses itens só sejam lidos se pertencerem ao paciente logado
+              const { data: itensDoOrcamento, error: errorItens } = await supabase
+                  .from('orcamento_itens')
+                  .select(`
+                    id,
+                    valor,
+                    qtde,
+                    servicos (descricao),
+                    profissionais!orcamento_itens_profissional_id_fkey (nome)
+                  `)
+                  .eq('orcamento_id', orc.id); // Itens usam o id (UUID)
+
+                if (errorItens) console.error("Erro itens:", errorItens);
+                
+              let totalItens = 0;
+              if (Array.isArray(itensDoOrcamento)) {
+                totalItens = itensDoOrcamento.reduce((sum, item) => sum + (Number(item.valor || 0) * Number(item.qtde || 1)), 0);
+              }
+
+              // 2. Processamento isolado para evitar ReferenceError ou conflito de const 
+              const valorOrcado_Calculado = Number(totalItens || 0);
+              let valorPago_Calculado = 0;
+              let saldo_Calculado = 0;
+              
+              if (Array.isArray(todosOsPagamentosDaClinica)) { 
+                // Varre o array em memória sem fazer novas requisições 
+                const pagamentosDesteCard = todosOsPagamentosDaClinica.filter(pag => { 
+                  // Tenta cruzar tanto pelo ID longo (UUID) quanto pelo ID sequencial numérico 
+                  const bateIdLongo = String(pag.orcamento_id || '').trim() === String(orc.id || '').trim(); 
+                  const bateIdSequencial = String(pag.orcamento_id || '').trim() === String(orc.seqid || '').trim(); 
+                  
+                  const statusTxt = String(pag.status_pagamento || pag.status || '').toLowerCase(); 
+                  const statusOk = statusTxt.includes('confirmado'); 
+                  
+                  return (bateIdLongo || bateIdSequencial) && statusOk; 
+                }); 
+              
+                valorPago_Calculado = pagamentosDesteCard.reduce((sum, pag) => sum + Number(pag.valor_pago || pag.valor || 0), 0); 
+              } 
+              
+              // Realiza a matemática final de forma direta e limpa 
+              saldo_Calculado = Number(valorOrcado_Calculado || 0) - Number(valorPago_Calculado); 
+              
+              console.log(`[V34 - SUCESSO CARD #${orc.seqid}] Pago: ${valorPago_Calculado} | Saldo: ${saldo_Calculado}`); 
+              
+              const valorOrcado = valorOrcado_Calculado;
+              const valorPago = valorPago_Calculado;
+              const saldo = saldo_Calculado;  
+              
+              // DEBUG FINANCEIRO POR ORÇAMENTO
+              console.log(`[ORÇAMENTO #${orc.seqid}] Valores Brutos:`, {
+                itensRetornados: itensDoOrcamento,
+                valorOrcado_Calculado: valorOrcado,
+                valorPago_Calculado: valorPago,
+                saldo_Calculado: saldo
+              });
+
+              const formatarBRL = (valor) => Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+              
+              const dataFormatada = new Date(orc.created_at).toLocaleDateString('pt-BR');
+
+              const orcEl = document.createElement('div');
+              orcEl.style.display = 'flex';
+              orcEl.style.flexDirection = 'column';
+              orcEl.style.padding = '12px 0';
+              orcEl.style.borderBottom = '1px solid #f1f5f9';
+
+              let itensHtml = '';
+                if (Array.isArray(itensDoOrcamento) && itensDoOrcamento.length > 0) {
+                  itensHtml = '<div style="margin-bottom: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">';
+                  itensHtml += '<div style="color: #475569; font-weight: 600; font-size: 12px; margin-bottom: 6px; text-transform: uppercase;">Procedimentos</div>';
+                  itensDoOrcamento.forEach(item => {
+                    const servicoNome = item.servicos ? item.servicos.descricao : 'Procedimento';
+                    const profNome = item.profissionais ? item.profissionais.nome : 'Não atribuído';
+                  itensHtml += `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; font-size: 12px;">
+                      <div style="flex: 1; text-align: left; padding-right: 8px;">
+                        <span style="color: #0f172a; font-weight: 500;">${servicoNome}</span>
+                        <div style="color: #64748b; font-size: 11px;">Resp: ${profNome}</div>
+                      </div>
+                      <span style="color: #64748b; font-weight: 500; white-space: nowrap;">${item.qtde}x</span>
+                    </div>
+                  `;
+                });
+                itensHtml += '</div>';
+              }
+
+              orcEl.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                  <div>
+                    <div style="color: #0f172a; font-weight: 600; font-size: 14px;">Orçamento #${orc.seqid || ''}</div>
+                    <div style="color: #64748b; font-size: 12px;">Criado em: ${dataFormatada}</div>
+                  </div>
+                  <span style="background: #e0f2fe; color: #1e40af; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">${orc.status || 'Aberto'}</span>
+                </div>
+                
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-size: 13px;">
+                  ${itensHtml}
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="color: #64748b;">Valor Orçado:</span>
+                    <span style="color: #0f172a; font-weight: 500;">${formatarBRL(valorOrcado)}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="color: #64748b;">Valor Pago:</span>
+                    <span style="color: #10b981; font-weight: 500;">${formatarBRL(valorPago)}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; padding-top: 4px; border-top: 1px dashed #cbd5e1;">
+                    <span style="color: #475569; font-weight: 600;">Saldo:</span>
+                    <span style="color: ${saldo > 0 ? '#ef4444' : '#10b981'}; font-weight: 600;">${formatarBRL(saldo)}</span>
+                  </div>
+                </div>
+              `;
+              budgetsContainer.appendChild(orcEl);
+            }
+          } else {
+              budgetsContainer.innerHTML = '<p style="margin: 0; color: #64748b; font-size: 13px;">Você não possui orçamentos pendentes.</p>';
+            }
+
+            // Inicia o Chat isolado
+            carregarMensagens(pacienteUuid, empresaIdPaciente);
+
+          } catch (budgetErr) {
+          console.error("Exceção ao buscar orçamentos:", budgetErr);
+        }
+
+        // Busca de Agendamentos Reais
+        try {
+          const nowIso = new Date().toISOString();
+          const { data: agendamentos, error: agendError } = await supabase
+            .from('agenda_agendamentos')
+            .select(`
+              id,
+              inicio,
+              status,
+              titulo,
+              profissionais (nome)
+            `)
+            .eq('paciente_id', pacienteSeqId)
+            .gte('inicio', nowIso) // Apenas futuros
+            .order('inicio', { ascending: true })
+            .limit(5);
+
+          if (agendError) {
+            console.error("Erro ao buscar agendamentos:", agendError);
+          } else if (agendamentos && agendamentos.length > 0) {
+            const appointmentsContainer = document.getElementById('appointmentsContainer');
+            appointmentsContainer.innerHTML = ''; // Limpa o placeholder
+            
+            agendamentos.forEach(ag => {
+                const dataConsulta = new Date(ag.inicio);
+                const dataFormatada = dataConsulta.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
+                const horaFormatada = dataConsulta.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                const profNome = ag.profissionais ? ag.profissionais.nome : 'Profissional';
+                
+                // Lógica de estado inicial dos botões
+                const isConfirmado = ag.status === 'CONFIRMADO';
+                const isCancelado = ag.status === 'CANCELADO';
+                const confirmDisabled = isConfirmado ? 'disabled style="flex: 1; background: #9ca3af; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: not-allowed;"' : 'style="flex: 1; background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"';
+                const cancelDisabled = isCancelado ? 'disabled style="flex: 1; background: #9ca3af; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: not-allowed;"' : 'style="flex: 1; background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;"';
+
+                let actionHtml = '';
+                if (['MARCADO', 'CONFIRMADO', 'CANCELADO'].includes(ag.status)) {
+                  actionHtml = `
+                    <div style="display: flex; gap: 8px; margin-top: 10px;">
+                      <button id="btn-conf-${ag.id}" onclick="window.atualizarAgendamento('${ag.id}', 'CONFIRMADO', this)" ${confirmDisabled}>
+                        ${isConfirmado ? 'Confirmado' : 'Confirmar'}
+                      </button>
+                      <button id="btn-canc-${ag.id}" onclick="window.atualizarAgendamento('${ag.id}', 'CANCELADO', this)" ${cancelDisabled}>
+                        ${isCancelado ? 'Cancelado' : 'Cancelar'}
+                      </button>
+                    </div>
+                  `;
+                } else {
+                  let statusBg = '#f1f5f9';
+                  let statusColor = '#475569';
+                  actionHtml = `<div style="margin-top: 10px; text-align: right;"><span style="background: ${statusBg}; color: ${statusColor}; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">${ag.status}</span></div>`;
+                }
+                
+                const agEl = document.createElement('div');
+                agEl.style.cssText = 'background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; margin-bottom: 8px; display: flex; flex-direction: column;';
+                agEl.innerHTML = `
+                  <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                      <div style="color: #0f172a; font-weight: 600; font-size: 14px; text-transform: capitalize;">${dataFormatada} - ${horaFormatada}</div>
+                      <div style="color: #64748b; font-size: 12px;">${ag.titulo || 'Consulta'}</div>
+                      <div style="color: #475569; font-size: 11px; margin-top: 4px;">Resp: ${profNome}</div>
+                    </div>
+                  </div>
+                  ${actionHtml}
+                `;
+                appointmentsContainer.appendChild(agEl);
+              });
+          }
+        } catch (agendErr) {
+          console.error("Exceção ao buscar agendamentos:", agendErr);
+        }
+
+        // Mapear os cliques dos botões após a injeção dos dados
+        mapearCliquesBotoes();
+      }
+
+      // Função para amarrar os cliques
+      function mapearCliquesBotoes() {
+        const btnAgendamentos = document.getElementById('btn-agendamentos');
+        const btnOrcamentos = document.getElementById('btn-orcamentos');
+        
+        if (btnAgendamentos) {
+          btnAgendamentos.onclick = () => {
+            const container = document.getElementById('appointmentsContainer');
+            if (container.style.display === 'none') {
+              container.style.display = 'block';
+            } else {
+              container.style.display = 'none';
+            }
+          };
+        }
+        
+        if (btnOrcamentos) {
+          btnOrcamentos.onclick = () => {
+            const container = document.getElementById('budgetsContainer');
+            if (container.style.display === 'none') {
+              container.style.display = 'block';
+            } else {
+              container.style.display = 'none';
+            }
+          };
+        }
+      }
+
+      // ==========================================
+        // CHAT DE MÃO DUPLA - LÓGICA ISOLADA
+        // ==========================================
+        let chatSubscription = null;
+        let currentPacienteId = null;
+        let currentEmpresaId = null;
+
+        const btnChat = document.getElementById('btn-chat');
+        const chatContainer = document.getElementById('chatContainer');
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const btnSendChat = document.getElementById('btnSendChat');
+
+        if (btnChat) {
+          btnChat.onclick = () => {
+            if (chatContainer.style.display === 'none') {
+              chatContainer.style.display = 'flex';
+              chatMessages.scrollTop = chatMessages.scrollHeight;
+            } else {
+              chatContainer.style.display = 'none';
+            }
+          };
+        }
+
+        async function carregarMensagens(pacienteId, empresaId) {
+          currentPacienteId = pacienteId;
+          currentEmpresaId = empresaId;
+
+          try {
+            const { data, error } = await supabase
+              .from('portal_mensagens')
+              .select('*')
+              .eq('paciente_id', pacienteId)
+              .order('created_at', { ascending: true });
+
+            if (error) throw error;
+
+            renderizarMensagens(data || []);
+            iniciarRealtimeChat(pacienteId);
+          } catch (e) {
+            console.error("Erro ao carregar chat:", e);
+            chatMessages.innerHTML = '<p style="margin: 0; color: #dc2626; font-size: 12px; text-align: center;">Erro ao carregar mensagens.</p>';
+          }
+        }
+
+        function renderizarMensagens(mensagens) {
+          chatMessages.innerHTML = '';
+          window.lastRenderedDate = null;
+          if (mensagens.length === 0) {
+            chatMessages.innerHTML = '<p style="margin: 0; color: #94a3b8; font-size: 12px; text-align: center;">Nenhuma mensagem ainda. Envie um oi!</p>';
+            return;
+          }
+
+          mensagens.forEach(msg => {
+            adicionarMensagemDOM(msg);
+          });
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function formatChatDateSeparator(date) {
+            const today = new Date();
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+            const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
+
+            if (isToday) return 'Hoje';
+            if (isYesterday) return 'Ontem';
+            return date.toLocaleDateString('pt-BR');
+        }
+
+        function adicionarMensagemDOM(msg) {
+          const emptyMsg = chatMessages.querySelector('p');
+          if (emptyMsg && emptyMsg.textContent.includes('Nenhuma mensagem')) {
+            chatMessages.innerHTML = '';
+          }
+
+          const msgDate = new Date(msg.created_at || new Date());
+          const dateString = msgDate.getFullYear() + '-' + msgDate.getMonth() + '-' + msgDate.getDate();
+          
+          if (window.lastRenderedDate !== dateString) {
+              window.lastRenderedDate = dateString;
+              const dateSep = document.createElement('div');
+              dateSep.style.background = '#e2e8f0';
+              dateSep.style.padding = '4px 12px';
+              dateSep.style.borderRadius = '10px';
+              dateSep.style.fontSize = '12px';
+              dateSep.style.fontWeight = '600';
+              dateSep.style.color = '#475569';
+              dateSep.style.margin = '10px auto';
+              dateSep.style.width = 'fit-content';
+              dateSep.style.textAlign = 'center';
+              dateSep.textContent = formatChatDateSeparator(msgDate);
+              chatMessages.appendChild(dateSep);
+          }
+
+          const isPaciente = msg.remetente === 'paciente';
+          const msgEl = document.createElement('div');
+          msgEl.style.maxWidth = '85%';
+          msgEl.style.padding = '8px 12px';
+          msgEl.style.borderRadius = '8px';
+          msgEl.style.fontSize = '13px';
+          msgEl.style.wordBreak = 'break-word';
+          msgEl.style.display = 'flex';
+          msgEl.style.flexDirection = 'column';
+
+          if (isPaciente) {
+            msgEl.style.alignSelf = 'flex-end';
+            msgEl.style.background = '#3b82f6';
+            msgEl.style.color = '#ffffff';
+            msgEl.style.borderBottomRightRadius = '2px';
+          } else {
+            msgEl.style.alignSelf = 'flex-start';
+            msgEl.style.background = '#f1f5f9';
+            msgEl.style.color = '#334155';
+            msgEl.style.borderBottomLeftRadius = '2px';
+          }
+
+          const contentDiv = document.createElement('div');
+          if (msg.tipo_mensagem === 'ARQUIVO') {
+            const now = new Date();
+            const diffTime = Math.abs(now - msgDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays > 10) {
+              contentDiv.innerHTML = `<span style="color: inherit; display: flex; align-items: center; gap: 4px; font-style: italic;">❌ Arquivo expirado (Prazo de 10 dias esgotado). Solicite o reenvio.</span>`;
+            } else {
+              const url = msg.conteudo;
+              contentDiv.innerHTML = `<a href="${url}" target="_blank" style="color: inherit; text-decoration: underline; display: flex; align-items: center; gap: 4px;">📎 Baixar Arquivo / Ver Exame</a>`;
+            }
+          } else {
+            contentDiv.textContent = msg.conteudo;
+            contentDiv.style.whiteSpace = 'pre-wrap';
+          }
+          msgEl.appendChild(contentDiv);
+
+          const timeDiv = document.createElement('div');
+          const timeColor = isPaciente ? '#e0e7ff' : '#64748b'; // Azul bem clarinho/branco no balão azul, cinza mais forte no balão branco
+          const hhmm = msgDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          timeDiv.textContent = hhmm;
+          timeDiv.style.fontSize = '11px';
+          timeDiv.style.fontWeight = '500';
+          timeDiv.style.textAlign = 'right';
+          timeDiv.style.marginTop = '4px';
+          timeDiv.style.color = timeColor;
+          msgEl.appendChild(timeDiv);
+
+          chatMessages.appendChild(msgEl);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        if (btnSendChat) {
+          btnSendChat.onclick = enviarMensagemChat;
+        }
+
+        if (chatInput) {
+          chatInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+              enviarMensagemChat();
+            }
+          });
+        }
+
+        window.autoReplyTimer = null;
+        window.agendarAutoReply = function() {
+          if (sessionStorage.getItem('autoReplyEnviada') === 'true') return;
+          
+          if (window.autoReplyTimer) clearTimeout(window.autoReplyTimer);
+          
+          window.autoReplyTimer = setTimeout(async () => {
+            try {
+              const msgAuto = "Olá! Ficamos felizes pelo seu contato. 😊 Nossa equipe não está disponível neste momento, mas sua mensagem foi registrada e responderemos o mais breve possível.";
+              
+              const { error } = await supabase
+                .from('portal_mensagens')
+                .insert([{
+                  paciente_id: currentPacienteId,
+                  empresa_id: currentEmpresaId,
+                  conteudo: msgAuto,
+                  remetente: 'clinica',
+                  lida: false,
+                  tipo_mensagem: 'TEXTO'
+                }]);
+                
+              if (!error) {
+                sessionStorage.setItem('autoReplyEnviada', 'true');
+              }
+            } catch (e) {
+              console.error("Erro na auto-resposta:", e);
+            }
+          }, 60000); // 1 minuto (60.000 ms)
+        };
+
+        window.uploadArquivoChat = async function(input) {
+          const file = input.files[0];
+          if (!file || !currentPacienteId || !currentEmpresaId) return;
+          
+          if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+            alert('Por favor, selecione apenas arquivos em formato PDF.');
+            input.value = '';
+            return;
+          }
+          
+          input.value = ''; // Reset input
+          
+          const btnAnexo = document.getElementById('btnAnexo');
+          const btnAnexoOriginalText = btnAnexo.innerHTML;
+          btnAnexo.disabled = true;
+          btnAnexo.innerHTML = '⏳';
+          
+          try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+            const filePath = `${currentEmpresaId}/${currentPacienteId}/${fileName}`;
+            
+        const { data, error: uploadError } = await supabase.storage
+          .from("portal_anexos")
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: true,
+            contentType: 'application/pdf'
+          });
+              
+            if (uploadError) {
+              console.error('Erro detalhado do Storage:', uploadError);
+              throw uploadError;
+            }
+            
+            const { data: publicUrlData } = supabase.storage
+              .from("portal_anexos")
+              .getPublicUrl(filePath);
+              
+            const publicUrl = publicUrlData.publicUrl;
+            
+            const { error: insertError } = await supabase
+              .from('portal_mensagens')
+              .insert([{
+                paciente_id: currentPacienteId,
+                empresa_id: currentEmpresaId,
+                conteudo: publicUrl,
+                remetente: 'paciente',
+                lida: false,
+                tipo_mensagem: 'ARQUIVO'
+              }]);
+              
+            if (insertError) throw insertError;
+            
+            adicionarMensagemDOM({
+              remetente: 'paciente',
+              conteudo: publicUrl,
+              tipo_mensagem: 'ARQUIVO',
+              created_at: new Date().toISOString()
+            });
+            
+            agendarAutoReply();
+            
+          } catch (e) {
+            console.error("Erro ao enviar arquivo:", e);
+            alert("Erro ao enviar arquivo. Tente novamente.");
+          } finally {
+            btnAnexo.disabled = false;
+            btnAnexo.innerHTML = btnAnexoOriginalText;
+          }
+        };
+
+        async function enviarMensagemChat() {
+          const texto = chatInput.value.trim();
+          if (!texto || !currentPacienteId || !currentEmpresaId) return;
+
+          chatInput.value = '';
+          chatInput.disabled = true;
+          btnSendChat.disabled = true;
+
+          try {
+            const { error } = await supabase
+              .from('portal_mensagens')
+              .insert([{
+                paciente_id: currentPacienteId,
+                empresa_id: currentEmpresaId,
+                conteudo: texto,
+                remetente: 'paciente',
+                lida: false,
+                tipo_mensagem: 'TEXTO'
+              }]);
+
+            if (error) throw error;
+            
+            // Adicionar localmente caso o Realtime atrase
+            adicionarMensagemDOM({
+              remetente: 'paciente',
+              conteudo: texto,
+              tipo_mensagem: 'TEXTO',
+              created_at: new Date().toISOString()
+            });
+            
+            agendarAutoReply();
+
+          } catch (e) {
+            console.error("Erro ao enviar mensagem:", e);
+            alert("Erro ao enviar mensagem. Tente novamente.");
+          } finally {
+            chatInput.disabled = false;
+            btnSendChat.disabled = false;
+            chatInput.focus();
+          }
+        }
+
+        function iniciarRealtimeChat(pacienteId) {
+          if (chatSubscription) return; // Já está inscrito
+
+          chatSubscription = supabase
+            .channel('chat_paciente')
+            .on(
+              'postgres_changes',
+              {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'portal_mensagens',
+                filter: `paciente_id=eq.${pacienteId}`
+              },
+              (payload) => {
+                const newMsg = payload.new;
+                if (newMsg && newMsg.remetente && newMsg.remetente.toUpperCase() === 'CLINICA') {
+                  if (window.autoReplyTimer) clearTimeout(window.autoReplyTimer);
+                  
+                  adicionarMensagemDOM({
+                    remetente: 'clinica',
+                    conteudo: newMsg.conteudo,
+                    tipo_mensagem: newMsg.tipo_mensagem,
+                    created_at: newMsg.created_at
+                  });
+                }
+              }
+            )
+            .subscribe();
+        }
+
+        window.atualizarAgendamento = async function(agendamentoId, novoStatus, btnElement) {
+        if (!confirm(`Tem certeza que deseja marcar esta consulta como ${novoStatus}?`)) return;
+        
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const token = urlParams.get('token') || '';
+
+          // Usa a função RPC (Stored Procedure) que criei no banco de dados para segurança
+          const { error } = await supabase
+            .rpc('portal_atualizar_agendamento', {
+              p_agendamento_id: agendamentoId,
+              p_novo_status: novoStatus,
+              p_token: token
+            });
+            
+          if (error) throw error;
+          
+          alert(`Agendamento atualizado para ${novoStatus} com sucesso!`);
+          
+          // Lógica de Toggle UI instantânea
+          const btnConf = document.getElementById(`btn-conf-${agendamentoId}`);
+          const btnCanc = document.getElementById(`btn-canc-${agendamentoId}`);
+
+          if (novoStatus === 'CONFIRMADO') {
+            if (btnConf) {
+              btnConf.disabled = true;
+              btnConf.textContent = 'Confirmado';
+              btnConf.style.background = '#9ca3af';
+              btnConf.style.cursor = 'not-allowed';
+            }
+            if (btnCanc) {
+              btnCanc.disabled = false;
+              btnCanc.textContent = 'Cancelar';
+              btnCanc.style.background = '#ef4444';
+              btnCanc.style.cursor = 'pointer';
+            }
+          } else if (novoStatus === 'CANCELADO') {
+            if (btnCanc) {
+              btnCanc.disabled = true;
+              btnCanc.textContent = 'Cancelado';
+              btnCanc.style.background = '#9ca3af';
+              btnCanc.style.cursor = 'not-allowed';
+            }
+            if (btnConf) {
+              btnConf.disabled = false;
+              btnConf.textContent = 'Confirmar';
+              btnConf.style.background = '#10b981';
+              btnConf.style.cursor = 'pointer';
+            }
+          }
+          
+        } catch (err) {
+          console.error("Erro ao atualizar agendamento:", err);
+          alert("Não foi possível atualizar o agendamento. Verifique se o seu acesso é válido.");
+        }
+      };
+
+      // 2º PASSO AUTOMÁTICO: Agora sim checa o localStorage com o supabase já pronto
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+
+      const salvoUuid = localStorage.getItem('occ_paciente_uuid'); 
+      const salvoEmpresa = localStorage.getItem('occ_empresa_id'); 
+      const salvoNome = localStorage.getItem('occ_paciente_nome');
+      const salvoSeqId = localStorage.getItem('occ_paciente_seqid');
+      
+      if (!token && salvoUuid && salvoEmpresa) { 
+        statusMsg.textContent = "Carregando seus dados...";
+        await carregarDadosPortal(salvoUuid, salvoEmpresa, salvoNome, salvoSeqId); 
+        return; // Corta a execução aqui e não deixa cair no erro de token!
+      }
+
+      if (!token) {
+        // Se for um aparelho totalmente novo (sem local storage e sem token)
+        window.location.href = "/index.html"; 
+        return;
+      }
+
+      // 3º PASSO: Tentar login via token
+      statusMsg.textContent = "Validando seu acesso seguro...";
+
+      try {
+        const { data, error } = await supabase
+          .from('paciente_tokens')
+          .select('paciente_id, expires_at, pacientes(nome, seqid, empresa_id)')
+          .eq('token', token)
+          .single();
+
+        if (error || !data) {
+          throw new Error('Token inválido ou expirado.');
+        }
+
+        if (new Date(data.expires_at) < new Date()) {
+          throw new Error('Seu link de acesso expirou. Solicite um novo no site principal.');
+        }
+
+        const pacienteUuid = data.pacienteid || data.paciente_id;
+        const empresaIdPaciente = data.pacientes ? data.pacientes.empresa_id : null;
+        const nomeCompleto = data.pacientes ? data.pacientes.nome : 'Paciente';
+        const pacienteSeqId = data.pacientes ? data.pacientes.seqid : null;
+
+        // Armazena com segurança no aparelho do paciente (Login Permanente via PWA)
+        localStorage.setItem('occ_paciente_uuid', pacienteUuid); 
+        localStorage.setItem('occ_empresa_id', empresaIdPaciente); 
+        localStorage.setItem('occ_paciente_nome', nomeCompleto);
+        localStorage.setItem('occ_paciente_seqid', pacienteSeqId);
+
+        await carregarDadosPortal(pacienteUuid, empresaIdPaciente, nomeCompleto, pacienteSeqId);
+
+      } catch (err) {
+        console.error("Erro na validação do token:", err);
+        statusMsg.textContent = err.message || "Ocorreu um erro ao validar seu acesso.";
+        statusMsg.style.color = "#dc2626";
+      }
+    });
+  </script>
+</body>
+</html>

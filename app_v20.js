@@ -107,6 +107,11 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 60000) {
         });
 }
 
+if (typeof window.supabase === 'undefined') {
+    alert('Erro crítico: Não foi possível carregar a biblioteca de banco de dados (Supabase). Verifique sua conexão com a internet ou se há algum bloqueador de anúncios/firewall impedindo o acesso aos servidores CDN.');
+    throw new Error('Supabase client not loaded');
+}
+
 const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
     global: {
         fetch: (url, options) => fetchWithTimeout(url, options, 60000)
@@ -554,25 +559,32 @@ function canStockAction(area, action, ctx = null) {
 
 async function checkEmpresaHasNfseModule() {
     try {
-        const { data: empData, error: empErr } = await db.from('empresas').select('plano_tipo').eq('id', currentEmpresaId).single();
+        const { data: empData, error: empErr } = await db.from('empresas').select('plano_tipo, modulos_contratados').eq('id', currentEmpresaId).single();
         if (empErr) throw empErr;
-        if (!empData || !empData.plano_tipo) return false;
-        
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empData.plano_tipo);
-        let planData = null;
-        if (isUuid) {
-            const { data } = await db.from('config_planos').select('modulos_texto').eq('id', empData.plano_tipo).maybeSingle();
-            planData = data;
-        } else {
-            const { data } = await db.from('config_planos').select('modulos_texto').ilike('tipo_assinatura', empData.plano_tipo).maybeSingle();
-            planData = data;
+        if (!empData) return false;
+
+        let modulosStr = empData.modulos_contratados;
+
+        // Fallback: se a empresa não tiver o snapshot gravado (ex: não rodou o backfill), busca do plano
+        if (!modulosStr && empData.plano_tipo) {
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empData.plano_tipo);
+            let planData = null;
+            if (isUuid) {
+                const { data } = await db.from('config_planos').select('modulos_texto').eq('id', empData.plano_tipo).maybeSingle();
+                planData = data;
+            } else {
+                const { data } = await db.from('config_planos').select('modulos_texto').ilike('tipo_assinatura', empData.plano_tipo).maybeSingle();
+                planData = data;
+            }
+            if (planData) modulosStr = planData.modulos_texto;
         }
-        if (planData && planData.modulos_texto) {
-            const mods = planData.modulos_texto.toLowerCase();
+
+        if (modulosStr) {
+            const mods = modulosStr.toLowerCase();
             return mods.includes('nfse') || mods.includes('emitir nfs-e') || mods.includes('emitir nfs');
         }
     } catch (e) {
-        console.error("Erro ao verificar permissão do módulo NFSe no plano:", e);
+        console.error("Erro ao verificar permissão do módulo NFSe na empresa:", e);
     }
     return false;
 }
@@ -709,6 +721,7 @@ async function checkAuth(sessionOverride) {
             console.log("DEBUG: SuperAdmin Logged in via fallback (no mapping found)");
         } else {
             console.warn("User record not found in clinician mapping (usuario_empresas). User ID:", currentUser.id, "Email:", currentUser.email);
+            showToast("Sua conta não possui vínculo com nenhuma clínica ativa. Contate o suporte.", true);
             return false;
         }
     } else {
@@ -849,6 +862,7 @@ function getModuleKey(type) {
         'commissions': 'comissoes',
         'marketing': 'marketing',
         'atendimento': 'atendimento',
+        'consultaAvaliacao': 'atendimento',
         'agenda': 'agenda',
         'protese': 'protese',
         'stockInventory': 'estoque_inventario',
@@ -2440,6 +2454,17 @@ async function initializeApp(isContextSwitch = false) {
         patients = patientsRes.data || [];
         professionals = professionalsRes.data || [];
         activeEmpresasList = empresasRes.data || [];
+        
+        const headerLoggedUser = document.getElementById('headerLoggedUser');
+        if (headerLoggedUser && currentUser && currentUser.email) {
+            const uEmail = String(currentUser.email).trim().toLowerCase();
+            const currentProf = professionals.find(p => String(p.email || '').trim().toLowerCase() === uEmail);
+            if (currentProf) {
+                headerLoggedUser.textContent = `| Profissional: ${currentProf.nome}`;
+            } else {
+                headerLoggedUser.textContent = `| Usuário: ${currentUser.user_metadata?.full_name || currentUser.email.split('@')[0]}`;
+            }
+        }
 
         const currentEmpresaRow = (activeEmpresasList || []).find(e => String(e && e.id || '') === String(currentEmpresaId || '')) || null;
         financialParamsCache = normalizeFinancialParams(currentEmpresaRow && currentEmpresaRow.financeiro_params ? currentEmpresaRow.financeiro_params : {});
@@ -2789,9 +2814,14 @@ const navFinanceiro = document.getElementById('navFinanceiro');
 const navCommissions = document.getElementById('navCommissions');
 const navMarketing = document.getElementById('navMarketing');
 const navDashboard = document.getElementById('navDashboard');
+const navAtendimentoToggle = document.getElementById('navAtendimentoToggle');
+const navAtendimentoSubmenu = document.getElementById('navAtendimentoSubmenu');
+const navAtendimentoToggleIcon = document.getElementById('navAtendimentoToggleIcon');
+const navConsultaAvaliacao = document.getElementById('navConsultaAvaliacao');
 const navAtendimento = document.getElementById('navAtendimento');
 const navAgenda = document.getElementById('navAgenda');
 const navProtese = document.getElementById('navProtese');
+const navSuporteTickets = document.getElementById('navSuporteTickets');
 const navEmpresas = document.getElementById('navEmpresas');
 const navAssinaturas = document.getElementById('navAssinaturas');
 const navMyCompany = document.getElementById('navMyCompany');
@@ -2825,8 +2855,35 @@ const marketingView = document.getElementById('marketingView');
 const dashboardView = document.getElementById('dashboardView');
 const patientPortalView = document.getElementById('patientPortalView');
 const atendimentoView = document.getElementById('atendimentoView');
+const consultaAvaliacaoView = document.getElementById('consultaAvaliacaoView');
+const consultaProfessionalGroup = document.getElementById('consultaProfessionalGroup');
 const agendaView = document.getElementById('agendaView');
 const proteseView = document.getElementById('proteseView');
+const suporteTicketsView = document.getElementById('suporteTicketsView');
+const btnNovoTicket = document.getElementById('btnNovoTicket');
+const btnRefreshTickets = document.getElementById('btnRefreshTickets');
+const btnPrintTicketsReport = document.getElementById('btnPrintTicketsReport');
+const btnPrintTicketsReportFull = document.getElementById('btnPrintTicketsReportFull');
+const ticketReportModal = document.getElementById('ticketReportModal');
+const btnTicketReportModalX = document.getElementById('btnTicketReportModalX');
+const btnTicketReportCancel = document.getElementById('btnTicketReportCancel');
+const btnTicketReportGenerate = document.getElementById('btnTicketReportGenerate');
+let ticketReportType = 'simples';
+const ticketReportCategoria = document.getElementById('ticketReportCategoria');
+const ticketReportStatus = document.getElementById('ticketReportStatus');
+const suporteTicketsBody = document.getElementById('suporteTicketsBody');
+const suporteTicketsEmptyState = document.getElementById('suporteTicketsEmptyState');
+const suporteTicketModal = document.getElementById('suporteTicketModal');
+const suporteTicketModalTitle = document.getElementById('suporteTicketModalTitle');
+const suporteTicketId = document.getElementById('suporteTicketId');
+const suporteTicketTitulo = document.getElementById('suporteTicketTitulo');
+const suporteTicketCategoria = document.getElementById('suporteTicketCategoria');
+const suporteTicketDescricao = document.getElementById('suporteTicketDescricao');
+const suporteTicketAdminStatusGroup = document.getElementById('suporteTicketAdminStatusGroup');
+const suporteTicketRespostaGroup = document.getElementById('suporteTicketRespostaGroup');
+const suporteTicketResposta = document.getElementById('suporteTicketResposta');
+const suporteTicketStatus = document.getElementById('suporteTicketStatus');
+const btnSalvarTicket = document.getElementById('btnSalvarTicket');
 const myCompanyView = document.getElementById('myCompanyView');
 const financialParamsView = document.getElementById('financialParamsView');
 const btnAddNewEmpresa = document.getElementById('btnAddNewEmpresa');
@@ -3043,22 +3100,42 @@ function renderPermissionsGrid(existingPerms = null, targetEmpresaId = null) {
 
     let allowedModules = null; // null means all modules allowed
     const empId = targetEmpresaId || currentEmpresaId;
-    if (empId && activeEmpresasList && typeof resolvePlanDisplayName === 'function') {
+    if (empId && activeEmpresasList) {
         const emp = activeEmpresasList.find(e => e.id === empId);
-        if (emp && emp.plano_tipo && configPlanosList) {
-            const planName = resolvePlanDisplayName(emp.plano_tipo);
-            const planCfg = configPlanosList.find(p => p.tipo_assinatura === planName || p.id === emp.plano_tipo || p.tipo_assinatura === emp.plano_tipo);
-            if (planCfg && planCfg.modulos_texto) {
-                allowedModules = planCfg.modulos_texto.toLowerCase().split(',').map(s => s.trim());
+        if (emp) {
+            if (emp.modulos_contratados) {
+                allowedModules = emp.modulos_contratados.toLowerCase().split(',').map(s => s.trim());
+            } else if (emp.plano_tipo && configPlanosList && typeof resolvePlanDisplayName === 'function') {
+                const planName = resolvePlanDisplayName(emp.plano_tipo);
+                const planCfg = configPlanosList.find(p => p.tipo_assinatura === planName || p.id === emp.plano_tipo || p.tipo_assinatura === emp.plano_tipo);
+                if (planCfg && planCfg.modulos_texto) {
+                    allowedModules = planCfg.modulos_texto.toLowerCase().split(',').map(s => s.trim());
+                }
             }
         }
     }
 
+    if (allowedModules !== null) {
+        // Limpa acentos e caracteres especiais
+        allowedModules = allowedModules.map(m => m.normalize('NFD').replace(/[\u0300-\u036f]/g, ""));
+    }
+
     systemModules.forEach(mod => {
         if (allowedModules) {
-            const isAllowed = allowedModules.includes(mod.label.toLowerCase()) || allowedModules.includes(mod.id.toLowerCase());
+            const modLabelClean = mod.label.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+            const modIdClean = mod.id.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+            
+            let isAllowed = allowedModules.includes(modLabelClean) || allowedModules.includes(modIdClean);
+            
+            // Regra específica para o Financeiro/NFS-e
+            if (modIdClean === 'nfse' || modLabelClean.includes('nfs-e')) {
+                if (allowedModules.some(m => m.includes('nfs-e') || m.includes('nfse'))) {
+                    isAllowed = true;
+                }
+            }
+            
             if (!isAllowed) {
-                return; // Skip rendering this module if it's not in the plan
+                return; // Skip rendering this module if it's not in the plan/company
             }
         }
 
@@ -3231,6 +3308,13 @@ const agendaFim = document.getElementById('agendaFim');
 const agendaStatus = document.getElementById('agendaStatus');
 const agendaObs = document.getElementById('agendaObs');
 
+// Consulta/Avaliação DOM Elements
+const consultaDate = document.getElementById('consultaDate');
+const consultaProfessional = document.getElementById('consultaProfessional');
+const btnConsultaRefresh = document.getElementById('btnConsultaRefresh');
+const consultaPacientesTableBody = document.getElementById('consultaPacientesTableBody');
+const consultaEmptyState = document.getElementById('consultaEmptyState');
+
 // Atendimento DOM Elements
 const atendimentoDate = document.getElementById('atendimentoDate');
 const atendimentoProfessional = document.getElementById('atendimentoProfessional');
@@ -3267,6 +3351,7 @@ const btnCommSearch = document.getElementById('btnCommSearch');
 const btnCommPay = document.getElementById('btnCommPay');
 const btnCommAdvance = document.getElementById('btnCommAdvance');
 const btnCommTransfer = document.getElementById('btnCommTransfer');
+const btnCommReworkAdjustment = document.getElementById('btnCommReworkAdjustment');
 const btnCommPrint = document.getElementById('btnCommPrint');
 const btnCommPrintReport = document.getElementById('btnCommPrintReport');
 const commSelectAll = document.getElementById('commSelectAll');
@@ -3278,6 +3363,15 @@ const commTransferNewProfessional = document.getElementById('commTransferNewProf
 const commTransferObs = document.getElementById('commTransferObs');
 const btnCommTransferCancel = document.getElementById('btnCommTransferCancel');
 const btnCommTransferConfirm = document.getElementById('btnCommTransferConfirm');
+
+const commReworkAdjustmentModal = document.getElementById('commReworkAdjustmentModal');
+const commReworkAttendanceId = document.getElementById('commReworkAttendanceId');
+const commReworkDebitProfessional = document.getElementById('commReworkDebitProfessional');
+const commReworkDebitValue = document.getElementById('commReworkDebitValue');
+const commReworkCreditProfessional = document.getElementById('commReworkCreditProfessional');
+const commReworkCreditValue = document.getElementById('commReworkCreditValue');
+const commReworkObs = document.getElementById('commReworkObs');
+const btnCommReworkConfirm = document.getElementById('btnCommReworkConfirm');
 
 const modalSuperAdmin = document.getElementById('modalSuperAdmin');
 const btnCloseModalSuperAdmin = document.getElementById('btnCloseModalSuperAdmin');
@@ -3401,7 +3495,9 @@ function updateSidebarVisibility() {
         'navFinanceiro': 'financeiro',
         'navCommissions': 'commissions',
         'navMarketing': 'marketing',
+        'navAtendimentoToggle': 'atendimento',
         'navAtendimento': 'atendimento',
+        'navConsultaAvaliacao': 'consultaAvaliacao',
         'navAgenda': 'agenda',
         'navProtese': 'protese'
     };
@@ -3422,13 +3518,16 @@ function updateSidebarVisibility() {
         reports: canAccessStockTab('stockReports')
     };
     const hasAnyStock = !!(stockPerms.inventory || stockPerms.models || stockPerms.mapping || stockPerms.logs || stockPerms.reports);
-    if (navEstoqueToggle) navEstoqueToggle.style.display = hasAnyStock ? 'flex' : 'none';
-    if (navInventory) navInventory.style.display = stockPerms.inventory ? 'flex' : 'none';
-    if (navUsageModels) navUsageModels.style.display = stockPerms.models ? 'flex' : 'none';
-    if (navServiceMapping) navServiceMapping.style.display = stockPerms.mapping ? 'flex' : 'none';
-    if (navInventoryLogs) navInventoryLogs.style.display = stockPerms.logs ? 'flex' : 'none';
-    if (navInventoryReports) navInventoryReports.style.display = stockPerms.reports ? 'flex' : 'none';
-    if (!hasAnyStock) {
+    
+    // Explicitly hide the entire nav section if the user doesn't have the base 'estoque' module permission
+    const hasBaseStockPerm = can('estoque', 'select');
+    if (navEstoqueToggle) navEstoqueToggle.style.display = (hasAnyStock && hasBaseStockPerm) ? 'flex' : 'none';
+    if (navInventory) navInventory.style.display = (stockPerms.inventory && hasBaseStockPerm) ? 'flex' : 'none';
+    if (navUsageModels) navUsageModels.style.display = (stockPerms.models && hasBaseStockPerm) ? 'flex' : 'none';
+    if (navServiceMapping) navServiceMapping.style.display = (stockPerms.mapping && hasBaseStockPerm) ? 'flex' : 'none';
+    if (navInventoryLogs) navInventoryLogs.style.display = (stockPerms.logs && hasBaseStockPerm) ? 'flex' : 'none';
+    if (navInventoryReports) navInventoryReports.style.display = (stockPerms.reports && hasBaseStockPerm) ? 'flex' : 'none';
+    if (!hasAnyStock || !hasBaseStockPerm) {
         if (navEstoqueSubmenu) navEstoqueSubmenu.style.display = 'none';
         if (navEstoqueToggleIcon) navEstoqueToggleIcon.className = 'ri-arrow-down-s-line';
     }
@@ -3486,7 +3585,7 @@ function setActiveTab(tab) {
     // 1. Prepare Navigation Elements safely
     const navElements = [
         navPatients, navProfessionals, navSpecialties, navServices,
-        navBudgets, navFinanceiro, navCommissions, navMarketing, navAtendimento, navAgenda, navProtese, navDashboard, navUsersAdminBtn, navEmpresas, navAssinaturas, navMyCompany, navFinancialParams, document.getElementById('navCancelledBudgets'),
+        navBudgets, navFinanceiro, navCommissions, navMarketing, navAtendimentoToggle, navAtendimento, navConsultaAvaliacao, navAgenda, navProtese, navSuporteTickets, navDashboard, navUsersAdminBtn, navEmpresas, navAssinaturas, navMyCompany, navFinancialParams, document.getElementById('navCancelledBudgets'),
         navEstoqueToggle, navInventory, navUsageModels, navServiceMapping, navInventoryLogs, navInventoryReports
     ];
 
@@ -3508,8 +3607,10 @@ function setActiveTab(tab) {
         'commissions': [commissionsView],
         'marketing': [marketingView],
         'atendimento': [atendimentoView],
+        'consultaAvaliacao': [consultaAvaliacaoView],
         'agenda': [agendaView],
         'protese': [proteseView],
+        'suporteTickets': [suporteTicketsView],
         'cancelledBudgets': [document.getElementById('cancelledBudgetsView')],
         'stockInventory': [inventoryView],
         'stockModels': [usageModelsView],
@@ -3536,6 +3637,9 @@ function setActiveTab(tab) {
     if (patientDetailsView) patientDetailsView.classList.add('hidden');
     if (navEstoqueSubmenu) navEstoqueSubmenu.style.display = 'none';
     if (navEstoqueToggleIcon) navEstoqueToggleIcon.className = 'ri-arrow-down-s-line';
+    if (navAtendimentoSubmenu) navAtendimentoSubmenu.style.display = 'none';
+    if (navAtendimentoToggleIcon) navAtendimentoToggleIcon.className = 'ri-arrow-down-s-line';
+    if (navAtendimentoToggle) navAtendimentoToggle.classList.remove('expanded');
 
     // Activate Selected Tab and View
     if (tab === 'patients') {
@@ -3547,6 +3651,9 @@ function setActiveTab(tab) {
         showList('dashboard');
     } else if (tab === 'patientPortal') {
         showList('patientPortal');
+    } else if (tab === 'professionals') {
+        if (navProfessionals) navProfessionals.classList.add('active');
+        showList('professionals');
     } else if (tab === 'specialties') {
         if (navSpecialties) navSpecialties.classList.add('active');
         showList('specialties');
@@ -3601,9 +3708,17 @@ function setActiveTab(tab) {
         if (navM) navM.classList.add('active');
         showList('marketing');
     } else if (tab === 'atendimento') {
-        const navT = document.getElementById('navAtendimento');
-        if (navT) navT.classList.add('active');
+        if (navAtendimentoToggle) navAtendimentoToggle.classList.add('expanded');
+        if (navAtendimento) navAtendimento.classList.add('active');
+        if (navAtendimentoSubmenu) navAtendimentoSubmenu.style.display = 'block';
+        if (navAtendimentoToggleIcon) navAtendimentoToggleIcon.className = 'ri-arrow-up-s-line';
         showList('atendimento');
+    } else if (tab === 'consultaAvaliacao') {
+        if (navAtendimentoToggle) navAtendimentoToggle.classList.add('expanded');
+        if (navConsultaAvaliacao) navConsultaAvaliacao.classList.add('active');
+        if (navAtendimentoSubmenu) navAtendimentoSubmenu.style.display = 'block';
+        if (navAtendimentoToggleIcon) navAtendimentoToggleIcon.className = 'ri-arrow-up-s-line';
+        showList('consultaAvaliacao');
     } else if (tab === 'agenda') {
         const navA = document.getElementById('navAgenda');
         if (navA) navA.classList.add('active');
@@ -3612,6 +3727,9 @@ function setActiveTab(tab) {
         const navP = document.getElementById('navProtese');
         if (navP) navP.classList.add('active');
         showList('protese');
+    } else if (tab === 'suporteTickets') {
+        if (navSuporteTickets) navSuporteTickets.classList.add('active');
+        showList('suporteTickets');
     } else if (tab === 'stockInventory') {
         if (!canAccessStockTab('stockInventory')) return;
         if (navEstoqueToggle) navEstoqueToggle.classList.add('expanded');
@@ -3647,7 +3765,7 @@ function setActiveTab(tab) {
         if (navEstoqueSubmenu) navEstoqueSubmenu.style.display = 'block';
         if (navEstoqueToggleIcon) navEstoqueToggleIcon.className = 'ri-arrow-up-s-line';
         showList('stockReports');
-    } else {
+    } else if (tab === 'professionals_fallback_removed') {
         if (navProfessionals) navProfessionals.classList.add('active');
         showList('professionals');
     }
@@ -3670,8 +3788,10 @@ function setupNavigationListeners() {
         'navCommissions': 'commissions',
         'navMarketing': 'marketing',
         'navAtendimento': 'atendimento',
+        'navConsultaAvaliacao': 'consultaAvaliacao',
         'navAgenda': 'agenda',
         'navProtese': 'protese',
+        'navSuporteTickets': 'suporteTickets',
         'navInventory': 'stockInventory',
         'navUsageModels': 'stockModels',
         'navServiceMapping': 'stockMapping',
@@ -3682,7 +3802,8 @@ function setupNavigationListeners() {
         'navAssinaturas': 'assinaturas',
         'navMyCompany': 'myCompany',
         'navFinancialParams': 'financialParams',
-        'navCancelledBudgets': 'cancelledBudgets'
+        'navCancelledBudgets': 'cancelledBudgets',
+        'navSuporteTickets': 'suporteTickets'
     };
 
     Object.entries(navMapping).forEach(([id, tab]) => {
@@ -3703,6 +3824,15 @@ function setupNavigationListeners() {
             if (navEstoqueSubmenu) navEstoqueSubmenu.style.display = open ? 'none' : 'block';
             if (navEstoqueToggleIcon) navEstoqueToggleIcon.className = open ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line';
             navEstoqueToggle.classList.toggle('expanded', !open);
+        };
+    }
+
+    if (navAtendimentoToggle) {
+        navAtendimentoToggle.onclick = () => {
+            const open = navAtendimentoSubmenu && navAtendimentoSubmenu.style.display !== 'none';
+            if (navAtendimentoSubmenu) navAtendimentoSubmenu.style.display = open ? 'none' : 'block';
+            if (navAtendimentoToggleIcon) navAtendimentoToggleIcon.className = open ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line';
+            navAtendimentoToggle.classList.toggle('expanded', !open);
         };
     }
 
@@ -4780,8 +4910,81 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
         invRows = await fetchInventoryByIdsFromDb(invIds);
     } catch { }
     const invById = new Map(invRows.map(r => [String(r && r.id || ''), r]));
+    const visibleItems = mItems.filter(mi => !(includeBiosseg && mi && mi.__inherited));
+
     if (!mItems.length) {
         return await openModelItemsConfigPrompt(modelId);
+    }
+
+    if (visibleItems.length === 0 || window.__isConsultaAvaliacaoMode) {
+        // Apenas itens de biossegurança: baixar silenciosamente
+        try {
+            const selectedMap = new Map();
+            if (includeBiosseg) {
+                mItems.forEach((mi) => {
+                    if (!(mi && mi.__inherited)) return;
+                    const invId = String(mi && mi.inventory_id || '').trim();
+                    if (!invId || selectedMap.has(invId)) return;
+                    const qtdForced = Math.max(1, toDec(mi && mi.quantidade_sugerida, 0));
+                    selectedMap.set(invId, { mi, qtd: qtdForced });
+                });
+            }
+            const selected = Array.from(selectedMap.values());
+            if (!selected.length) return { ok: true, skipped: true };
+
+            const atendimentoRef = String(agendamentoId || itemId || '').trim() || null;
+            const itemIdStr = String(itemId || '').trim();
+            const motivo = atendimentoRef ? `Atendimento #${atendimentoRef}${modelName ? ` (${modelName})` : ''}` : '';
+            
+            for (const row of selected) {
+                const invId = String(row && row.mi && row.mi.inventory_id || '');
+                const inv = invById.get(invId) || getInventoryById(invId);
+                if (!inv) continue;
+                const consumivel = isInventoryConsumable(inv);
+                if (consumivel) {
+                    const novo = toDec(inv && inv.estoque_atual, 0) - toDec(row.qtd, 0);
+                    const { error: updErr } = await db.from('inventory').update({ estoque_atual: novo }).eq('id', invId);
+                    if (updErr) throw updErr;
+                    try {
+                        const nextInv = { ...inv, estoque_atual: novo };
+                        invById.set(invId, nextInv);
+                        const local = (inventoryItems || []).find(i => String(i && i.id || '') === String(invId));
+                        if (local) local.estoque_atual = novo;
+                    } catch { }
+                }
+                let payload = {
+                    empresa_id: getEstoqueEmpresaScopeId(),
+                    inventory_id: invId,
+                    atendimento_id: atendimentoRef,
+                    orcamento_item_id: itemIdStr || null,
+                    tipo: consumivel ? 'SAIDA' : 'USO',
+                    quantidade: toDec(row.qtd, 0),
+                    motivo,
+                    responsavel_id: currentUser && currentUser.id ? currentUser.id : null
+                };
+                let ins = await db.from('inventory_logs').insert(payload);
+                if (ins && ins.error && isMotivoSchemaError(ins.error)) {
+                    const { motivo, ...rest } = payload;
+                    payload = rest;
+                    ins = await db.from('inventory_logs').insert(payload);
+                }
+                if (ins && ins.error && isOrcamentoItemIdSchemaError(ins.error)) {
+                    throw new Error("Schema cache desatualizado para inventory_logs.orcamento_item_id.");
+                }
+                if (ins && ins.error && isMotivoSchemaError(ins.error)) {
+                    const { motivo, ...rest } = payload;
+                    payload = rest;
+                    ins = await db.from('inventory_logs').insert(payload);
+                }
+                if (ins && ins.error) throw ins.error;
+            }
+            await loadEstoqueData(true);
+            return { ok: true, applied: true };
+        } catch (err) {
+            const msg = err && err.message ? String(err.message) : 'Falha no check-out silencioso de estoque.';
+            showToast(msg, true);
+            return { ok: false, reason: 'error', message: msg };
+        }
     }
 
     const overlay = ensureStockCheckoutModal();
@@ -4808,15 +5011,16 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
 
     body.innerHTML = '';
     mItems.forEach((mi, idx) => {
+        const forced = !!(includeBiosseg && mi && mi.__inherited);
+        if (forced) return; // Hide biosafety items from the UI
+
         const suggested = toDec(mi && mi.quantidade_sugerida, 1);
         const invId = String(mi && mi.inventory_id || '').trim();
         const inv = invById.get(invId) || getInventoryById(invId);
         const consumivel = isInventoryConsumable(inv);
-        const forced = !!(includeBiosseg && mi && mi.__inherited);
         const tr = document.createElement('tr');
-        if (forced) tr.className = 'checkout-biosseg-row';
         tr.innerHTML = `
-            <td><input type="checkbox" class="js-stock-use${forced ? ' checkout-biosseg-check' : ''}" data-row="${idx}" ${forced ? 'checked disabled data-forced="1"' : ''}></td>
+            <td><input type="checkbox" class="js-stock-use" data-row="${idx}"></td>
             <td>${escapeHtml(String(inv && inv.nome || getInventoryNameById(invId) || 'Material'))} ${consumivel ? '' : '<span class="inventory-alert" title="Item instrumental - sem baixa de saldo"><i class="ri-shield-keyhole-line"></i> Instrumental</span>'}</td>
             <td>${suggested.toFixed(2)}</td>
             <td><input type="text" class="form-control js-stock-qtd" data-row="${idx}" inputmode="decimal" data-mask="decimal2" value="${formatNumberBR(suggested, 2)}"></td>
@@ -7226,6 +7430,27 @@ function updateStockReportsMenuActiveState() {
         btn.classList.toggle('btn-secondary', !active);
         btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
+    
+    // Resetar o botão de Extrato de Transações quando navegamos para relatórios
+    const extratoBtn = document.getElementById('btnMenuExtratoTransacoes');
+    if (extratoBtn && key !== 'extrato') {
+        extratoBtn.classList.remove('btn-primary');
+        extratoBtn.classList.add('btn-secondary');
+    }
+    
+    // Resetar o botão de Conta Paciente quando navegamos para relatórios
+    const contaPacienteBtn = document.getElementById('btnMenuContaPaciente');
+    if (contaPacienteBtn && key !== 'conta_paciente') {
+        contaPacienteBtn.classList.remove('btn-primary');
+        contaPacienteBtn.classList.add('btn-secondary');
+    }
+    
+    // Garantir que "Novo Lançamento" seja sempre primário
+    const btnNovaTransacao = document.getElementById('btnNovaTransacao');
+    if (btnNovaTransacao) {
+        btnNovaTransacao.classList.remove('btn-secondary');
+        btnNovaTransacao.classList.add('btn-primary');
+    }
 }
 
 function getStockReportPage(key) {
@@ -8507,13 +8732,14 @@ function renderStockReportsActive({ key, startDate, endDate }) {
                             <div style="font-size:19px; font-weight:800; color:#0f172a;"><i class="ri-archive-line"></i> ${escapeHtml(formatCurrencyBRL(totalMat))}</div>
                         </div>
                     </div>
-                    <div style="display:grid; grid-template-columns: 1fr 180px 180px auto; gap:8px;">
+                    <div style="display:grid; grid-template-columns: 1fr 180px 180px auto auto; gap:8px;">
                         <select id="stockApurExecutorFilter" class="form-control">
                             <option value="">Todos os Executores</option>
                             ${exOptions.map(n => `<option value="${escapeHtml(n)}"${n === stockReportsApuracaoExecutorFilter ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}
                         </select>
                         <input id="stockApurStart" type="date" class="form-control" value="${escapeHtml(String(inventoryReportStartDate || ''))}">
                         <input id="stockApurEnd" type="date" class="form-control" value="${escapeHtml(String(inventoryReportEndDate || ''))}">
+                        <button type="button" class="btn btn-secondary" id="btnStockApurFilter"><i class="ri-search-line"></i> Filtrar</button>
                         <button type="button" class="btn btn-primary" onclick="openPrintExtratoFilter()"><i class="ri-printer-line"></i> Imprimir Extrato</button>
                     </div>
                 </div>
@@ -8558,6 +8784,7 @@ function renderStockReportsActive({ key, startDate, endDate }) {
             });
             const d1 = document.getElementById('stockApurStart');
             const d2 = document.getElementById('stockApurEnd');
+            const btnFilter = document.getElementById('btnStockApurFilter');
             const applyPeriod = () => {
                 const s = String(d1 && d1.value || '');
                 const e = String(d2 && d2.value || '');
@@ -8569,8 +8796,7 @@ function renderStockReportsActive({ key, startDate, endDate }) {
                 inventoryReportEndDate = e;
                 renderStockReports();
             };
-            if (d1) d1.addEventListener('change', applyPeriod);
-            if (d2) d2.addEventListener('change', applyPeriod);
+            if (btnFilter) btnFilter.addEventListener('click', applyPeriod);
             const alertCard = document.getElementById('stockApurCardAlert');
             if (alertCard) alertCard.addEventListener('click', () => {
                 stockReportsApuracaoOnlyCritical = !stockReportsApuracaoOnlyCritical;
@@ -8932,9 +9158,11 @@ function renderStockReports() {
         const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
         const cardExtrato = document.getElementById('finExtratoCard');
         const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
+        const cardConciliacao = document.getElementById('financeiroConciliacaoFiscalWrapper');
         if (cardBusca) cardBusca.style.display = 'none';
         if (cardExtrato) cardExtrato.style.display = 'none';
         if (cardEmissao) cardEmissao.style.display = 'none';
+        if (cardConciliacao) cardConciliacao.style.display = 'none';
 
         homePanel.innerHTML = `<div class="stock-dashboard-sub">Carregando...</div>`;
         renderStockReportsHome({ startDate, endDate }).catch((err) => {
@@ -9538,6 +9766,7 @@ function bindEstoqueModule() {
             const cardSaldo = document.getElementById('finPainelSaldo');
             const cardExtrato = document.getElementById('finExtratoCard');
             const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
+            const cardConciliacao = document.getElementById('financeiroConciliacaoFiscalWrapper');
 
             if (reportPanel) reportPanel.classList.add('hidden');
             if (homePanel) homePanel.classList.add('hidden');
@@ -9545,6 +9774,7 @@ function bindEstoqueModule() {
             
             // Oculta a emissão por padrão, a menos que haja busca
             if (cardEmissao) cardEmissao.style.display = 'none';
+            if (cardConciliacao) cardConciliacao.style.display = 'none';
             
             // Mostra o Extrato e oculta os filtros (ou mantém, mas o padrão original era sem os filtros em cima, apenas a tabela)
             // Como agora o Extrato virou um card com filtros, podemos apenas mostrar ele
@@ -9576,12 +9806,14 @@ function bindEstoqueModule() {
             const cardSaldo = document.getElementById('finPainelSaldo');
             const cardExtrato = document.getElementById('finExtratoCard');
             const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
+            const cardConciliacao = document.getElementById('financeiroConciliacaoFiscalWrapper');
             
             if (reportPanel) reportPanel.classList.add('hidden');
             if (homePanel) homePanel.classList.add('hidden');
             if (cardBusca) cardBusca.style.display = 'none';
             if (cardSaldo) cardSaldo.classList.add('hidden');
             if (cardEmissao) cardEmissao.style.display = 'none';
+            if (cardConciliacao) cardConciliacao.style.display = 'none';
 
             if (cardExtrato) {
                 cardExtrato.style.display = 'block';
@@ -9610,6 +9842,12 @@ function bindEstoqueModule() {
             topButtons.forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
             document.getElementById('btnMenuExtratoTransacoes').classList.remove('btn-secondary');
             document.getElementById('btnMenuExtratoTransacoes').classList.add('btn-primary');
+            
+            const btnNovaTransacao = document.getElementById('btnNovaTransacao');
+            if (btnNovaTransacao) {
+                btnNovaTransacao.classList.remove('btn-secondary');
+                btnNovaTransacao.classList.add('btn-primary');
+            }
         });
     }
     if (btnStockReportBack) btnStockReportBack.addEventListener('click', () => setStockReportsActive('home'));
@@ -10225,7 +10463,19 @@ function renderTable(data = [], type = 'patients') {
         budgetsTableBody.parentElement.style.display = 'table';
         document.getElementById('budgetEmptyState').classList.add('hidden');
 
-        const orderedBudgets = sortBudgetsDesc(data);
+        // Filter out 'Avaliação' status budgets before sorting and rendering
+        const filteredBudgets = data.filter(b => {
+            const statusNorm = String(b.status || '').trim().toLowerCase();
+            return statusNorm !== 'avaliação' && statusNorm !== 'avaliacao';
+        });
+
+        const orderedBudgets = sortBudgetsDesc(filteredBudgets);
+
+        if (orderedBudgets.length === 0) {
+            budgetsTableBody.parentElement.style.display = 'none';
+            document.getElementById('budgetEmptyState').classList.remove('hidden');
+            return;
+        }
 
         orderedBudgets.forEach(b => {
             const tr = document.createElement('tr');
@@ -10542,7 +10792,19 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             document.getElementById('addBudgetItemPanel').style.display = 'none';
         }
         if (document.getElementById('budgetFormTitle')) {
-            document.getElementById('budgetFormTitle').innerText = editMode ? 'Editar Orçamento - V2' : 'Novo Orçamento';
+            if (window.__isConsultaAvaliacaoMode) {
+                document.getElementById('budgetFormTitle').innerText = editMode ? 'Editar Avaliação' : 'Nova Avaliação';
+            } else {
+                document.getElementById('budgetFormTitle').innerText = editMode ? 'Editar Orçamento - V2' : 'Novo Orçamento';
+            }
+        }
+        if (document.getElementById('btnSaveBudget')) {
+            const btnSaveBudget = document.getElementById('btnSaveBudget');
+            if (window.__isConsultaAvaliacaoMode) {
+                btnSaveBudget.innerHTML = '<i class="ri-save-line"></i> Salvar Avaliação Completa';
+            } else {
+                btnSaveBudget.innerHTML = '<i class="ri-save-line"></i> Salvar Orçamento Completo';
+            }
         }
         if (document.getElementById('budIdDisplay')) {
             document.getElementById('budIdDisplay').value = editMode ? '' : 'Novo';
@@ -10580,19 +10842,43 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             
             const statusSelect = document.getElementById('budStatus');
             if (statusSelect) {
-                statusSelect.innerHTML = `
-                    <option value="Pendente">Pendente</option>
-                    <option value="Aprovado">Aprovado</option>
-                    <option value="Executado">Executado</option>
-                    <option value="Finalizado">Finalizado</option>
-                    <option value="Cancelado">Cancelado</option>
-                `;
-                statusSelect.value = 'Pendente';
+                if (window.__isConsultaAvaliacaoMode) {
+                    statusSelect.innerHTML = `
+                        <option value="Avaliação">Avaliação</option>
+                    `;
+                    statusSelect.value = 'Avaliação';
+                    statusSelect.disabled = true; // Block manipulation when in Avaliação mode
+                } else {
+                    statusSelect.innerHTML = `
+                        <option value="Pendente">Pendente</option>
+                        <option value="Aprovado">Aprovado</option>
+                        <option value="Executado">Executado</option>
+                        <option value="Finalizado">Finalizado</option>
+                        <option value="Cancelado">Cancelado</option>
+                    `;
+                    statusSelect.value = 'Pendente';
+                    statusSelect.disabled = false;
+                }
             }
             
             if (document.getElementById('budTipo')) document.getElementById('budTipo').value = 'Normal';
             if (document.getElementById('budObservacoes')) document.getElementById('budObservacoes').value = '';
-            if (document.getElementById('budProfissionalId')) document.getElementById('budProfissionalId').value = '';
+            
+            // Auto-selecionar o profissional responsável logado se for dentista
+            if (document.getElementById('budProfissionalId')) {
+                document.getElementById('budProfissionalId').value = ''; // default fallback
+                if (typeof currentUser !== 'undefined' && currentUser && currentUser.email) {
+                    const uEmail = String(currentUser.email).trim().toLowerCase();
+                    const currentProf = professionals.find(p => String(p.email || '').trim().toLowerCase() === uEmail);
+                    if (currentProf) {
+                        const profType = String(currentProf.tipo || '').toLowerCase();
+                        if (profType !== 'protetico' && profType !== 'protético') {
+                            const val = currentProf.seqid || currentProf.id;
+                            document.getElementById('budProfissionalId').value = val;
+                        }
+                    }
+                }
+            }
         }
 
         if (typeof validateBudgetMasterForm === 'function') validateBudgetMasterForm();
@@ -10632,6 +10918,9 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
                     companySelect.__bound = true;
                     companySelect.addEventListener('change', () => {
                         renderPermissionsGrid(null, companySelect.value);
+                        if (normalizeRole(document.getElementById('adminUserRole').value) === 'admin') {
+                            applyAdminFullPermissionsToGrid();
+                        }
                     });
                 }
             } else {
@@ -10655,6 +10944,76 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
         const dataVencInput = document.getElementById('empresaDataVencimento');
         const base64Input = document.getElementById('empresaLogoBase64');
         const logoPreview = document.getElementById('logoPreviewContainer');
+        const containerModulos = document.getElementById('empresaModulosCheckboxes');
+
+        // Módulos disponíveis conhecidos pelo sistema (para a venda avulsa e controle da clínica)
+        const allSystemModules = [
+            'Dashboard', 'Profissionais', 'Serviços', 'Estoque: Modelo de Uso', 
+            'Estoque: Movimentações', 'Orçamentos', 'Marketing', 'Atendimento', 
+            'Produção Protética', 'Destacar no Site', 'Pacientes', 'Especialidades', 
+            'Estoque: Inventário', 'Estoque: Vínculo de Serviços', 'Estoque: Relatórios', 
+            'Financeiro', 'Comissões', 'Agenda', 'Emitir NFS-e', 'Auditoria', 'Suporte'
+        ];
+
+        function renderModulosCheckboxes(currentModulesStr) {
+            if (!containerModulos) return;
+            containerModulos.innerHTML = '';
+            
+            // Remove espaços, quebras de linha e vírgulas inúteis, garantindo que " Orçamentos " seja reconhecido
+            const cleanStr = (currentModulesStr || '').replace(/\r?\n|\r/g, ' ').toLowerCase();
+            const currentArr = cleanStr.split(',').map(s => s.trim()).filter(Boolean);
+            
+            allSystemModules.forEach(mod => {
+                const modLower = mod.toLowerCase().trim();
+                
+                // Agora verificamos de forma mais inteligente se a palavra está contida na string,
+                // já que o banco pode ter salvo "orcamentos" sem acento ou com pequenos erros.
+                const isChecked = currentArr.some(item => {
+                    if (item === modLower) return true;
+                    // Lida com caracteres especiais (ç, ã, etc)
+                    const itemNoAccents = item.normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+                    const modNoAccents = modLower.normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+                    if (itemNoAccents === modNoAccents) return true;
+                    // Lida com a NFSe
+                    if (modLower === 'emitir nfs-e' && (item.includes('nfse') || item.includes('nfs-e'))) return true;
+                    return false;
+                });
+                
+                const div = document.createElement('div');
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.gap = '8px';
+                
+                div.innerHTML = `
+                    <input type="checkbox" id="mod_${mod}" value="${mod}" class="empresa-modulo-cb" ${isChecked ? 'checked' : ''}>
+                    <label for="mod_${mod}" style="margin:0; cursor:pointer;">${mod}</label>
+                `;
+                containerModulos.appendChild(div);
+
+                // Adiciona o alerta de confirmação ao tentar desmarcar
+                const cb = div.querySelector('input[type="checkbox"]');
+                cb.addEventListener('click', (e) => {
+                    if (!cb.checked) {
+                        const confirmMsg = `Atenção: Você está desmarcando o módulo "${mod}".\n\nSe a empresa já utilizava este módulo, ela perderá acesso a ele imediatamente após você salvar as alterações.\n\nTem certeza que deseja remover este módulo?`;
+                        if (!confirm(confirmMsg)) {
+                            e.preventDefault(); // Impede que a caixinha seja desmarcada
+                        }
+                    }
+                });
+            });
+        }
+
+        // Listener para mudar checkboxes quando o plano mudar
+        if (planoTipoInput) {
+            planoTipoInput.onchange = (e) => {
+                const selectedVal = e.target.value;
+                if (!selectedVal) return;
+                const pInfo = configPlanosList.find(p => p.id === selectedVal || p.tipo_assinatura === selectedVal);
+                if (pInfo) {
+                    renderModulosCheckboxes(pInfo.modulos_texto);
+                }
+            };
+        }
 
         if (editMode && dataObj) {
             idInput.value = dataObj.id;
@@ -10685,6 +11044,15 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
                 }
                 planoTipoInput.value = v;
             }
+            
+            // Renderiza os módulos marcados da empresa (ou faz fallback para o plano caso seja nulo, embora a migração previna isso)
+            if (dataObj.modulos_contratados) {
+                renderModulosCheckboxes(dataObj.modulos_contratados);
+            } else {
+                const pInfo = configPlanosList.find(p => p.id === dataObj.plano_tipo || p.tipo_assinatura === dataObj.plano_tipo);
+                renderModulosCheckboxes(pInfo ? pInfo.modulos_texto : '');
+            }
+
             if (dataVencInput) dataVencInput.value = dataObj.data_vencimento ? String(dataObj.data_vencimento).slice(0, 10) : '';
             document.getElementById('empresaSupervisorPin').value = dataObj.supervisor_pin || '';
             document.getElementById('empresaSupervisorPin').placeholder = 'Deixe em branco para manter a senha atual';
@@ -10715,6 +11083,7 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
                 }
                 planoTipoInput.value = '';
             }
+            renderModulosCheckboxes('');
             if (dataVencInput) dataVencInput.value = '';
             base64Input.value = '';
             logoPreview.innerHTML = `<i class="ri-image-line" style="font-size: 1.5rem; color: var(--text-muted);"></i>`;
@@ -11123,6 +11492,13 @@ function showList(type = 'patients') {
         document.getElementById('medicacaoDescContainer').style.display = 'none';
         document.getElementById('alergiaDescContainer').style.display = 'none';
         renderTable(patients, 'patients');
+    } else if (type === 'professionals') {
+        professionalFormView.classList.add('hidden');
+        professionalListView.classList.remove('hidden');
+        professionalForm.reset();
+        document.getElementById('editProfessionalId').value = '';
+        comissionCard.style.display = 'none';
+        renderTable(professionals, 'professionals');
     } else if (type === 'specialties') {
         if (specialtyFormView) specialtyFormView.classList.add('hidden');
         if (specialtiesListView) specialtiesListView.classList.remove('hidden');
@@ -11323,6 +11699,9 @@ function showList(type = 'patients') {
         if (atendimentoView) atendimentoView.classList.remove('hidden');
         initAtendimentoFilters();
         renderAtendimentoPlaceholder();
+    } else if (type === 'consultaAvaliacao') {
+        if (consultaAvaliacaoView) consultaAvaliacaoView.classList.remove('hidden');
+        initConsultaAvaliacaoFilters();
     } else if (type === 'agenda') {
         if (agendaView) agendaView.classList.remove('hidden');
         initAgendaFilters();
@@ -11332,6 +11711,12 @@ function showList(type = 'patients') {
         if (proteseView) proteseView.classList.remove('hidden');
         initProteseModule();
         fetchProteseFromUI();
+    } else if (type === 'suporteTickets') {
+        if (suporteTicketsView) suporteTicketsView.classList.remove('hidden');
+        if (btnRefreshTickets) btnRefreshTickets.style.display = isSuperAdmin ? 'inline-flex' : 'none';
+        if (btnPrintTicketsReport) btnPrintTicketsReport.style.display = isSuperAdmin ? 'inline-flex' : 'none';
+        if (btnPrintTicketsReportFull) btnPrintTicketsReportFull.style.display = isSuperAdmin ? 'inline-flex' : 'none';
+        fetchTickets();
     } else if (type === 'cancelledBudgets') {
         const cbView = document.getElementById('cancelledBudgetsView');
         if (cbView) cbView.classList.remove('hidden');
@@ -11349,7 +11734,7 @@ function showList(type = 'patients') {
             }
         });
         viewCancelledBudgets();
-    } else {
+    } else if (type === 'professionals_fallback_removed') {
         professionalFormView.classList.add('hidden');
         professionalListView.classList.remove('hidden');
         professionalForm.reset();
@@ -12094,6 +12479,245 @@ function initDashboardFilters() {
         if (dashProfessional) dashProfessional.addEventListener('change', () => refreshDashboardFromUI());
     }
 }
+
+function initConsultaAvaliacaoFilters() {
+    if (consultaProfessional) {
+        const prev = String(consultaProfessional.value || '');
+        const opts = ['<option value="">Selecione...</option>'];
+        (professionals || [])
+            .slice()
+            .filter(p => String(p.status || '') === 'Ativo')
+            .filter(p => (String(p.tipo || '').toLowerCase() !== 'protetico'))
+            .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+            .forEach(p => {
+                opts.push(`<option value="${p.seqid}">${p.nome}</option>`);
+            });
+        consultaProfessional.innerHTML = opts.join('');
+        if (prev && Array.from(consultaProfessional.options).some(o => String(o.value) === prev)) {
+            consultaProfessional.value = prev;
+        }
+    }
+
+    if (consultaDate && !consultaDate.value) {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        consultaDate.value = `${yyyy}-${mm}-${dd}`;
+    }
+
+    const shouldAuto = currentUserRole === 'dentista';
+    if (consultaProfessionalGroup) consultaProfessionalGroup.style.display = shouldAuto ? 'none' : '';
+
+    if (shouldAuto && consultaProfessional && !consultaProfessional.value) {
+        const uEmail = String(currentUser?.email || '').trim().toLowerCase();
+        const prof = (professionals || []).find(p => String(p.email || '').trim().toLowerCase() === uEmail);
+        if (prof && prof.seqid) {
+            consultaProfessional.value = String(prof.seqid);
+        } else {
+            if (consultaProfessionalGroup) consultaProfessionalGroup.style.display = '';
+        }
+    }
+
+    if (!window.__consultaDelegated) {
+        window.__consultaDelegated = true;
+        if (btnConsultaRefresh) btnConsultaRefresh.addEventListener('click', () => fetchConsultaAvaliacaoForUI());
+        if (consultaDate) consultaDate.addEventListener('change', () => fetchConsultaAvaliacaoForUI());
+        if (consultaProfessional) consultaProfessional.addEventListener('change', () => fetchConsultaAvaliacaoForUI());
+    }
+
+    fetchConsultaAvaliacaoForUI();
+}
+
+async function fetchConsultaAvaliacaoForUI() {
+    if (!consultaDate || !consultaProfessional) return;
+    const dateStr = consultaDate.value;
+    const profSeqId = consultaProfessional.value;
+    if (!dateStr || !profSeqId) {
+        if (consultaPacientesTableBody) consultaPacientesTableBody.innerHTML = '';
+        if (consultaEmptyState) consultaEmptyState.classList.remove('hidden');
+        return;
+    }
+    
+    try {
+        if (consultaPacientesTableBody) {
+            consultaPacientesTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando...</td></tr>';
+        }
+        if (consultaEmptyState) consultaEmptyState.classList.add('hidden');
+
+        const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
+        const agQ = db.from('agenda_agendamentos')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('profissional_id', Number(profSeqId))
+            .gte('inicio', startIso)
+            .lt('inicio', endIso)
+            .order('inicio', { ascending: true });
+            
+        const { data: ags, error: agErr } = await agQ;
+        if (agErr) throw agErr;
+        
+        // Filter out canceled
+        const validAgs = (ags || []).filter(a => String(a.status || '').toLowerCase() !== 'cancelado');
+        
+        if (!validAgs.length) {
+            if (consultaPacientesTableBody) consultaPacientesTableBody.innerHTML = '';
+            if (consultaEmptyState) consultaEmptyState.classList.remove('hidden');
+            return;
+        }
+        
+        // Get patient info
+        const patIds = [...new Set(validAgs.map(a => a.paciente_id).filter(Boolean))];
+        let pMap = {};
+        if (patIds.length > 0) {
+            const { data: pats } = await db.from('pacientes')
+                .select('id, seqid, nome, telefone')
+                .in('seqid', patIds);
+            (pats || []).forEach(p => { pMap[p.seqid] = p; });
+        }
+        
+        let html = '';
+        let visibleCount = 0;
+        validAgs.forEach(ag => {
+            const pInfo = pMap[ag.paciente_id] || {};
+            const pUuid = pInfo.id;
+            
+            // Check budgets for this patient
+            let avaliacaoBudget = null;
+            let wasLiberated = false;
+            
+            if (pUuid) {
+                // Find if there's an 'Avaliação' budget
+                avaliacaoBudget = budgets.find(b => {
+                    const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                    const statusNorm = String(b.status || '').trim().toLowerCase();
+                    return isSamePat && (statusNorm === 'avaliação' || statusNorm === 'avaliacao');
+                });
+                
+                // If no avaliacao budget, check if there's a 'Pendente' budget created today (meaning it was liberated)
+                if (!avaliacaoBudget) {
+                    wasLiberated = budgets.some(b => {
+                        const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                        const statusNorm = String(b.status || '').trim().toLowerCase();
+                        return isSamePat && statusNorm === 'pendente' && (b.created_at || '').startsWith(dateStr);
+                    });
+                }
+            }
+            
+            // If it was liberated today, don't show in the grid
+            if (wasLiberated) return;
+            
+            visibleCount++;
+            
+            const d = new Date(ag.inicio);
+            const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const pName = escapeHtml(pInfo.nome || 'Paciente não encontrado');
+            const pPhone = escapeHtml(pInfo.telefone || '-');
+            const statusBadge = `<span class="status-badge" style="background:var(--bg-color); color:var(--text-color); border:1px solid var(--border-color);">${escapeHtml(ag.status || 'Agendado')}</span>`;
+            
+            let actionButtons = `
+                <button class="btn btn-sm btn-primary" onclick="iniciarConsultaAvaliacao(${ag.paciente_id}, '${ag.id}')">
+                    <i class="ri-play-circle-line"></i> Iniciar Avaliação
+                </button>
+            `;
+            
+            if (avaliacaoBudget) {
+                actionButtons += `
+                    <button class="btn btn-sm btn-secondary" onclick="liberarAvaliacao('${avaliacaoBudget.id}')" style="margin-left: 4px;" title="Liberar Avaliação para Pendente">
+                        <i class="ri-check-double-line"></i> Liberar
+                    </button>
+                `;
+            }
+            
+            html += `
+                <tr>
+                    <td style="font-weight:bold;">${timeStr}</td>
+                    <td>${pName}</td>
+                    <td>${pPhone}</td>
+                    <td>${statusBadge}</td>
+                    <td style="white-space: nowrap;">
+                        ${actionButtons}
+                    </td>
+                </tr>
+            `;
+        });
+        
+        if (visibleCount === 0) {
+            if (consultaPacientesTableBody) consultaPacientesTableBody.innerHTML = '';
+            if (consultaEmptyState) consultaEmptyState.classList.remove('hidden');
+        } else {
+            if (consultaPacientesTableBody) consultaPacientesTableBody.innerHTML = html;
+            if (consultaEmptyState) consultaEmptyState.classList.add('hidden');
+        }
+        
+    } catch (e) {
+        console.error('Error fetching consulta/avaliacao:', e);
+        if (consultaPacientesTableBody) consultaPacientesTableBody.innerHTML = '';
+        if (consultaEmptyState) consultaEmptyState.classList.remove('hidden');
+        showToast('Erro ao carregar agenda de avaliação.', true);
+    }
+}
+
+window.iniciarConsultaAvaliacao = function(patientSeqId, agendamentoId) {
+    // Find the actual patient ID (UUID) using the seqid
+    const patient = (patients || []).find(p => String(p.seqid) === String(patientSeqId));
+    if (!patient) {
+        showToast('Paciente não encontrado no sistema.', true);
+        return;
+    }
+    
+    // Set a flag so the patient ficha knows it's in "Consulta" mode
+    window.__isConsultaAvaliacaoMode = true;
+    window.__currentConsultaAgendamentoId = agendamentoId;
+    window._currentPatientDetailId = patient.id;
+    
+    // Check if there is an existing budget with status "Avaliação" for this patient
+    const existingAvaliacao = (budgets || []).find(b => b.pacienteid === patient.id && String(b.status || '').trim().toLowerCase() === 'avaliação');
+    
+    if (existingAvaliacao) {
+        window.editBudget(existingAvaliacao.id);
+    } else {
+        window.createNewBudgetFromProntuario();
+    }
+};
+
+window.liberarAvaliacao = async function(budgetId) {
+    try {
+        if (!confirm('Deseja liberar esta avaliação? O status do orçamento mudará para Pendente e ele não aparecerá mais nesta grid.')) {
+            return;
+        }
+
+        const b = budgets.find(bud => bud.id === budgetId);
+        if (!b) {
+            showToast('Orçamento não encontrado.', true);
+            return;
+        }
+
+        const { error } = await db.from('orcamentos')
+            .update({ status: 'Pendente' })
+            .eq('id', budgetId);
+
+        if (error) throw error;
+
+        // Atualizar no estado local
+        b.status = 'Pendente';
+        
+        showToast('Avaliação liberada com sucesso! Status alterado para Pendente.');
+        
+        // Recarregar a grid
+        if (typeof fetchConsultaAvaliacaoForUI === 'function') {
+            fetchConsultaAvaliacaoForUI();
+        }
+        
+        // Se a tabela de orçamentos estiver visível, atualize-a
+        if (typeof renderBudgetsTable === 'function') {
+            renderBudgetsTable();
+        }
+    } catch (err) {
+        console.error('Erro ao liberar avaliação:', err);
+        showToast('Erro ao liberar avaliação: ' + err.message, true);
+    }
+};
 
 function initAtendimentoFilters() {
     if (atendimentoProfessional) {
@@ -13856,7 +14480,7 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
             const patientBudgets = allPatientBudgets
                 .filter(b => {
                     const stKey = normalizeKey(b && b.status || '');
-                    return stKey !== 'EXECUTADO' && stKey !== 'CANCELADO';
+                    return stKey !== 'EXECUTADO' && stKey !== 'CANCELADO' && stKey !== 'AVALIAÇÃO' && stKey !== 'PENDENTE';
                 })
                 .sort((a, b) => {
                     const sa = Number(a && a.seqid || 0);
@@ -13883,7 +14507,8 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
                     const st = String(it.status || it.item_status || '').trim();
                     const stKey = normalizeStatusKey(st);
                     if (stKey === 'FINALIZADO' || stKey === 'CANCELADO') return;
-                    const eligible = isFreeBudget || stKey === 'LIBERADO' || stKey === 'EMEXECUCAO';
+                    // Allowed all non-finalized items to have checkbox, to fix regression
+                    const eligible = true;
                     if (!eligible) {
                         hasMatchButNotEligible = true;
                         return;
@@ -14152,6 +14777,57 @@ async function refreshDashboardFromUI() {
         await fetchConfigPlanos();
     }
     renderSuperAdminRenewals();
+    fetchDashboardTicketKpis();
+}
+
+async function fetchDashboardTicketKpis() {
+    const kpiWrap = document.getElementById('superAdminTicketsKpis');
+    if (!kpiWrap) return;
+    
+    if (!isSuperAdmin) {
+        kpiWrap.classList.add('hidden');
+        return;
+    }
+    
+    kpiWrap.classList.remove('hidden');
+    
+    try {
+        const { data, error } = await db.from('suporte_tickets')
+            .select('categoria, status')
+            .neq('status', 'Concluído');
+            
+        if (error) throw error;
+        
+        let countBug = 0;
+        let countDuvida = 0;
+        let countSol = 0;
+        let countFin = 0;
+        let countOutros = 0;
+        
+        for (const t of (data || [])) {
+            const cat = (t.categoria || '').trim();
+            if (cat === 'Bug / Erro') countBug++;
+            else if (cat === 'Dúvidas') countDuvida++;
+            else if (cat === 'Solicitação') countSol++;
+            else if (cat === 'Financeiro') countFin++;
+            else countOutros++;
+        }
+        
+        const elBug = document.getElementById('kpiTicketBug');
+        const elDuvida = document.getElementById('kpiTicketDuvida');
+        const elSol = document.getElementById('kpiTicketSol');
+        const elFin = document.getElementById('kpiTicketFin');
+        const elOutros = document.getElementById('kpiTicketOutros');
+        
+        if (elBug) elBug.textContent = countBug;
+        if (elDuvida) elDuvida.textContent = countDuvida;
+        if (elSol) elSol.textContent = countSol;
+        if (elFin) elFin.textContent = countFin;
+        if (elOutros) elOutros.textContent = countOutros;
+        
+    } catch (err) {
+        console.error('Erro ao buscar KPIs de tickets:', err);
+    }
 }
 
 function renderSuperAdminRenewals() {
@@ -15339,6 +16015,22 @@ function openProteseModal(order) {
 
     syncProteseOrcamentoItens();
     syncProteseExecucaoGroups();
+    
+    const btnSave = document.getElementById('btnProteseSave');
+    if (btnSave) {
+        if (order && order.status_geral === 'CONCLUIDA') {
+            btnSave.disabled = true;
+            btnSave.style.opacity = '0.5';
+            btnSave.style.cursor = 'not-allowed';
+            btnSave.title = 'Ordens concluídas não podem ser alteradas';
+        } else {
+            btnSave.disabled = false;
+            btnSave.style.opacity = '1';
+            btnSave.style.cursor = 'pointer';
+            btnSave.title = '';
+        }
+    }
+
     const btnPrint = document.getElementById('btnProtesePrint');
     if (btnPrint) btnPrint.disabled = !currentProteseOrder;
     const btnPrintSimple = document.getElementById('btnProtesePrintSimple');
@@ -15454,7 +16146,7 @@ function syncProteseEventButtons() {
     const canWrite = can('protese', 'insert') || can('protese', 'update');
     const fase = String((currentProteseOrder && currentProteseOrder.fase_atual) || '').trim();
     const st = String((currentProteseOrder && currentProteseOrder.status_geral) || (document.getElementById('proteseStatusGeral') || {}).value || '').trim();
-    const isDone = fase === 'ENCERRADA' || st === 'CANCELADA';
+    const isDone = fase === 'ENCERRADA' || st === 'CANCELADA' || st === 'CONCLUIDA';
     const materialTipo = String((materialSel && materialSel.value) || (currentProteseOrder && currentProteseOrder.material_tipo) || 'FISICO');
     const isSaved = !!(currentProteseOrder && currentProteseOrder.id);
 
@@ -16172,6 +16864,11 @@ async function saveProteseOrder() {
     }
     if (!can('protese', 'update') && currentProteseOrder) {
         showToast('Você não tem permissão para editar OP.', true);
+        return;
+    }
+
+    if (currentProteseOrder && currentProteseOrder.status_geral === 'CONCLUIDA') {
+        showToast('Ordens Protéticas já CONCLUÍDAS não podem ser alteradas ou salvas.', true);
         return;
     }
 
@@ -18416,6 +19113,192 @@ function openCommTransferModalFromSelection() {
     commTransferModal.classList.remove('hidden');
 }
 
+function openCommReworkAdjustmentModal() {
+    if (!commReworkAdjustmentModal) return;
+    if (!(isSuperAdmin || isAdminRole() || can('comissoes', 'create'))) {
+        showToast('Você não possui permissão para criar ajustes de comissão.', true);
+        return;
+    }
+    
+    // Reset fields
+    commReworkAttendanceId.value = '';
+    commReworkDebitValue.value = '';
+    commReworkCreditValue.value = '';
+    commReworkObs.value = '';
+    
+    // Auto-fill attendance ID and values if exactly one commission is selected
+    try {
+        const rows = getSelectedCommissionRows();
+        if (rows && rows.length === 1) {
+            const row = rows[0];
+            
+            // Try to extract an ID from the commission (atendimento_id or orcamento_id/seqid)
+            if (row.atendimento_id) {
+                commReworkAttendanceId.value = 'ATD-' + row.atendimento_id;
+            } else if (row.orcamento_id) {
+                commReworkAttendanceId.value = 'ORC-' + (row._orcamentoSeqid || row.orcamento_id);
+            } else if (row._orcamentoSeqid) {
+                commReworkAttendanceId.value = 'ORC-' + row._orcamentoSeqid;
+            }
+            
+            // Auto-fill the debit and credit values based on the commission value
+            if (row.valor_comissao != null) {
+                const valStr = String(row.valor_comissao).replace(',', '.');
+                const val = Math.abs(parseFloat(valStr));
+                if (!isNaN(val)) {
+                    commReworkDebitValue.value = '-' + val.toFixed(2);
+                    commReworkCreditValue.value = val.toFixed(2); // input type="number" não aceita o sinal "+" no value
+                }
+            }
+            
+            // Auto-fill the professional to debit
+            if (row.profissional_id) {
+                const profStr = String(row.profissional_id);
+                // After populating options, select it and trigger logic
+                setTimeout(() => {
+                    commReworkDebitProfessional.value = profStr;
+                    if(typeof commReworkDebitProfessional.onchange === 'function') {
+                        commReworkDebitProfessional.onchange();
+                    }
+                }, 10);
+            }
+        }
+    } catch(e) {
+        console.error('Error auto-filling commission data:', e);
+    }
+    
+    // Populate professionals directly
+    const profOptions = ['<option value="">Selecione o profissional</option>'];
+    (professionals || [])
+        .filter(p => String(p.status || '').toUpperCase() === 'ATIVO' || String(p.status || '').toUpperCase() === 'ATIVA')
+        .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+        .forEach(p => {
+            profOptions.push(`<option value="${p.seqid}">${escapeHtml(p.nome || '')}</option>`);
+        });
+        
+    commReworkDebitProfessional.innerHTML = profOptions.join('');
+    commReworkCreditProfessional.innerHTML = profOptions.join('');
+    
+    // Add mutual exclusion logic
+    commReworkDebitProfessional.onchange = () => {
+        const val = commReworkDebitProfessional.value;
+        Array.from(commReworkCreditProfessional.options).forEach(opt => {
+            if(opt.value === val && val !== "") {
+                opt.disabled = true;
+                if(commReworkCreditProfessional.value === val) commReworkCreditProfessional.value = "";
+            } else {
+                opt.disabled = false;
+            }
+        });
+    };
+    
+    commReworkCreditProfessional.onchange = () => {
+        const val = commReworkCreditProfessional.value;
+        Array.from(commReworkDebitProfessional.options).forEach(opt => {
+            if(opt.value === val && val !== "") {
+                opt.disabled = true;
+                if(commReworkDebitProfessional.value === val) commReworkDebitProfessional.value = "";
+            } else {
+                opt.disabled = false;
+            }
+        });
+    };
+    
+    commReworkAdjustmentModal.classList.remove('hidden');
+}
+
+async function confirmCommReworkAdjustment() {
+    if (!commReworkAttendanceId.value.trim()) {
+        showToast('Informe o ID do atendimento original.', true);
+        return;
+    }
+    if (!commReworkDebitProfessional.value) {
+        showToast('Selecione o profissional para estorno.', true);
+        return;
+    }
+    if (!commReworkCreditProfessional.value) {
+        showToast('Selecione o profissional para crédito.', true);
+        return;
+    }
+    if (commReworkDebitProfessional.value === commReworkCreditProfessional.value) {
+        showToast('O profissional de estorno deve ser diferente do profissional de crédito.', true);
+        return;
+    }
+
+    const debitValStr = commReworkDebitValue.value.replace(',', '.');
+    const creditValStr = commReworkCreditValue.value.replace(',', '.');
+    
+    const debitVal = parseFloat(debitValStr);
+    const creditVal = parseFloat(creditValStr);
+    
+    if (isNaN(debitVal) || isNaN(creditVal)) {
+        showToast('Valores de estorno e crédito devem ser numéricos.', true);
+        return;
+    }
+    
+    // O valor do estorno geralmente o usuário digita positivo ou negativo, vamos tratar para garantir que:
+    // Debit = negativo, Credit = positivo
+    const debitFinal = -Math.abs(debitVal);
+    const creditFinal = Math.abs(creditVal);
+    
+    // Regra de Ouro: A soma do estorno e crédito deve ser 0
+    if (Math.abs(debitFinal + creditFinal) > 0.01) {
+        showToast(`Regra de Ouro: O valor estornado (${formatCurrency(Math.abs(debitFinal))}) deve ser igual ao creditado (${formatCurrency(creditFinal)}).`, true);
+        return;
+    }
+    
+    const obsBase = `Ajuste por retrabalho do Atendimento ID ${commReworkAttendanceId.value.trim()}`;
+    const extraObs = commReworkObs.value.trim() ? ` - ${commReworkObs.value.trim()}` : '';
+    const finalObs = obsBase + extraObs;
+    
+    const nowIso = new Date().toISOString();
+    
+    const debitPayload = {
+        empresa_id: currentEmpresaId,
+        profissional_id: commReworkDebitProfessional.value,
+        atendimento_id: null, // Podem não estar linkando com a FK real
+        paciente_nome: 'AJUSTE_RETRABALHO',
+        procedimento_nome: `Retrabalho: ${commReworkAttendanceId.value.trim()}`,
+        valor_base: 0,
+        percentual_comissao: 0,
+        valor_comissao: debitFinal,
+        status: 'GERADA',
+        data_geracao: nowIso,
+        observacoes: finalObs,
+        categoria: 'AJUSTE_RETRABALHO'
+    };
+    
+    const creditPayload = {
+        empresa_id: currentEmpresaId,
+        profissional_id: commReworkCreditProfessional.value,
+        atendimento_id: null,
+        paciente_nome: 'AJUSTE_RETRABALHO',
+        procedimento_nome: `Retrabalho: ${commReworkAttendanceId.value.trim()}`,
+        valor_base: 0,
+        percentual_comissao: 0,
+        valor_comissao: creditFinal,
+        status: 'GERADA',
+        data_geracao: nowIso,
+        observacoes: finalObs,
+        categoria: 'AJUSTE_RETRABALHO'
+    };
+
+    if (btnCommReworkConfirm) btnCommReworkConfirm.disabled = true;
+    try {
+        const { error } = await withTimeout(db.from('financeiro_comissoes').insert([debitPayload, creditPayload]), 15000, 'financeiro_comissoes:rework_adjustment:insert');
+        if (error) throw error;
+        
+        showToast('Ajuste de retrabalho registrado com sucesso.');
+        commReworkAdjustmentModal.classList.add('hidden');
+        fetchCommissionsFromUI();
+    } catch (err) {
+        console.error('Erro ao registrar ajuste de retrabalho:', err);
+        showToast('Erro ao registrar ajuste. Verifique o console.', true);
+    } finally {
+        if (btnCommReworkConfirm) btnCommReworkConfirm.disabled = false;
+    }
+}
+
 function closeCommTransferModal() {
     if (commTransferModal) commTransferModal.classList.add('hidden');
 }
@@ -18784,6 +19667,7 @@ if (btnCommSearch) btnCommSearch.addEventListener('click', () => fetchCommission
 if (btnCommPay) btnCommPay.addEventListener('click', () => markSelectedCommissionsPaid());
 if (btnCommAdvance) btnCommAdvance.addEventListener('click', () => markSelectedCommissionsAdvanced());
 if (btnCommTransfer) btnCommTransfer.addEventListener('click', () => openCommTransferModalFromSelection());
+if (btnCommReworkAdjustment) btnCommReworkAdjustment.addEventListener('click', () => openCommReworkAdjustmentModal());
 if (btnCommPrint) btnCommPrint.addEventListener('click', () => printCommissionReceipt());
 if (btnCommPrintReport) btnCommPrintReport.addEventListener('click', () => printCommissionsReportFromUI());
 if (commStatus) commStatus.addEventListener('change', () => { resetCommissionSelection(); fetchCommissionsFromUI(); });
@@ -18802,6 +19686,7 @@ if (commSelectAll) commSelectAll.addEventListener('change', (e) => {
 
 if (btnCommTransferCancel) btnCommTransferCancel.addEventListener('click', closeCommTransferModal);
 if (btnCommTransferConfirm) btnCommTransferConfirm.addEventListener('click', transferSelectedCommissionsToProfessional);
+if (btnCommReworkConfirm) btnCommReworkConfirm.addEventListener('click', confirmCommReworkAdjustment);
 
 // Global action to delete user mapping
 window.removeTenantUser = async function (usuario_id) {
@@ -19621,8 +20506,9 @@ if (btnCancelService) btnCancelService.addEventListener('click', () => showList(
 
 // Nav Budget
 if (btnNewBudget) btnNewBudget.addEventListener('click', () => showForm(false, 'budgets'));
-if (btnBackBudget) btnBackBudget.addEventListener('click', () => showList('budgets'));
-if (btnCancelBudget) btnCancelBudget.addEventListener('click', () => showList('budgets'));
+// Handled lower down
+// if (btnBackBudget) btnBackBudget.addEventListener('click', () => showList('budgets'));
+// if (btnCancelBudget) btnCancelBudget.addEventListener('click', () => showList('budgets'));
 
 // Masks
 if (inputCpf) inputCpf.addEventListener('input', e => e.target.value = maskCPF(e.target.value));
@@ -21400,13 +22286,29 @@ if (btnNewBudget) {
 
 if (btnBackBudget) {
     btnBackBudget.addEventListener('click', () => {
-        showList('budgets');
+        if (window.__isConsultaAvaliacaoMode) {
+            window.__isConsultaAvaliacaoMode = false;
+            window.__currentConsultaAgendamentoId = null;
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.getElementById('consultaAvaliacaoView').classList.remove('hidden');
+            if (document.getElementById('budgetForm')) document.getElementById('budgetForm').reset();
+        } else {
+            showList('budgets');
+        }
     });
 }
 
 if (btnCancelBudget) {
     btnCancelBudget.addEventListener('click', () => {
-        showList('budgets'); // Apenas esconde o formulário e mostra a lista
+        if (window.__isConsultaAvaliacaoMode) {
+            window.__isConsultaAvaliacaoMode = false;
+            window.__currentConsultaAgendamentoId = null;
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.getElementById('consultaAvaliacaoView').classList.remove('hidden');
+            if (document.getElementById('budgetForm')) document.getElementById('budgetForm').reset();
+        } else {
+            showList('budgets'); // Apenas esconde o formulário e mostra a lista
+        }
     });
 }
 
@@ -21968,6 +22870,7 @@ if (btnToggleAddItem) {
             }
 
             validateBudgetItemForm();
+            if (document.getElementById('budItemDescricaoAtendimento')) document.getElementById('budItemDescricaoAtendimento').value = '';
             bindOdontogramaEvents();
         } catch (err) {
             alert("Erro ao abrir painel: " + err.message);
@@ -21980,6 +22883,7 @@ if (btnCancelAddItem) {
     btnCancelAddItem.addEventListener('click', () => {
         addBudgetItemPanel.style.display = 'none';
         editingBudgetItemId = null;
+        if (document.getElementById('budItemDescricaoAtendimento')) document.getElementById('budItemDescricaoAtendimento').value = '';
     });
 }
 
@@ -22413,6 +23317,7 @@ if (btnSaveAddItem) {
             const servicoDescricao = servData ? servData.descricao : (document.getElementById('budItemDescricao').value || servId);
             let subdivisao = document.getElementById('budItemSubdivisao').value || (servData ? servData.subdivisao : '') || '-';
             subdivisao = subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+            const descricaoAtendimento = document.getElementById('budItemDescricaoAtendimento')?.value || '';
 
             if (editingBudgetItemId) {
                 const idx = currentBudgetItems.findIndex(i => i.id === editingBudgetItemId);
@@ -22431,6 +23336,7 @@ if (btnSaveAddItem) {
                         valorProtetico: valorProtetico || 0,
                         profissionalId: executorId,
                         executorNome: executorData ? executorData.nome : '',
+                        descricaoAtendimento: descricaoAtendimento,
                         status: currentBudgetItems[idx].status || 'Pendente'
                     };
                     if (porElemento) {
@@ -22463,6 +23369,7 @@ if (btnSaveAddItem) {
                     valorProtetico: valorProtetico || 0,
                     profissionalId: executorId,
                     executorNome: executorData ? executorData.nome : '',
+                    descricaoAtendimento: descricaoAtendimento,
                     status: 'Pendente'
                 };
                 if (porElemento) {
@@ -22673,6 +23580,7 @@ window.editBudgetItem = function (itemId) {
     document.getElementById('budItemServicoId').value = item.servicoId || '';
     syncOdontoButtonForServiceId(item.servicoId || '');
     document.getElementById('budItemDescricao').value = item.servicoDescricao || '';
+    document.getElementById('budItemDescricaoAtendimento').value = item.descricaoAtendimento || '';
     
     let subValue = item.subdivisao || '';
     subValue = subValue.replace(/^\d+\.\d+\s*-\s*/, '').trim();
@@ -22702,6 +23610,31 @@ window.editBudgetItem = function (itemId) {
     bindOdontogramaEvents();
 };
 
+// --- HELPER CONCILIAÇÃO FISCAL ---
+async function checkAndGenerateProtocoloFiscal(orcamento_id) {
+    if (!orcamento_id) return;
+    try {
+        const { data: orc, error: errFetch } = await db.from('orcamentos').select('protocolo_fiscal').eq('id', orcamento_id).single();
+        if (errFetch || !orc) return;
+        
+        if (!orc.protocolo_fiscal) {
+            const year = new Date().getFullYear();
+            const rnd = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const protocol = `OCC-${year}-${rnd}`;
+            
+            const { error: errUpdate } = await db.from('orcamentos').update({ protocolo_fiscal: protocol }).eq('id', orcamento_id);
+            if (!errUpdate) {
+                // Atualizar no array local se existir
+                const b = budgets.find(b => b.id === orcamento_id);
+                if (b) b.protocolo_fiscal = protocol;
+                console.log(`DEBUG V20: Protocolo Fiscal ${protocol} gerado para o orçamento ${orcamento_id}`);
+            }
+        }
+    } catch (e) {
+        console.error("Erro ao gerar protocolo fiscal:", e);
+    }
+}
+
 // Form Save Budget (Master)
 if (budgetForm) {
     budgetForm.addEventListener('submit', async e => {
@@ -22710,7 +23643,12 @@ if (budgetForm) {
 
         const id = document.getElementById('editBudgetId').value;
         const statusElement = document.getElementById('budStatus');
-        const newStatus = statusElement ? statusElement.value : '';
+        let newStatus = statusElement ? statusElement.value : '';
+        
+        // If disabled due to Avaliacao mode, read the default value
+        if (statusElement && statusElement.disabled && window.__isConsultaAvaliacaoMode) {
+            newStatus = 'Avaliação';
+        }
 
         // --- TRAVA DE SEGURANÇA: Orçamento Cancelado é IMUTÁVEL ---
         if (id) {
@@ -22793,7 +23731,7 @@ if (budgetForm) {
             empresa_id: currentEmpresaId,
             profissional_id: profSeqId
         };
-
+        
         try {
             let orcamentoId = id;
             const originalBudget = id ? budgets.find(b => b.id === id) : null;
@@ -22830,6 +23768,7 @@ if (budgetForm) {
                     valor_protetico: item.valorProtetico || 0,
                     profissional_id: executorObj ? parseInt(executorObj.seqid) : null,
                     subdivisao: item.subdivisao ? item.subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim() : '',
+                    descricao_atendimento: item.descricaoAtendimento || '', // Capture locally, no DB column yet probably
                     status: item.status || 'Pendente'
                 };
             });
@@ -22870,9 +23809,52 @@ if (budgetForm) {
                 // 2. Identify removed items
                 const removedItemIds = dbItemIds.filter(did => !currentItemIds.includes(did));
                 
+                // 2.5 Clean up payload for DB
+                const dbItemsPayload = itemsPayload.map(it => {
+                    const copy = { ...it };
+                    delete copy.descricao_atendimento;
+                    return copy;
+                });
+                
                 // 3. Upsert current items (updates existing, inserts new)
-                const { error: upsertError } = await db.from('orcamento_itens').upsert(itemsPayload);
+                const { error: upsertError } = await db.from('orcamento_itens').upsert(dbItemsPayload);
                 if (upsertError) throw upsertError;
+
+                // 3.5. Sync commissions for updated items (e.g. professional or value changed)
+                for (const item of itemsPayload) {
+                    const { data: existingComm } = await db.from('financeiro_comissoes').select('id, profissional_id, status, valor_comissao').eq('item_id', item.id).maybeSingle();
+                    
+                    if (existingComm) {
+                        const profChanged = String(existingComm.profissional_id) !== String(item.profissional_id);
+                        
+                        const profObj = professionals.find(p => String(p.seqid) === String(item.profissional_id));
+                        let novoValor = existingComm.valor_comissao;
+                        if (profObj) {
+                            const bData = budgets.find(b => b.id === id) || budgetData;
+                            novoValor = calculateCommission(profObj, item, bData);
+                            if (!(novoValor > 0)) novoValor = 0;
+                        }
+
+                        const valueChanged = Number(existingComm.valor_comissao) !== Number(novoValor);
+
+                        if (profChanged || valueChanged) {
+                            if (['PAGA', 'ANTECIPADA', 'TRANSFERIDA', 'ESTORNADA'].includes(existingComm.status)) {
+                                if (profChanged) {
+                                    showToast(`Atenção: A comissão de um item editado já foi processada (paga/transferida) e não será alterada para o novo profissional.`, true);
+                                }
+                            } else {
+                                await db.from('financeiro_comissoes').update({
+                                    profissional_id: item.profissional_id,
+                                    valor_comissao: novoValor
+                                }).eq('id', existingComm.id);
+                                
+                                if (profChanged) {
+                                    showToast(`Comissão atualizada para o novo profissional.`, false);
+                                }
+                            }
+                        }
+                    }
+                }
                 
                 // 4. Delete only removed items
                 if (removedItemIds.length > 0) {
@@ -22922,9 +23904,15 @@ if (budgetForm) {
                 // Update orcamento_id in itemsPayload for new budget
                 itemsPayload.forEach(it => it.orcamento_id = orcamentoId);
 
+                const dbItemsPayload = itemsPayload.map(it => {
+                    const copy = { ...it };
+                    delete copy.descricao_atendimento;
+                    return copy;
+                });
+
                 // Insert new items if there are any
-                if (itemsPayload.length > 0) {
-                    const { data: insertedItems, error: addError } = await db.from('orcamento_itens').insert(itemsPayload).select();
+                if (dbItemsPayload.length > 0) {
+                    const { data: insertedItems, error: addError } = await db.from('orcamento_itens').insert(dbItemsPayload).select();
                     if (addError) throw addError;
 
                     // Sync the inserted relational items back to the cache
@@ -22933,13 +23921,82 @@ if (budgetForm) {
                         budgets[index].orcamento_itens = insertedItems;
                     }
                 }
+                
+                // --- INÍCIO LÓGICA CONSULTA/AVALIAÇÃO ---
+                // Gravar na evolução independentemente de estar no modo consulta ou não, pois o campo agora é obrigatório por item
+                const itemsWithDesc = itemsPayload.filter(it => it.descricao_atendimento && it.descricao_atendimento.trim() !== '');
+                if (itemsWithDesc.length > 0) {
+                    try {
+                        const profIdForEvol = profObj ? profObj.id : (currentUser && currentUser.id);
+                        const evolEntries = itemsWithDesc.map(it => {
+                            const svc = services.find(s => s.id == it.servico_id);
+                            const svcName = svc ? svc.descricao : `Serviço #${it.servico_id}`;
+                            const budgetRef = budgetData.seqid || orcamentoId.slice(0,8);
+                            return {
+                                paciente_id: pat.id,
+                                profissional_id: profIdForEvol,
+                                descricao: `[Orçamento #${budgetRef} - ${svcName}]: ${it.descricao_atendimento}`,
+                                dente_regiao: (it.elementos && it.elementos.length > 0) ? it.elementos.join(', ') : 'Geral',
+                                empresa_id: currentEmpresaId,
+                                created_by: currentUser?.id
+                            };
+                        });
+                        const { error: evolErr } = await db.from('paciente_evolucao').insert(evolEntries);
+                        if (evolErr) console.error("Erro ao gravar evolução do orçamento:", evolErr);
+                    } catch (e) {
+                        console.error("Erro na gravação automática de evolução:", e);
+                    }
+                }
+
+                if (window.__isConsultaAvaliacaoMode && window.__currentConsultaAgendamentoId) {
+                    try {
+                        const { error: agErr } = await db.from('agenda_agendamentos')
+                            .update({ status: 'Orçamento Gerado' })
+                            .eq('id', window.__currentConsultaAgendamentoId);
+                        
+                        if (agErr) {
+                            console.error("Erro ao atualizar agendamento para Orçamento Gerado:", agErr);
+                        } else {
+                            // Atualizar na interface se a tela da recepção/agenda estiver aberta (opcional, o reload resolve)
+                            // Apenas resetamos a flag do agendamento atual
+                            window.__currentConsultaAgendamentoId = null;
+                            if (typeof fetchAgendaForUI === 'function') {
+                                fetchAgendaForUI();
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Erro na lógica de Consulta/Avaliação pós-orçamento:", e);
+                    }
+                }
+                // --- FIM LÓGICA CONSULTA/AVALIAÇÃO ---
+
                 showToast('Orçamento cadastrado com sucesso!');
             }
 
-            showList('budgets');
-            const searchInput = document.getElementById('searchBudgetInput');
-            if (searchInput) {
-                searchInput.focus();
+            // Gerar protocolo fiscal se for Aprovado
+            if (budgetData.status === 'Aprovado' || budgetData.status === 'Fechado' || budgetData.status === 'Executado') {
+                await checkAndGenerateProtocoloFiscal(orcamentoId);
+            }
+
+            if (window.__isConsultaAvaliacaoMode) {
+                // Voltar para a tela de Consulta/Avaliação
+                window.__isConsultaAvaliacaoMode = false;
+                window.__currentConsultaAgendamentoId = null;
+                document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+                document.getElementById('consultaAvaliacaoView').classList.remove('hidden');
+                
+                // Limpar campos
+                if (document.getElementById('budgetForm')) document.getElementById('budgetForm').reset();
+                
+                if (typeof fetchConsultaAvaliacaoForUI === 'function') {
+                    fetchConsultaAvaliacaoForUI();
+                }
+            } else {
+                showList('budgets');
+                const searchInput = document.getElementById('searchBudgetInput');
+                if (searchInput) {
+                    searchInput.focus();
+                }
             }
         } catch (error) {
             console.error("DEBUG - Erro completo ao salvar orçamento:", error);
@@ -23003,6 +24060,15 @@ window.editBudget = function (id) {
                 <option value="Executado">Executado</option>
                 <option value="Cancelado">Cancelado</option>
             `;
+        } else if (normStatus === 'avaliação' || normStatus === 'avaliacao') {
+            statusSelect.innerHTML = `
+                <option value="Avaliação">Avaliação</option>
+                <option value="Pendente">Pendente</option>
+                <option value="Aprovado">Aprovado</option>
+                <option value="Executado">Executado</option>
+                <option value="Finalizado">Finalizado</option>
+                <option value="Cancelado">Cancelado</option>
+            `;
         } else {
             // Lista completa para outros status
             statusSelect.innerHTML = `
@@ -23016,8 +24082,17 @@ window.editBudget = function (id) {
         
         // Match value correctly regardless of original casing
         statusSelect.value = currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1).toLowerCase();
+        if (normStatus === 'avaliação' || normStatus === 'avaliacao') {
+            statusSelect.value = 'Avaliação';
+        }
         if (!statusSelect.value && statusSelect.options.length > 0) {
             statusSelect.selectedIndex = 0;
+        }
+        
+        if (window.__isConsultaAvaliacaoMode) {
+            statusSelect.disabled = true;
+        } else {
+            statusSelect.disabled = false;
         }
     }
 
@@ -23279,6 +24354,7 @@ window.printBudget = function (id) {
                                     </tr>
                                 </tfoot>
                             </table>
+                            ${b.protocolo_fiscal ? `<div style="text-align:right; margin-top: 10px; font-size: 13px; font-weight: bold; color: #374151;">Protocolo para NFSe: ${b.protocolo_fiscal}</div>` : ''}
                         </div>
 
                         ${b.observacoes ? `
@@ -23956,11 +25032,20 @@ if (loginForm) {
         btnLogin.innerText = 'Autenticando...';
 
         try {
-            const { error } = await db.auth.signInWithPassword({ email, password });
+            const { data, error } = await db.auth.signInWithPassword({ email, password });
             if (error) throw error;
+
+            if (data && data.session) {
+                lastValidSession = data.session;
+            }
+            authSessionResolvePromise = null;
 
             // Re-initialize app to pull active user mapping
             await initializeApp();
+            
+            if (!currentUser || !currentEmpresaId) {
+                throw new Error("Não foi possível carregar o ambiente da clínica. Sua conta pode não ter os vínculos necessários.");
+            }
         } catch (err) {
             errorDiv.innerText = err.message || 'Erro de autenticação.';
             errorDiv.style.display = 'block';
@@ -23977,6 +25062,7 @@ if (btnLogout) {
         auditAuth('btnLogout:click', null);
         explicitLogoutRequested = true;
         appUrlLocked = false;
+        authSessionResolvePromise = null;
         try {
             await db.auth.signOut();
         } catch (e) {
@@ -24124,6 +25210,7 @@ db.auth.onAuthStateChange(async (event, session) => {
         isSuperAdmin = false;
         requirePasswordChange = false;
         explicitLogoutRequested = false;
+        authSessionResolvePromise = null;
         showLoginUi();
         return;
     }
@@ -24175,6 +25262,16 @@ async function createAndLinkProvisionalProfessional(ctx) {
     }
 
     modal.classList.remove('hidden');
+    
+    const btnCancel = document.getElementById('btnCancelVinculoProfissional');
+    if (btnCancel) {
+        btnCancel.onclick = () => {
+            modal.classList.add('hidden');
+            const r = form.__vpResolve;
+            form.__vpResolve = null;
+            if (typeof r === 'function') r(false);
+        };
+    }
 
     return new Promise((resolve) => {
         form.__vpResolve = resolve;
@@ -24302,7 +25399,7 @@ if (userAdminForm) {
                 };
             });
             if (role === 'admin') {
-                // Ao invés de conceder todos os módulos cegamente, concedemos apenas os que estão visíveis na tela (pertencentes ao plano)
+                // Ao invés de conceder todos os módulos cegamente, concedemos apenas os que estão visíveis na tela (pertencentes ao plano e avulsos)
                 // Se for SuperAdmin, ele tem acesso irrestrito de qualquer forma pelo banco, mas para manter a consistência da UI, seguimos o que está renderizado.
                 systemModules.forEach(mod => {
                     const hasRow = document.querySelector(`.perm-check[data-mod="${mod.id}"]`);
@@ -24314,6 +25411,13 @@ if (userAdminForm) {
                     };
                 });
             }
+
+            const activeModuleIds = [];
+            systemModules.forEach(mod => {
+                if (permissions[mod.id] && permissions[mod.id].select) {
+                    activeModuleIds.push(mod.id);
+                }
+            });
 
             if (id) {
                 const empresaId = document.getElementById('editAdminEmpresaId') ? document.getElementById('editAdminEmpresaId').value : '';
@@ -24351,6 +25455,7 @@ if (userAdminForm) {
                             const errorMsg = result.error || result.message || 'Erro desconhecido na nuvem.';
                             throw new Error(`Erro na nuvem: ${errorMsg}`);
                         }
+
                     } catch (cloudErr) {
                         const msg = cloudErr && cloudErr.message ? cloudErr.message : String(cloudErr);
                         showToast(`Nenhuma alteração feita no banco. ${msg}`, true);
@@ -24399,9 +25504,28 @@ if (userAdminForm) {
                 const createdUserId = result && (result.userId || result.user_id || result.usuario_id)
                     ? String(result.userId || result.user_id || result.usuario_id)
                     : '';
+                    
                 if ((role === 'dentista' || role === 'protetico') && createdUserId) {
-                    await createAndLinkProvisionalProfessional({ empresaId: targetEmpresaId, usuarioId: createdUserId, role, email });
-                    showToast("Usuário, profissional e vínculo criados com sucesso!");
+                    // Check if professional with this email already exists
+                    const existingProf = professionals.find(p => String(p.email || '').trim().toLowerCase() === email.trim().toLowerCase());
+                    
+                    if (existingProf) {
+                        // Just link the existing professional to the new user
+                        try {
+                            await db.from('profissional_usuarios').upsert(
+                                { empresa_id: targetEmpresaId, usuario_id: createdUserId, profissional_id: existingProf.id },
+                                { onConflict: 'empresa_id,usuario_id' }
+                            );
+                            showToast("Usuário criado e vinculado ao profissional existente!");
+                        } catch (err) {
+                            console.error("Erro ao vincular profissional existente:", err);
+                            showToast("Usuário criado, mas falha ao vincular profissional.", true);
+                        }
+                    } else {
+                        // Needs to create a new professional
+                        await createAndLinkProvisionalProfessional({ empresaId: targetEmpresaId, usuarioId: createdUserId, role, email });
+                        showToast("Usuário, profissional e vínculo criados com sucesso!");
+                    }
                 } else {
                     showToast("Usuário criado e vinculado com sucesso!");
                 }
@@ -24607,6 +25731,10 @@ if (empresaForm) {
             const celular = String((document.getElementById('empresaCelular') || {}).value || '').trim();
             const email = String((document.getElementById('empresaEmail') || {}).value || '').trim().toLowerCase();
             const planoTipo = String((document.getElementById('empresaPlanoTipo') || {}).value || '').trim() || null;
+            
+            // Coleta os módulos marcados na interface
+            const cbs = document.querySelectorAll('.empresa-modulo-cb:checked');
+            const modulosContratados = Array.from(cbs).map(cb => cb.value).join(', ');
 
             if (!email) {
                 showToast("E-mail da empresa é obrigatório.", true);
@@ -24640,7 +25768,8 @@ if (empresaForm) {
                         celular: celular || null,
                         logotipo: logo || null,
                         assinatura_status: 'TRIAL',
-                        plano_tipo: planoTipo
+                        plano_tipo: planoTipo,
+                        modulos_contratados: modulosContratados || null
                     })
                 });
                 const result = await resp.json();
@@ -24666,7 +25795,8 @@ if (empresaForm) {
                     logotipo: logo || null,
                     plano_tipo: String((document.getElementById('empresaPlanoTipo') || {}).value || '').trim() || null,
                     data_vencimento: String((document.getElementById('empresaDataVencimento') || {}).value || '').trim() || null,
-                    assinatura_status: String((document.getElementById('empresaAssinaturaStatus') || {}).value || '').trim() || null
+                    assinatura_status: String((document.getElementById('empresaAssinaturaStatus') || {}).value || '').trim() || null,
+                    modulos_contratados: modulosContratados || null
                 };
                 
                 if (supervisorPin) {
@@ -24677,45 +25807,87 @@ if (empresaForm) {
                 if (error) throw error;
                 showToast("Empresa salva com sucesso!");
 
-                // [INÍCIO] Sincronização automática de módulos para Admins após mudança de plano
+                // [INÍCIO] Sincronização automática de módulos para Admins após mudança de plano/módulos
                 try {
-                    if (empresaData.plano_tipo) {
                     let allowedModules = null;
-                    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empresaData.plano_tipo);
-                    
-                    let planData = null;
-                    if (isUuid) {
-                        const { data } = await db.from('config_planos').select('modulos_texto').eq('id', empresaData.plano_tipo).maybeSingle();
-                        planData = data;
-                    } else {
-                        const { data } = await db.from('config_planos').select('modulos_texto').ilike('tipo_assinatura', empresaData.plano_tipo).maybeSingle();
-                        planData = data;
-                    }
-
-                    if (planData && planData.modulos_texto) {
-                        allowedModules = planData.modulos_texto.toLowerCase().split(',').map(s => s.trim());
-                    }
-
-                    const newAdminPerms = {};
-                    (systemModules || []).forEach(mod => {
-                        let isAllowed = true;
-                        if (allowedModules) {
-                            isAllowed = allowedModules.includes(mod.label.toLowerCase()) || allowedModules.includes(mod.id.toLowerCase());
+                    if (empresaData.modulos_contratados) {
+                        allowedModules = empresaData.modulos_contratados.toLowerCase().split(',').map(s => s.trim());
+                    } else if (empresaData.plano_tipo) {
+                        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empresaData.plano_tipo);
+                        let planData = null;
+                        if (isUuid) {
+                            const { data } = await db.from('config_planos').select('modulos_texto').eq('id', empresaData.plano_tipo).maybeSingle();
+                            planData = data;
+                        } else {
+                            const { data } = await db.from('config_planos').select('modulos_texto').ilike('tipo_assinatura', empresaData.plano_tipo).maybeSingle();
+                            planData = data;
                         }
-                        newAdminPerms[mod.id] = { select: isAllowed, insert: isAllowed, update: isAllowed, delete: isAllowed };
-                    });
 
-                    const { error: permError } = await db.from('usuario_empresas')
-                        .update({ permissoes: newAdminPerms })
-                        .eq('empresa_id', oldId)
-                        .eq('perfil', 'admin');
-                    
-                    if (permError) {
-                        console.error("Erro ao sincronizar permissões do Admin após mudança de plano:", permError);
-                    } else {
-                        console.log(`Permissões sincronizadas para Admins da clínica ${oldId} conforme o plano ${empresaData.plano_tipo}`);
+                        if (planData && planData.modulos_texto) {
+                            allowedModules = planData.modulos_texto.toLowerCase().split(',').map(s => s.trim());
+                        }
                     }
-                }
+
+                    if (allowedModules !== null) {
+                        const newAdminPerms = {};
+                        
+                        // Formata a lista de permitidos limpando os acentos e os espaços extras
+                        const cleanAllowedModules = allowedModules.map(m => m.normalize('NFD').replace(/[\u0300-\u036f]/g, ""));
+                        
+                        (systemModules || []).forEach(mod => {
+                            // Limpa também o nome do módulo do sistema para comparar "maca" com "maca"
+                            const modLabelClean = mod.label.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+                            const modIdClean = mod.id.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+                            
+                            let isAllowed = cleanAllowedModules.includes(modLabelClean) || cleanAllowedModules.includes(modIdClean);
+                            
+                            // Regra específica para o Financeiro/NFS-e
+                            if (modIdClean === 'nfse' || modLabelClean.includes('nfs-e')) {
+                                if (cleanAllowedModules.some(m => m.includes('nfs-e') || m.includes('nfse'))) {
+                                    isAllowed = true;
+                                }
+                            }
+                            
+                            newAdminPerms[mod.id] = { select: isAllowed, insert: isAllowed, update: isAllowed, delete: isAllowed };
+                        });
+
+                        const { data: adminUsers, error: errFetchAdmins } = await db.from('usuario_empresas')
+                            .select('usuario_id, perfil, modulos_liberados')
+                            .eq('empresa_id', oldId);
+                            
+                        if (errFetchAdmins) {
+                            console.error("Erro ao buscar admins para atualizar permissões:", errFetchAdmins);
+                        } else if (adminUsers && adminUsers.length > 0) {
+                            // Filtra os perfis que consideramos admin (usando normalizeRole para maior segurança)
+                            const adminIds = adminUsers
+                                .filter(u => normalizeRole(u.perfil) === 'admin')
+                                .map(u => u.usuario_id);
+                            
+                            if (adminIds.length > 0) {
+                                // Mapeamento exato dos IDs de sistema (para a coluna modulos_liberados bater com a tela de usuário)
+                                const activeModuleIds = [];
+                                (systemModules || []).forEach(mod => {
+                                    if (newAdminPerms[mod.id] && newAdminPerms[mod.id].select) {
+                                        activeModuleIds.push(mod.id);
+                                    }
+                                });
+
+                                // Atualiza a tabela JSON de permissões
+                                const { error: permError } = await db.from('usuario_empresas')
+                                    .update({ permissoes: newAdminPerms })
+                                    .eq('empresa_id', oldId)
+                                    .in('usuario_id', adminIds);
+                                
+                                if (permError) {
+                                    console.error("Erro ao sincronizar permissões do Admin após mudança de plano:", permError);
+                                } else {
+                                    console.log(`Permissões sincronizadas para ${adminIds.length} Admins da clínica ${oldId}`);
+                                }
+                            } else {
+                                console.log(`Nenhum usuário com perfil Admin encontrado na clínica ${oldId}`);
+                            }
+                        }
+                    }
                 } catch (syncErr) {
                     console.error("Erro na rotina de sincronização de permissões:", syncErr);
                 }
@@ -25932,6 +27104,7 @@ async function renderPatientFinanceiro(patientId) {
 
 // Helper to Hide All Sections (improved)
 function hideAllSections() {
+    window.__isConsultaAvaliacaoMode = false;
     const sections = ['patientListView', 'patientFormView', 'professionalListView', 'professionalFormView',
         'specialtiesListView', 'specialtyFormView', 'servicesListView', 'serviceFormView',
         'budgetsListView', 'budgetFormView', 'usersAdminView', 'userAdminFormView',
@@ -26003,29 +27176,34 @@ const newEvolutionForm = document.getElementById('newEvolutionForm');
 const btnCancelEvolution = document.getElementById('btnCancelEvolution');
 const btnSaveEvolution = document.getElementById('btnSaveEvolution');
 
-btnNewEvolution.addEventListener('click', () => {
-    newEvolutionForm.classList.toggle('hidden');
-    // Populate professionals dropdown
-    const profSelect = document.getElementById('evolProfissional');
-    profSelect.innerHTML = '<option value="">Selecione o Profissional Responsible...</option>';
-    professionals.filter(p => p.status === 'Ativo').forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = p.nome;
-        profSelect.appendChild(opt);
+if (btnNewEvolution) {
+    btnNewEvolution.addEventListener('click', () => {
+        newEvolutionForm.classList.toggle('hidden');
+        // Populate professionals dropdown
+        const profSelect = document.getElementById('evolProfissional');
+        profSelect.innerHTML = '<option value="">Selecione o Profissional Responsible...</option>';
+        professionals.filter(p => p.status === 'Ativo').forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.nome;
+            profSelect.appendChild(opt);
+        });
     });
-});
+}
 
-btnCancelEvolution.addEventListener('click', () => {
-    newEvolutionForm.classList.add('hidden');
-    document.getElementById('evolDescricao').value = '';
-    document.getElementById('evolDente').value = '';
-});
+if (btnCancelEvolution) {
+    btnCancelEvolution.addEventListener('click', () => {
+        newEvolutionForm.classList.add('hidden');
+        document.getElementById('evolDescricao').value = '';
+        document.getElementById('evolDente').value = '';
+    });
+}
 
-btnSaveEvolution.addEventListener('click', async () => {
-    const desc = document.getElementById('evolDescricao').value.trim();
-    const profId = document.getElementById('evolProfissional').value;
-    const dente = document.getElementById('evolDente').value.trim();
+if (btnSaveEvolution) {
+    btnSaveEvolution.addEventListener('click', async () => {
+        const desc = document.getElementById('evolDescricao').value.trim();
+        const profId = document.getElementById('evolProfissional').value;
+        const dente = document.getElementById('evolDente').value.trim();
     const patientName = document.getElementById('detailsPatientName').innerText;
 
     // Find patient ID (we are in details view, so we need the current patient)
@@ -26057,7 +27235,8 @@ btnSaveEvolution.addEventListener('click', async () => {
         console.error("Erro ao salvar evolução:", err);
         showToast("Erro ao gravar no prontuário.", true);
     }
-});
+    });
+}
 
 // Back buttons logic
 document.getElementById('btnBackDetails')?.addEventListener('click', () => {
@@ -26132,6 +27311,36 @@ function renderPatientBudgets(patientId) {
         }
     }).join('');
 }
+
+window.createNewBudgetFromProntuario = function() {
+    const isConsulta = window.__isConsultaAvaliacaoMode;
+    const agId = window.__currentConsultaAgendamentoId;
+    const patId = window._currentPatientDetailId;
+    
+    showForm(false, 'budgets');
+    
+    if (isConsulta) {
+        window.__isConsultaAvaliacaoMode = true;
+        window.__currentConsultaAgendamentoId = agId;
+    }
+    
+    if (patId) {
+        const pat = patients.find(p => p.id === patId);
+        if (pat) {
+            const pacNome = document.getElementById('budPacienteNome');
+            const pacId = document.getElementById('budPacienteId');
+            const cpf = document.getElementById('budCpfPaciente');
+            const cel = document.getElementById('budCelularPaciente');
+            const email = document.getElementById('budEmailPaciente');
+            
+            if (pacNome) pacNome.value = `${pat.nome} (${pat.cpf})`;
+            if (pacId) pacId.value = pat.id;
+            if (cpf) cpf.value = pat.cpf || '';
+            if (cel) cel.value = pat.celular || pat.telefone || '';
+            if (email) email.value = pat.email || '';
+        }
+    }
+};
 
 window.viewBudgetFromPatient = function (budgetId) {
     const b = budgets.find(bud => bud.id === budgetId);
@@ -26523,7 +27732,7 @@ async function printPatientDetailReport(saveAsPdf = false) {
     <!-- Section: Contact -->
     <div class="section">
         <div class="section-header">
-            <div class="section-icon">📋</div>
+            <div class="section-icon">Ã°Å¸â€œâ€¹</div>
             <div class="section-title">Informações de Contato</div>
             <div class="section-line"></div>
         </div>
@@ -27030,13 +28239,16 @@ async function saveFinanceiroNotaTeste(payload) {
 
 async function renderFinanceiroNotasGrid() {
     const wrapper = document.getElementById('financeiroEmissaoNotasWrapper');
+    const conciliaWrapper = document.getElementById('financeiroConciliacaoFiscalWrapper');
     const hasNfse = await checkEmpresaHasNfseModule();
     if (wrapper) {
         if (!hasNfse) {
             wrapper.style.display = 'none';
+            if (conciliaWrapper) conciliaWrapper.style.display = 'block';
             return;
         } else {
             wrapper.style.display = 'block';
+            if (conciliaWrapper) conciliaWrapper.style.display = 'none';
         }
     }
 
@@ -27228,9 +28440,13 @@ window.emitirNotaTesteFinanceiro = async function (budgetRef) {
 async function fetchTransactions(patientId = null) {
     try {
         const nfseWrapper = document.getElementById('financeiroEmissaoNotasWrapper');
+        const conciliaWrapper = document.getElementById('financeiroConciliacaoFiscalWrapper');
         if (nfseWrapper) {
             checkEmpresaHasNfseModule().then(hasNfse => {
                 nfseWrapper.style.display = hasNfse ? 'block' : 'none';
+                if (conciliaWrapper) {
+                    conciliaWrapper.style.display = hasNfse ? 'none' : 'block';
+                }
             });
         }
 
@@ -27751,7 +28967,6 @@ async function deleteTransaction(id) {
                     extratoFilterEnd.value = startVal;
                 }
             }
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
         });
 
         extratoFilterEnd.addEventListener('change', () => {
@@ -27763,7 +28978,6 @@ async function deleteTransaction(id) {
                 extratoFilterEnd.value = startVal;
                 showToast("A data final não pode ser menor que a data inicial.", true);
             }
-            if (btnFiltrarExtrato) btnFiltrarExtrato.click();
         });
     }
 
@@ -28290,6 +29504,9 @@ window.recordBudgetPayment = async function (budgetId) {
 
         await autoReleaseEligibleBudgetItems(budget, `Auto-Liberado via Pagamento (${currentUser.email.split('@')[0]})`);
         await syncBudgetStatusToExecutedIfAllFinalized(budget.id);
+        
+        // Gerar protocolo fiscal após confirmação de pagamento
+        await checkAndGenerateProtocoloFiscal(budget.id);
 
         console.log("DEBUG V19: Atualizando interface via viewBudgetPayments...");
         viewBudgetPayments(budgetId);
@@ -28501,7 +29718,7 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
         }
     };
 
-    if (valorLiberado + valorDesteItem > totalPago) {
+    if (valorLiberado + valorDesteItem > totalPago && !window.__isConsultaAvaliacaoMode) {
         // Se o usuário logado já é Admin ou Supervisor, ele pode autorizar sem PIN extra
         if (isAdminRole() || normalizeRole(currentUserRole) === 'supervisor') {
             realizarLiberacao(`Auto-Autorizado (${normalizeRole(currentUserRole)}: ${currentUser.email.split('@')[0]})`);
@@ -28779,7 +29996,7 @@ window.generateCommissionForItem = async function (budgetId, itemId, silent) {
 
         const { data: existing, error: exErr } = await withTimeout(
             db.from('financeiro_comissoes')
-                .select('id')
+                .select('id, profissional_id, status')
                 .eq('item_id', item.id)
                 .eq('empresa_id', currentEmpresaId)
                 .maybeSingle(),
@@ -28787,10 +30004,6 @@ window.generateCommissionForItem = async function (budgetId, itemId, silent) {
             'financeiro_comissoes:exists'
         );
         if (exErr) throw exErr;
-        if (existing && existing.id) {
-            if (!silent) showToast('Comissão já existe para este item.');
-            return true;
-        }
 
         const prof = (professionals || []).find(p => String(p.seqid) === String(profId));
         if (!prof) {
@@ -28799,6 +30012,41 @@ window.generateCommissionForItem = async function (budgetId, itemId, silent) {
         }
 
         const valorComissao = calculateCommission(prof, item, budget);
+
+        if (existing && existing.id) {
+            // Se já existe comissão, verificar se o profissional foi alterado no orçamento
+            if (String(existing.profissional_id) !== String(profId) || true) {
+                if (['PAGA', 'ANTECIPADA', 'TRANSFERIDA', 'ESTORNADA'].includes(existing.status)) {
+                    if (String(existing.profissional_id) !== String(profId)) {
+                        if (!silent) showToast('Atenção: A comissão já foi processada (paga/transferida) e não será alterada para o novo profissional.', true);
+                    } else {
+                        if (!silent) showToast('Comissão já existe e já foi processada.');
+                    }
+                    return true;
+                }
+
+                // Atualiza a comissão existente com o novo profissional e recalcula o valor
+                const updateData = {
+                    profissional_id: profId,
+                    valor_comissao: valorComissao > 0 ? valorComissao : 0
+                };
+                const { error: upErr } = await withTimeout(
+                    db.from('financeiro_comissoes').update(updateData).eq('id', existing.id),
+                    15000,
+                    'financeiro_comissoes:update'
+                );
+                if (upErr) throw upErr;
+                
+                if (String(existing.profissional_id) !== String(profId)) {
+                    if (!silent) showToast(`Comissão atualizada para o novo profissional: R$ ${updateData.valor_comissao.toFixed(2)}`);
+                } else if (!silent) {
+                    showToast('Comissão atualizada com sucesso.');
+                }
+                return true;
+            }
+            return true;
+        }
+
         if (!(valorComissao > 0)) {
             if (!silent) showToast('Comissão calculada = 0. Verifique regras de comissão no Profissional.', true);
             return false;
@@ -29207,78 +30455,183 @@ async function showCancelDetails(logId) {
     }
 }
 
+function printApuracaoFinanceira(start, end) {
+    // Pegar as linhas atuais da apuração globalmente para não ter que buscar no banco de novo
+    if (typeof inventoryBiReportRowsCurrent === 'undefined' || !inventoryBiReportRowsCurrent || inventoryBiReportRowsCurrent.length === 0) {
+        showToast('Nenhum dado de apuração para imprimir.', true);
+        return;
+    }
+    
+    const formatDataBR = (d) => {
+        if (!d) return '';
+        const datePart = d.split('T')[0];
+        const p = datePart.split('-');
+        if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+        return d;
+    };
+    
+    let trHtml = '';
+    let totValor = 0;
+    let totComissao = 0;
+    let totProt = 0;
+    let totMat = 0;
+    let totLucro = 0;
+    
+    inventoryBiReportRowsCurrent.forEach(r => {
+        const commissionAfterProt = !!(window.occFinanceRules && window.occFinanceRules.comissao_after_protetico);
+        const calcComissao = (row) => {
+            const perc = toDec(row && row.comissao_percentual, 0);
+            if (!commissionAfterProt || perc <= 0) return toDec(row && row.comissao, 0);
+            const base = Math.max(0, toDec(row && row.valor_bruto, 0) - toDec(row && row.protetico, 0));
+            return base * (perc / 100);
+        };
+        const cCom = calcComissao(r);
+        const cLucro = toDec(r.valor_bruto, 0) - (cCom + toDec(r.protetico, 0) + toDec(r.mat_bio, 0));
+        const vb = toDec(r.valor_bruto, 0);
+        const cMargem = vb > 0 ? (cLucro / vb) * 100 : 0;
+        
+        totValor += vb;
+        totComissao += cCom;
+        totProt += toDec(r.protetico, 0);
+        totMat += toDec(r.mat_bio, 0);
+        totLucro += cLucro;
+
+        trHtml += `
+            <tr>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(String(r.atendimento || '—'))}</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(String(r.executor || '—'))}</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(String(r.codigo_servico || '-'))}</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0;"><strong>${escapeHtml(String(r.procedimento || '—'))}</strong><br><span style="font-size:10px;color:#64748b;">${escapeHtml(String(r.subdivisao || 'Sem Subdivisão'))}</span></td>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0; text-align:right;">${formatCurrencyBRL(vb)}</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0; text-align:right;">${formatCurrencyBRL(cCom)}</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0; text-align:right;">${formatCurrencyBRL(toDec(r.protetico, 0))}</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0; text-align:right;">${formatCurrencyBRL(toDec(r.mat_bio, 0))}</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0; text-align:right; font-weight:bold;">${formatCurrencyBRL(cLucro)}</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e2e8f0; text-align:right;">${formatNumberBR(cMargem, 2)}%</td>
+            </tr>
+        `;
+    });
+    
+    const executorFilter = document.getElementById('stockApurExecutorFilter')?.value || 'Todos os Executores';
+    
+    const printHtml = `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <title>Apuração Financeira</title>
+            <style>
+                body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; margin: 0; padding: 20px; font-size: 11px; }
+                .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #cbd5e1; }
+                .header h1 { margin: 0 0 5px 0; color: #0f172a; font-size: 18px; }
+                .header p { margin: 0; color: #64748b; font-size: 13px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                th { background-color: #f8fafc; color: #475569; font-weight: 600; text-align: left; padding: 8px 6px; border-bottom: 2px solid #e2e8f0; }
+                .totals { display: flex; justify-content: flex-end; gap: 20px; margin-top: 15px; padding-top: 10px; border-top: 2px solid #cbd5e1; }
+                .total-box { text-align: right; }
+                .total-box div:first-child { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+                .total-box div:last-child { font-size: 15px; font-weight: 700; margin-top: 4px; color:#0f172a; }
+                @media print {
+                    body { padding: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Apuração Financeira por Atendimento</h1>
+                <p>Período: ${formatDataBR(start)} a ${formatDataBR(end)} | Executor: ${executorFilter}</p>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">Atendimento</th>
+                        <th style="width: 15%;">Executor</th>
+                        <th style="width: 8%;">Cód.</th>
+                        <th style="width: 22%;">Procedimento</th>
+                        <th style="width: 8%; text-align:right;">Valor</th>
+                        <th style="width: 8%; text-align:right;">Comissão</th>
+                        <th style="width: 8%; text-align:right;">Protético</th>
+                        <th style="width: 8%; text-align:right;">Mat+Bio</th>
+                        <th style="width: 8%; text-align:right;">Lucro</th>
+                        <th style="width: 5%; text-align:right;">Margem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${trHtml}
+                </tbody>
+            </table>
+            
+            <div class="totals">
+                <div class="total-box">
+                    <div>Total Valor</div>
+                    <div>${formatCurrencyBRL(totValor)}</div>
+                </div>
+                <div class="total-box">
+                    <div>Total Comissão</div>
+                    <div>${formatCurrencyBRL(totComissao)}</div>
+                </div>
+                <div class="total-box">
+                    <div>Total Mat+Bio</div>
+                    <div>${formatCurrencyBRL(totMat)}</div>
+                </div>
+                <div class="total-box">
+                    <div>Lucro Total</div>
+                    <div style="color:#166534;">${formatCurrencyBRL(totLucro)}</div>
+                </div>
+            </div>
+            
+            <script>
+                window.onload = function() {
+                    setTimeout(function() { 
+                        window.print(); 
+                        setTimeout(function() { window.close(); }, 500);
+                    }, 500);
+                };
+            </script>
+        </body>
+        </html>
+    `;
+
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+        printWin.document.open();
+        printWin.document.write(printHtml);
+        printWin.document.close();
+    } else {
+        showToast('O bloqueador de pop-ups impediu a abertura da impressão.', true);
+    }
+}
+
 // ============================================================
 // MODULO: IMPRESSAO DE EXTRATO DE TRANSACOES
 // ============================================================
 window.openPrintExtratoFilter = function() {
-    let modal = document.getElementById('modalPrintExtrato');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'modalPrintExtrato';
-        modal.style.position = 'fixed';
-        modal.style.inset = '0';
-        modal.style.background = 'rgba(0,0,0,0.5)';
-        modal.style.zIndex = '10000';
-        modal.style.display = 'flex';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-        
-        // Define default dates: first day of month to today
-        const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-        const currentDay = today.toISOString().split('T')[0];
-
-        modal.innerHTML = `
-            <div class="card" style="width: 420px; max-width: 90vw; padding: 1.5rem; background: #fff; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.2rem;">
-                    <h3 style="margin: 0; color: var(--text-dark);"><i class="ri-printer-line"></i> Imprimir Extrato</h3>
-                    <button class="btn-icon" onclick="document.getElementById('modalPrintExtrato').style.display='none'" style="color: var(--text-muted); border: none; background: transparent; cursor: pointer; font-size: 1.2rem;"><i class="ri-close-line"></i></button>
-                </div>
-                
-                <div class="form-group">
-                    <label>Período Inicial</label>
-                    <input type="date" id="printExtratoStart" class="form-control" value="${firstDay}">
-                </div>
-                <div class="form-group">
-                    <label>Período Final</label>
-                    <input type="date" id="printExtratoEnd" class="form-control" value="${currentDay}">
-                </div>
-                <div class="form-group">
-                    <label>Tipo de Transação</label>
-                    <select id="printExtratoTipo" class="form-control">
-                        <option value="">Todas (Receitas e Despesas)</option>
-                        <option value="RECEITA">Apenas Receitas</option>
-                        <option value="DESPESA">Apenas Despesas</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Categoria (Opcional)</label>
-                    <input type="text" id="printExtratoCategoria" class="form-control" placeholder="Ex: Clínica, Protético, etc.">
-                </div>
-                
-                <div style="display: flex; gap: 1rem; margin-top: 1.8rem;">
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('modalPrintExtrato').style.display='none'">Cancelar</button>
-                    <button class="btn btn-primary" style="flex: 1;" onclick="executePrintExtrato()"><i class="ri-printer-fill"></i> Gerar Impressão</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
+    // Primeiro verificamos qual aba está ativa para pegar as datas corretas
+    let activeStart, activeEnd;
+    
+    if (stockReportsActiveKey === 'financial_apportion') {
+        activeStart = document.getElementById('stockApurStart')?.value;
+        activeEnd = document.getElementById('stockApurEnd')?.value;
+        // Na apuração não temos filtro de categoria, passamos vazio
+        executePrintExtrato(activeStart, activeEnd, '', true);
+    } else {
+        activeStart = document.getElementById('extratoFilterStart')?.value;
+        activeEnd = document.getElementById('extratoFilterEnd')?.value;
+        executePrintExtrato(activeStart, activeEnd, '', false);
     }
-    modal.style.display = 'flex';
 };
 
-window.executePrintExtrato = async function() {
-    const start = document.getElementById('printExtratoStart').value;
-    const end = document.getElementById('printExtratoEnd').value;
-    const tipo = document.getElementById('printExtratoTipo').value;
-    const categoria = document.getElementById('printExtratoCategoria').value.trim().toLowerCase();
+window.executePrintExtrato = async function(customStart, customEnd, customCat, isApuracao = false) {
+    const start = customStart || document.getElementById('extratoFilterStart')?.value;
+    const end = customEnd || document.getElementById('extratoFilterEnd')?.value;
+    const categoria = customCat !== undefined ? customCat : (document.getElementById('extratoFilterCategoria')?.value.trim().toLowerCase() || '');
     
     if (!start || !end) {
-        showToast('Preencha as datas inicial e final', true);
+        showToast('Preencha as datas inicial e final no filtro da tela', true);
         return;
     }
     
-    document.getElementById('modalPrintExtrato').style.display = 'none';
     const loader = document.getElementById('bootLoader');
     if (loader) {
         loader.textContent = 'Gerando Extrato...';
@@ -29288,24 +30641,52 @@ window.executePrintExtrato = async function() {
     try {
         let query = db.from('financeiro_transacoes')
             .select('*')
-            .gte('data_transacao', start)
-            .lte('data_transacao', end)
             .order('data_transacao', { ascending: true });
             
         if (typeof currentEmpresaId !== 'undefined' && currentEmpresaId) {
             query = query.eq('empresa_id', currentEmpresaId);
         }
             
-        if (tipo) {
-            query = query.eq('tipo', tipo);
-        }
-        
         const { data, error } = await query;
         if (error) throw error;
         
         let filteredData = data || [];
-        if (categoria) {
-            filteredData = filteredData.filter(t => (t.categoria || '').toLowerCase().includes(categoria));
+        
+        // Na Apuração Financeira, filtramos por transações atreladas aos itens atendidos
+        // Como o Extrato baseia-se em transações financeiras e a apuração em itens do orçamento,
+        // O "espelho" não pode ser construído via banco "financeiro_transacoes", 
+        // mas sim chamando a função que monta a apuração.
+        if (isApuracao) {
+            if (loader) loader.style.display = 'none';
+            // Chama a função dedicada de impressão da apuração
+            printApuracaoFinanceira(start, end);
+            return;
+        }
+
+        // Filtro Local: Data Inicial
+        if (start) {
+            const startVal = start + 'T00:00:00';
+            filteredData = filteredData.filter(t => t.data_transacao >= startVal);
+        }
+        
+        // Filtro Local: Data Final
+        if (end) {
+            const endVal = end + 'T23:59:59';
+            filteredData = filteredData.filter(t => t.data_transacao <= endVal);
+        }
+        
+        // Filtro Local: Categoria (Forma de Pagamento)
+        if (categoria && categoria !== 'todas') {
+            const normalizeStr = (str) => {
+                let n = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+                return n.replace(" de ", " ");
+            };
+            const catLower = normalizeStr(categoria);
+            
+            filteredData = filteredData.filter(t => {
+                const formaPgto = normalizeStr(t.forma_pagamento || '');
+                return formaPgto.includes(catLower);
+            });
         }
         
         if (!filteredData || filteredData.length === 0) {
@@ -29316,7 +30697,9 @@ window.executePrintExtrato = async function() {
         
         const formatDataBR = (d) => {
             if (!d) return '';
-            const p = d.split('-');
+            // Se tiver T (timestamp do banco), pegamos só a parte da data
+            const datePart = d.split('T')[0];
+            const p = datePart.split('-');
             if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
             return d;
         };
@@ -29327,8 +30710,8 @@ window.executePrintExtrato = async function() {
         let trHtml = '';
         filteredData.forEach(t => {
             const val = parseFloat(t.valor) || 0;
-            if (t.tipo === 'RECEITA') totalReceita += val;
-            if (t.tipo === 'DESPESA') totalDespesa += val;
+            if (t.tipo === 'CREDITO') totalReceita += val;
+            if (t.tipo === 'DEBITO') totalDespesa += val;
             
             // Tentar pegar nome do paciente do cache
             let pNome = '';
@@ -29338,7 +30721,7 @@ window.executePrintExtrato = async function() {
             }
             
             const desc = t.observacoes ? t.observacoes : (pNome ? 'Paciente: ' + pNome : '-');
-            const color = t.tipo === 'RECEITA' ? '#166534' : '#991b1b';
+            const color = t.tipo === 'CREDITO' ? '#166534' : '#991b1b';
             
             trHtml += `
                 <tr>
@@ -29382,7 +30765,6 @@ window.executePrintExtrato = async function() {
                     <h1>Extrato de Transações</h1>
                     <p>Período: ${formatDataBR(start)} a ${formatDataBR(end)}</p>
                     ${categoria ? `<p>Filtro Categoria: ${categoria}</p>` : ''}
-                    ${tipo ? `<p>Filtro Tipo: ${tipo === 'RECEITA' ? 'Receitas' : 'Despesas'}</p>` : ''}
                 </div>
                 
                 <table>
@@ -29415,13 +30797,12 @@ window.executePrintExtrato = async function() {
                     </div>
                 </div>
                 
-                <div style="margin-top: 40px; text-align: center;">
-                    <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px;">Imprimir Extrato</button>
-                </div>
-                
                 <script>
                     window.onload = function() {
-                        setTimeout(function() { window.print(); }, 500);
+                        setTimeout(function() { 
+                            window.print(); 
+                            setTimeout(function() { window.close(); }, 500);
+                        }, 500);
                     };
                 </script>
             </body>
@@ -29448,4 +30829,728 @@ window.executePrintExtrato = async function() {
         }
     }
 };
+
+// ==========================================
+// MÓDULO DE SUPORTE - TICKETS
+// ==========================================
+
+async function fetchTickets() {
+    if (!suporteTicketsBody) return;
+    
+    suporteTicketsBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando chamados...</td></tr>';
+    if (suporteTicketsEmptyState) suporteTicketsEmptyState.classList.add('hidden');
+    
+    try {
+        let query = db.from('suporte_tickets').select('*').order('data_criacao', { ascending: false });
+        
+        if (!isSuperAdmin) {
+            if (!currentEmpresaId) {
+                suporteTicketsBody.innerHTML = '';
+                return;
+            }
+            query = query.eq('emp_id', currentEmpresaId);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        renderTicketsTable(data || []);
+    } catch (err) {
+        console.error('Erro ao buscar tickets:', err);
+        suporteTicketsBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--danger-color);">Erro ao carregar: ${err.message}</td></tr>`;
+    }
+}
+
+function renderTicketsTable(tickets) {
+    if (!tickets || tickets.length === 0) {
+        suporteTicketsBody.innerHTML = '';
+        if (suporteTicketsEmptyState) suporteTicketsEmptyState.classList.remove('hidden');
+        return;
+    }
+    
+    if (suporteTicketsEmptyState) suporteTicketsEmptyState.classList.add('hidden');
+    suporteTicketsBody.innerHTML = '';
+    
+    tickets.forEach(t => {
+        const tr = document.createElement('tr');
+        
+        const dateObj = new Date(t.data_criacao);
+        const dateStr = dateObj.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const shortId = t.id.substring(0, 8).toUpperCase();
+        
+        let statusBadge = 'bg-secondary';
+        if (t.status === 'Aberto') statusBadge = 'bg-primary';
+        else if (t.status === 'Em Atendimento') statusBadge = 'bg-warning text-dark';
+        else if (t.status === 'Concluído') statusBadge = 'bg-success';
+        
+        tr.innerHTML = `
+            <td><strong style="color: var(--primary-color);">TCK-${shortId}</strong></td>
+            <td>${t.nome_empresa || 'N/A'}<br><small class="text-muted" style="font-size: 0.8em;">${t.usuario_nome || 'Usuário'}</small></td>
+            <td>${t.titulo || 'Sem Título'}</td>
+            <td>${t.categoria || 'Geral'}</td>
+            <td><span class="badge ${statusBadge}">${t.status}</span></td>
+            <td>${dateStr}</td>
+            <td style="text-align:center;">
+                <button class="btn btn-sm btn-outline-primary btn-view-ticket" title="Visualizar">
+                    <i class="ri-eye-line"></i>
+                </button>
+            </td>
+        `;
+        
+        const btnView = tr.querySelector('.btn-view-ticket');
+        btnView.addEventListener('click', () => openViewTicketModal(t));
+        
+        suporteTicketsBody.appendChild(tr);
+    });
+}
+
+function openNovoTicketModal() {
+    if (suporteTicketId) suporteTicketId.value = '';
+    if (suporteTicketTitulo) {
+        suporteTicketTitulo.value = '';
+        suporteTicketTitulo.readOnly = false;
+    }
+    if (suporteTicketCategoria) {
+        suporteTicketCategoria.value = 'Dúvidas';
+        suporteTicketCategoria.disabled = false;
+    }
+    if (suporteTicketDescricao) {
+        suporteTicketDescricao.value = '';
+        suporteTicketDescricao.readOnly = false;
+    }
+    if (suporteTicketResposta) {
+        suporteTicketResposta.value = '';
+    }
+    
+    if (suporteTicketModalTitle) suporteTicketModalTitle.textContent = 'Abrir Novo Chamado';
+    if (suporteTicketAdminStatusGroup) suporteTicketAdminStatusGroup.classList.add('hidden');
+    if (suporteTicketRespostaGroup) suporteTicketRespostaGroup.classList.add('hidden');
+    
+    if (btnSalvarTicket) {
+        btnSalvarTicket.style.display = 'inline-flex';
+        btnSalvarTicket.innerHTML = 'Salvar';
+    }
+    
+    if (suporteTicketModal) suporteTicketModal.classList.remove('hidden');
+}
+
+function openViewTicketModal(ticket) {
+    if (suporteTicketId) suporteTicketId.value = ticket.id;
+    if (suporteTicketTitulo) {
+        suporteTicketTitulo.value = ticket.titulo || '';
+        suporteTicketTitulo.readOnly = true;
+    }
+    if (suporteTicketCategoria) {
+        suporteTicketCategoria.value = ticket.categoria || 'Dúvidas';
+        suporteTicketCategoria.disabled = true;
+    }
+    if (suporteTicketDescricao) {
+        suporteTicketDescricao.value = ticket.descricao || '';
+        suporteTicketDescricao.readOnly = true;
+    }
+    
+    if (suporteTicketModalTitle) suporteTicketModalTitle.textContent = `Chamado TCK-${ticket.id.substring(0,8).toUpperCase()}`;
+    
+    if (suporteTicketRespostaGroup) {
+        if (isSuperAdmin || ticket.resposta_admin) {
+            suporteTicketRespostaGroup.classList.remove('hidden');
+        } else {
+            suporteTicketRespostaGroup.classList.add('hidden');
+        }
+    }
+    
+    if (suporteTicketResposta) {
+        let respostaText = ticket.resposta_admin || '';
+        
+        // Resposta Automática Inteligente (SuperAdmin)
+        if (isSuperAdmin && !respostaText) {
+            respostaText = `Olá, ${ticket.usuario_nome || 'Usuário'}!\n\n`;
+            
+            // Salva os dados no próprio elemento para ser usado no salvamento
+            suporteTicketResposta.dataset.nomeEmpresa = ticket.nome_empresa || 'Clínica';
+            suporteTicketResposta.dataset.autoResposta = "true";
+        } else {
+            delete suporteTicketResposta.dataset.autoResposta;
+            delete suporteTicketResposta.dataset.nomeEmpresa;
+        }
+        
+        suporteTicketResposta.value = respostaText;
+        suporteTicketResposta.readOnly = !isSuperAdmin;
+    }
+    
+    if (isSuperAdmin) {
+        if (suporteTicketAdminStatusGroup) suporteTicketAdminStatusGroup.classList.remove('hidden');
+        if (suporteTicketStatus) suporteTicketStatus.value = ticket.status || 'Aberto';
+        if (btnSalvarTicket) {
+            btnSalvarTicket.style.display = 'inline-flex';
+            btnSalvarTicket.innerHTML = 'Atualizar Status';
+        }
+    } else {
+        if (suporteTicketAdminStatusGroup) suporteTicketAdminStatusGroup.classList.add('hidden');
+        if (btnSalvarTicket) btnSalvarTicket.style.display = 'none';
+    }
+    
+    if (suporteTicketModal) suporteTicketModal.classList.remove('hidden');
+}
+
+async function saveTicket() {
+    const id = suporteTicketId ? suporteTicketId.value : '';
+    const titulo = (suporteTicketTitulo ? suporteTicketTitulo.value : '').trim();
+    const categoria = (suporteTicketCategoria ? suporteTicketCategoria.value : '').trim();
+    const descricao = (suporteTicketDescricao ? suporteTicketDescricao.value : '').trim();
+    
+    if (!titulo || !descricao) {
+        showToast('Título e Descrição são obrigatórios.', true);
+        return;
+    }
+    
+    if (btnSalvarTicket) {
+        btnSalvarTicket.disabled = true;
+        btnSalvarTicket.innerHTML = 'Salvando...';
+    }
+    
+    try {
+        if (id && isSuperAdmin) {
+            const status = suporteTicketStatus ? suporteTicketStatus.value : 'Aberto';
+            let resposta = (suporteTicketResposta ? suporteTicketResposta.value : '').trim();
+            
+            // Adiciona a assinatura final automaticamente
+            if (suporteTicketResposta && suporteTicketResposta.dataset.autoResposta === "true") {
+                const nomeEmpresa = suporteTicketResposta.dataset.nomeEmpresa || 'Clínica';
+                if (!resposta.includes('Obrigado por nos acionar')) {
+                    resposta += "\n\nObrigado por nos acionar! Estamos à disposição para apoiar o sucesso da " + nomeEmpresa + ".";
+                }
+            }
+            
+            const { error } = await db.from('suporte_tickets').update({
+                status: status,
+                resposta_admin: resposta
+            }).eq('id', id);
+            
+            if (error) throw error;
+            showToast('Status do chamado atualizado!');
+        } else {
+            if (!currentEmpresaId) throw new Error('Empresa não identificada.');
+            
+            let nomeEmpresa = 'Clínica';
+            if (typeof activeEmpresasList !== 'undefined' && activeEmpresasList) {
+                const emp = activeEmpresasList.find(e => String(e.id) === String(currentEmpresaId));
+                if (emp) nomeEmpresa = emp.nome_fantasia || emp.razao_social || emp.nome || 'Clínica';
+            }
+            
+            let nomeUsuario = 'Usuário';
+            if (typeof userProfile !== 'undefined' && userProfile && userProfile.nome) {
+                nomeUsuario = userProfile.nome;
+            } else if (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.nome) {
+                nomeUsuario = currentUserProfile.nome;
+            } else if (typeof currentUser !== 'undefined' && currentUser) {
+                nomeUsuario = currentUser.user_metadata?.full_name || (currentUser.email ? currentUser.email.split('@')[0] : 'Usuário');
+            }
+            
+            const { error } = await db.from('suporte_tickets').insert([{
+                emp_id: currentEmpresaId,
+                nome_empresa: nomeEmpresa,
+                usuario_nome: nomeUsuario,
+                titulo: titulo,
+                categoria: categoria,
+                descricao: descricao,
+                status: 'Aberto'
+            }]);
+            
+            if (error) throw error;
+            showToast('Chamado aberto com sucesso!');
+        }
+        
+        if (suporteTicketModal) suporteTicketModal.classList.add('hidden');
+        fetchTickets();
+        if (isSuperAdmin) fetchDashboardTicketKpis();
+        
+    } catch (err) {
+        console.error('Erro ao salvar ticket:', err);
+        showToast('Erro: ' + err.message, true);
+    } finally {
+        if (btnSalvarTicket) {
+            btnSalvarTicket.disabled = false;
+            btnSalvarTicket.innerHTML = id ? 'Atualizar Status' : 'Salvar';
+        }
+    }
+}
+
+if (btnNovoTicket) {
+    btnNovoTicket.addEventListener('click', openNovoTicketModal);
+}
+if (btnRefreshTickets) {
+    btnRefreshTickets.addEventListener('click', () => {
+        showToast('Atualizando lista de chamados...', false);
+        fetchTickets();
+    });
+}
+
+if (btnPrintTicketsReport) {
+    btnPrintTicketsReport.addEventListener('click', () => {
+        if (!isSuperAdmin) return;
+        ticketReportType = 'simples';
+        if (ticketReportCategoria) ticketReportCategoria.value = '';
+        if (ticketReportStatus) ticketReportStatus.value = '';
+        if (ticketReportModal) ticketReportModal.classList.remove('hidden');
+    });
+}
+if (btnPrintTicketsReportFull) {
+    btnPrintTicketsReportFull.addEventListener('click', () => {
+        if (!isSuperAdmin) return;
+        ticketReportType = 'completo';
+        if (ticketReportCategoria) ticketReportCategoria.value = '';
+        if (ticketReportStatus) ticketReportStatus.value = '';
+        if (ticketReportModal) ticketReportModal.classList.remove('hidden');
+    });
+}
+if (btnTicketReportModalX) btnTicketReportModalX.addEventListener('click', () => ticketReportModal.classList.add('hidden'));
+if (btnTicketReportCancel) btnTicketReportCancel.addEventListener('click', () => ticketReportModal.classList.add('hidden'));
+if (ticketReportModal) ticketReportModal.addEventListener('click', (e) => { if (e.target === ticketReportModal) ticketReportModal.classList.add('hidden'); });
+
+if (btnTicketReportGenerate) {
+    btnTicketReportGenerate.addEventListener('click', async () => {
+        if (ticketReportModal) ticketReportModal.classList.add('hidden');
+        await generateTicketReport();
+    });
+}
+
+async function generateTicketReport() {
+    showToast('Gerando relatório de chamados...', false);
+    try {
+        let query = db.from('suporte_tickets').select('*');
+        
+        const catFilter = ticketReportCategoria ? ticketReportCategoria.value : '';
+        const statusFilter = ticketReportStatus ? ticketReportStatus.value : '';
+        
+        if (catFilter) query = query.eq('categoria', catFilter);
+        if (statusFilter) query = query.eq('status', statusFilter);
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        let sortedData = (data || []).sort((a, b) => {
+            const dateA = new Date(a.data_criacao || 0).getTime();
+            const dateB = new Date(b.data_criacao || 0).getTime();
+            if (dateA !== dateB) return dateB - dateA;
+            
+            const empA = (a.emp_id || '').localeCompare(b.emp_id || '');
+            if (empA !== 0) return empA;
+            
+            return (a.categoria || '').localeCompare(b.categoria || '');
+        });
+        
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            showToast('Permita popups para imprimir o relatório.', true);
+            return;
+        }
+        
+        const isFull = (ticketReportType === 'completo');
+        
+        let html = `
+        <html>
+        <head>
+            <title>Relatório ${isFull ? 'Completo' : 'Simples'} de Chamados</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+                h2 { text-align: center; border-bottom: 2px solid #ccc; padding-bottom: 10px; }
+                .meta { text-align: right; font-size: 0.9rem; color: #666; margin-bottom: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f4f4f4; }
+                .checkbox-cell { text-align: center; width: 60px; }
+                .checkbox-box { display: inline-block; width: 16px; height: 16px; border: 1px solid #000; }
+                .full-details { margin-top: 5px; font-size: 0.85rem; color: #444; border-top: 1px dashed #eee; padding-top: 5px; }
+                @media print {
+                    button { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <h2>Relatório ${isFull ? 'Completo' : 'Simples'} de Chamados - Suporte OCC</h2>
+            <div class="meta">
+                Filtros: Categoria: ${catFilter || 'Todas'} | Status: ${statusFilter || 'Todos'}<br>
+                Gerado em: ${new Date().toLocaleString('pt-BR')}
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Clínica (Empresa)</th>
+                        <th>Categoria / Detalhes</th>
+                        <th>Status</th>
+                        <th class="checkbox-cell">Concluído</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        if (sortedData.length === 0) {
+            html += `<tr><td colspan="5" style="text-align:center;">Nenhum chamado encontrado para os filtros selecionados.</td></tr>`;
+        } else {
+            for (const t of sortedData) {
+                const dataFormatada = t.data_criacao ? new Date(t.data_criacao).toLocaleString('pt-BR').slice(0,16) : '-';
+                
+                let detalhesHtml = `<strong>Título:</strong> ${t.titulo || '-'}`;
+                if (isFull) {
+                    const descSafe = (t.descricao || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const respSafe = (t.resposta_admin || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    detalhesHtml += `
+                        <div class="full-details">
+                            <div style="margin-bottom:4px;"><strong>Pergunta/Descrição:</strong><br>${descSafe || '-'}</div>
+                            ${respSafe ? `<div><strong>Resposta Admin:</strong><br>${respSafe}</div>` : ''}
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <tr>
+                        <td style="vertical-align: top;">${dataFormatada}</td>
+                        <td style="vertical-align: top;">${t.emp_id || 'Geral'}</td>
+                        <td style="vertical-align: top;">
+                            <div style="margin-bottom:4px; font-weight:600; color:var(--primary-color)">${t.categoria || '-'}</div>
+                            ${detalhesHtml}
+                        </td>
+                        <td style="vertical-align: top;">${t.status || '-'}</td>
+                        <td class="checkbox-cell" style="vertical-align: top;"><div class="checkbox-box"></div></td>
+                    </tr>
+                `;
+            }
+        }
+        
+        html += `
+                </tbody>
+            </table>
+            <div style="margin-top: 20px; text-align: center;">
+                <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">Imprimir Relatório</button>
+            </div>
+        </body>
+        </html>
+        `;
+        
+        printWindow.document.write(html);
+        printWindow.document.close();
+        
+    } catch (err) {
+        console.error('Erro ao gerar relatorio de tickets:', err);
+        showToast('Erro ao gerar relatório: ' + err.message, true);
+    }
+}
+
+if (btnSalvarTicket) {
+    btnSalvarTicket.addEventListener('click', saveTicket);
+}
+
+// --- Conciliação Fiscal (Vínculo Manual) ---
+document.addEventListener('DOMContentLoaded', () => {
+    const btnBuscar = document.getElementById('btnBuscarProtocoloFiscal');
+    const btnConfirmar = document.getElementById('btnConfirmarVinculoProtocolo');
+    const inputProtocolo = document.getElementById('inputBuscaProtocoloFiscal');
+    const divResultado = document.getElementById('resultadoBuscaProtocolo');
+    const divDados = document.getElementById('dadosOrcamentoProtocolo');
+    
+    let orcamentoEncontrado = null;
+
+    if (btnBuscar) {
+        btnBuscar.addEventListener('click', async () => {
+            const protocolo = inputProtocolo.value.trim().toUpperCase();
+            if (!protocolo) {
+                showToast('Digite um protocolo válido.', true);
+                return;
+            }
+            
+            try {
+                btnBuscar.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+                btnBuscar.disabled = true;
+                
+                // Busca o orçamento correspondente ao protocolo na mesma empresa
+                let query = db.from('orcamentos')
+                    .select('id, seqid, pacientenome, protocolo_fiscal, nota_fiscal_externa');
+                
+                if (currentEmpresaId) {
+                    query = query.eq('empresa_id', currentEmpresaId);
+                }
+                
+                const { data, error } = await query.eq('protocolo_fiscal', protocolo);
+                    
+                if (error || !data || data.length === 0) {
+                    divResultado.style.display = 'none';
+                    showToast('Nenhum orçamento encontrado com este protocolo.', true);
+                } else {
+                    orcamentoEncontrado = data[0];
+                    
+                    // Calcular valor caso não tenha cache direto
+                    const b = budgets.find(b => b.id === orcamentoEncontrado.id);
+                    let valorCalculado = 0;
+                    if (b) {
+                        const items = b.orcamento_itens || b.itens || [];
+                        valorCalculado = items.reduce((acc, i) => acc + ((parseFloat(i.valor) || 0) * (parseInt(i.qtde) || 1)), 0);
+                    }
+                    
+                    divResultado.style.display = 'block';
+                    divDados.innerHTML = `
+                        <strong>Orçamento #${orcamentoEncontrado.seqid}</strong><br>
+                        Paciente: ${orcamentoEncontrado.pacientenome || 'N/A'}<br>
+                        Valor Total: R$ ${valorCalculado.toFixed(2).replace('.', ',')}
+                        ${orcamentoEncontrado.nota_fiscal_externa ? `<br><span style="color:var(--success-color);"><i class="ri-checkbox-circle-line"></i> Nota já vinculada: <strong>${orcamentoEncontrado.nota_fiscal_externa}</strong></span>` : ''}
+                    `;
+                }
+            } catch (err) {
+                console.error('Erro na busca do protocolo:', err);
+                showToast('Erro ao buscar protocolo.', true);
+            } finally {
+                btnBuscar.innerHTML = 'Buscar';
+                btnBuscar.disabled = false;
+            }
+        });
+    }
+
+    if (btnConfirmar) {
+        btnConfirmar.addEventListener('click', async () => {
+            if (!orcamentoEncontrado) return;
+            
+            const notaExterna = document.getElementById('inputNotaFiscalExterna').value.trim();
+            if (!notaExterna) {
+                showToast('Digite o número da Nota Fiscal Externa para vincular.', true);
+                return;
+            }
+
+            try {
+                btnConfirmar.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+                btnConfirmar.disabled = true;
+
+                // Atualiza o orçamento com a nota fiscal externa
+                const { error } = await db.from('orcamentos')
+                    .update({ nota_fiscal_externa: notaExterna })
+                    .eq('id', orcamentoEncontrado.id)
+                    .eq('protocolo_fiscal', orcamentoEncontrado.protocolo_fiscal); // Garante a chave única
+
+                if (error) throw error;
+
+                // Atualiza o cache local
+                const b = budgets.find(b => b.id === orcamentoEncontrado.id);
+                if (b) {
+                    b.nota_fiscal_externa = notaExterna;
+                }
+
+                showToast(`Nota Fiscal ${notaExterna} vinculada ao orçamento #${orcamentoEncontrado.seqid} com sucesso!`);
+                inputProtocolo.value = '';
+                document.getElementById('inputNotaFiscalExterna').value = '';
+                divResultado.style.display = 'none';
+                orcamentoEncontrado = null;
+                
+                // Atualiza o relatório de conciliação
+                if (typeof loadConciliacaoReport === 'function') {
+                    loadConciliacaoReport();
+                }
+
+            } catch (err) {
+                console.error('Erro ao vincular nota fiscal externa:', err);
+                showToast('Erro ao vincular nota fiscal externa.', true);
+            } finally {
+                btnConfirmar.innerHTML = 'Confirmar Vínculo Manual';
+                btnConfirmar.disabled = false;
+            }
+        });
+    }
+
+    // --- Lógica do Relatório de Conciliação ---
+    const btnAtualizarRelatorio = document.getElementById('btnAtualizarRelatorioConciliacao');
+    const tabConciliados = document.getElementById('tabConciliados');
+    const tabNaoConciliados = document.getElementById('tabNaoConciliados');
+    const tbodyRelatorio = document.getElementById('tbodyRelatorioConciliacao');
+    let currentConciliacaoTab = 'vinculados';
+
+    async function loadConciliacaoReport() {
+        if (!tbodyRelatorio) return;
+        
+        try {
+            tbodyRelatorio.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--text-muted);">Carregando relatório... <i class="ri-loader-4-line ri-spin"></i></td></tr>';
+            
+            // Busca orçamentos aprovados/fechados/executados da empresa
+            let query = db.from('orcamentos')
+                .select('id, seqid, pacientenome, protocolo_fiscal, nota_fiscal_externa, status')
+                .in('status', ['Aprovado', 'Fechado', 'Executado'])
+                .order('seqid', { ascending: false });
+
+            if (currentEmpresaId) {
+                query = query.eq('empresa_id', currentEmpresaId);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            let filteredData = [];
+            if (currentConciliacaoTab === 'vinculados') {
+                // Possuem nota fiscal externa E protocolo fiscal
+                filteredData = (data || []).filter(o => o.protocolo_fiscal && o.nota_fiscal_externa);
+            } else {
+                // Possuem protocolo fiscal MAS NÃO possuem nota fiscal externa
+                filteredData = (data || []).filter(o => o.protocolo_fiscal && !o.nota_fiscal_externa);
+            }
+
+            if (filteredData.length === 0) {
+                tbodyRelatorio.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--text-muted);">Nenhum registro encontrado para esta visão.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            for (const o of filteredData) {
+                // Tenta achar no cache para calcular o valor
+                const b = budgets.find(b => b.id === o.id);
+                let valor = 0;
+                if (b) {
+                    const items = b.orcamento_itens || b.itens || [];
+                    valor = items.reduce((acc, i) => acc + ((parseFloat(i.valor) || 0) * (parseInt(i.qtde) || 1)), 0);
+                }
+
+                html += `
+                    <tr>
+                        <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <strong>#${o.seqid}</strong><br>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">${o.status}</span>
+                        </td>
+                        <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">${escapeHtml(o.pacientenome || 'N/A')}</td>
+                        <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <span style="font-family: monospace; background: #f1f5f9; padding: 2px 4px; border-radius: 4px;">${o.protocolo_fiscal || '-'}</span>
+                        </td>
+                        <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            ${o.nota_fiscal_externa ? `<span style="color: var(--success-color); font-weight: 600;">${escapeHtml(o.nota_fiscal_externa)}</span>` : '<span style="color: var(--warning-color);">Pendente</span>'}
+                        </td>
+                        <td style="padding: 0.75rem; text-align: right; border-bottom: 1px solid var(--border-color); font-weight: 600;">
+                            R$ ${valor.toFixed(2).replace('.', ',')}
+                        </td>
+                    </tr>
+                `;
+            }
+            tbodyRelatorio.innerHTML = html;
+
+        } catch (err) {
+            console.error('Erro ao carregar relatório de conciliação:', err);
+            tbodyRelatorio.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--danger-color);">Erro ao carregar relatório. Tente novamente.</td></tr>';
+        }
+    }
+
+    // Expõe globalmente para poder ser chamada no click de atualizar ou ao salvar vínculo
+    window.loadConciliacaoReport = loadConciliacaoReport;
+
+    if (btnAtualizarRelatorio) {
+        btnAtualizarRelatorio.addEventListener('click', loadConciliacaoReport);
+    }
+
+    const btnImprimirRelatorio = document.getElementById('btnImprimirRelatorioConciliacao');
+    if (btnImprimirRelatorio) {
+        btnImprimirRelatorio.addEventListener('click', () => {
+            const tableHtml = tbodyRelatorio.innerHTML;
+            const title = currentConciliacaoTab === 'vinculados' ? 'Lista de Orçamentos Aprovados vs. Notas Vinculadas' : 'Relatório de Orçamentos Sem Nota (Pendentes)';
+            
+            const printHtml = `
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <title>Relatório de Conciliação Fiscal</title>
+                <style>
+                    body { font-family: Arial, sans-serif; font-size: 12px; color: #333; margin: 0; padding: 20px; background: #f1f5f9; }
+                    .print-container { max-width: 900px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+                    h2 { color: #1d4ed8; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; text-align: center; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                    th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
+                    th { background-color: #f8fafc; font-weight: bold; color: #475569; text-transform: uppercase; font-size: 11px; }
+                    td { vertical-align: middle; }
+                    @media print {
+                        body { background: #fff; padding: 0; margin: 0; }
+                        .print-container { box-shadow: none; max-width: 100%; padding: 15px; margin: 0; border-radius: 0; }
+                        button { display: none !important; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="print-container">
+                    <h2>${title}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Orçamento</th>
+                                <th>Paciente</th>
+                                <th>Protocolo</th>
+                                <th>Nota Fiscal</th>
+                                <th style="text-align: right;">Valor Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableHtml}
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 30px; text-align: center;">
+                        <button onclick="window.print()" style="padding: 10px 24px; background: #1d4ed8; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold;">Imprimir Relatório</button>
+                    </div>
+                </div>
+                <script>
+                    window.onload = function() {
+                        setTimeout(function() { window.print(); }, 500);
+                    };
+                </script>
+            </body>
+            </html>
+            `;
+            
+            const w = 1000;
+            const h = 700;
+            const left = (screen.width - w) / 2;
+            const top = (screen.height - h) / 2;
+            const printWin = window.open('', 'PrintConciliacao', 'width=' + w + ',height=' + h + ',top=' + top + ',left=' + left + ',scrollbars=yes,resizable=yes');
+            
+            if (printWin) {
+                printWin.document.open();
+                printWin.document.write(printHtml);
+                printWin.document.close();
+            } else {
+                showToast('O bloqueador de pop-ups impediu a abertura da impressão.', true);
+            }
+        });
+    }
+
+    function switchTab(tabId) {
+        if (tabId === 'vinculados') {
+            currentConciliacaoTab = 'vinculados';
+            tabConciliados.classList.add('active');
+            tabConciliados.style.color = '#1d4ed8';
+            tabConciliados.style.borderBottom = '2px solid #1d4ed8';
+            
+            tabNaoConciliados.classList.remove('active');
+            tabNaoConciliados.style.color = '#64748b';
+            tabNaoConciliados.style.borderBottom = 'none';
+        } else {
+            currentConciliacaoTab = 'nao_vinculados';
+            tabNaoConciliados.classList.add('active');
+            tabNaoConciliados.style.color = '#1d4ed8';
+            tabNaoConciliados.style.borderBottom = '2px solid #1d4ed8';
+            
+            tabConciliados.classList.remove('active');
+            tabConciliados.style.color = '#64748b';
+            tabConciliados.style.borderBottom = 'none';
+        }
+        loadConciliacaoReport();
+    }
+
+    if (tabConciliados) {
+        tabConciliados.addEventListener('click', () => switchTab('vinculados'));
+    }
+    
+    if (tabNaoConciliados) {
+        tabNaoConciliados.addEventListener('click', () => switchTab('nao_vinculados'));
+    }
+
+    // Tenta carregar inicialmente quando a DOM estiver pronta
+    setTimeout(loadConciliacaoReport, 1000);
+
+});
+
+
+
+
+
+
 

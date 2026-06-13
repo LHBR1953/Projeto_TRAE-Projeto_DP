@@ -1,0 +1,52 @@
+
+/* SuperAdmin Tickets KPIs */
+.kpi-tickets-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.ticket-kpi-card {
+    flex: 1;
+    min-width: 150px;
+    background: #fff;
+    border-radius: 8px;
+    padding: 1.25rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ticket-kpi-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-transform: uppercase;
+}
+
+.ticket-kpi-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--text-color);
+}
+
+.ticket-kpi-bug { border-left-color: #ef4444; }
+.ticket-kpi-bug .ticket-kpi-title i { color: #ef4444; }
+
+.ticket-kpi-duvida { border-left-color: #eab308; }
+.ticket-kpi-duvida .ticket-kpi-title i { color: #eab308; }
+
+.ticket-kpi-solic { border-left-color: #3b82f6; }
+.ticket-kpi-solic .ticket-kpi-title i { color: #3b82f6; }
+
+.ticket-kpi-fin { border-left-color: #22c55e; }
+.ticket-kpi-fin .ticket-kpi-title i { color: #22c55e; }
+
+.ticket-kpi-outros { border-left-color: #64748b; }
+.ticket-kpi-outros .ticket-kpi-title i { color: #64748b; }

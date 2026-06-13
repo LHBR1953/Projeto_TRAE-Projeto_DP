@@ -6,6 +6,11 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
+  <script>
+    if (window.location.hash && window.location.hash.includes('type=recovery')) {
+      window.location.replace('app.html' + window.location.hash);
+    }
+  </script>
   <title>OCC — Odonto Connect Cloud</title>
   <link rel="stylesheet" href="styles.css?v=20260325-1125" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -20,23 +25,24 @@
     .lp-nav { display: flex; align-items: center; gap: 10px; }
     .lp-nav a { color: rgba(255,255,255,0.88); text-decoration: none; font-weight: 600; font-size: 13px; }
     .lp-nav a:hover { color: #fff; }
-    .lp-hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--border-color); min-height: 88vh; display: grid; place-items: center; }
-    .lp-hero-media { position: absolute; inset: 0; z-index: 1; }
-    .lp-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; background: #0b1220; pointer-events: none; }
+    .lp-hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--border-color); height: 100vh; display: grid; grid-template-columns: 1fr; grid-template-rows: 1fr; align-items: stretch; background: #0b1220; }
+    .lp-hero-media { grid-area: 1 / 1; width: 100%; height: 100%; position: relative; z-index: 1; }
+    .lp-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; background: #0b1220; pointer-events: none; }
     .lp-hero-scrim { position: absolute; inset: 0; background:
       linear-gradient(to right, rgba(10,15,25,0.70) 22%, rgba(10,15,25,0.0) 72%),
       radial-gradient(900px 540px at 50% 30%, rgba(255,255,255,0.06), transparent 60%);
-      z-index: 2; pointer-events: none; }
-    .lp-glow { position: absolute; width: 720px; height: 720px; right: -320px; top: -340px; background: radial-gradient(circle at 40% 40%, rgba(250, 204, 21, 0.20), rgba(56, 189, 248, 0.14), rgba(79, 70, 229, 0.0) 65%); filter: blur(22px); opacity: 0.95; z-index: 3; pointer-events: none; }
-    .lp-glow-2 { position: absolute; width: 760px; height: 760px; left: -360px; bottom: -430px; background: radial-gradient(circle at 60% 50%, rgba(16, 185, 129, 0.18), rgba(79, 70, 229, 0.12), rgba(79, 70, 229, 0.0) 62%); filter: blur(28px); opacity: 0.92; z-index: 3; pointer-events: none; }
-    .lp-hero-inner { position: relative; max-width: 1120px; margin: 0 auto; padding: 118px 20px 78px; z-index: 4; display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 28px; align-items: center; }
-    @media (max-width: 980px) { .lp-hero { min-height: 92vh; } .lp-hero-inner { grid-template-columns: 1fr; padding: 96px 18px 58px; } }
+      z-index: 2; pointer-events: none; transition: opacity 0.5s ease; }
+    .lp-glow { position: absolute; width: 720px; height: 720px; right: -320px; top: -340px; background: radial-gradient(circle at 40% 40%, rgba(250, 204, 21, 0.20), rgba(56, 189, 248, 0.14), rgba(79, 70, 229, 0.0) 65%); filter: blur(22px); opacity: 0.95; z-index: 3; pointer-events: none; transition: opacity 0.5s ease; }
+    .lp-glow-2 { position: absolute; width: 760px; height: 760px; left: -360px; bottom: -430px; background: radial-gradient(circle at 60% 50%, rgba(16, 185, 129, 0.18), rgba(79, 70, 229, 0.12), rgba(79, 70, 229, 0.0) 62%); filter: blur(28px); opacity: 0.92; z-index: 3; pointer-events: none; transition: opacity 0.5s ease; }
+    .lp-hero-inner { grid-area: 1 / 1; position: relative; max-width: 1120px; width: 100%; margin: 0 auto; padding: 118px 20px 78px; z-index: 4; display: grid; grid-template-columns: 1fr; gap: 28px; align-items: center; justify-items: center; text-align: center; transition: opacity 0.5s ease; opacity: 1; }
+    @media (max-width: 980px) { .lp-hero { min-height: 92vh; } .lp-hero-inner { grid-template-columns: 1fr; padding: 96px 18px 58px; align-items: flex-start; justify-items: center; text-align: center; } }
+    @media (max-height: 800px) { .lp-hero { min-height: 60vh; } }
     .lp-hero-card { border-radius: 22px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); box-shadow: 0 28px 90px rgba(0,0,0,0.42); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 22px; }
     .lp-hero-title { margin: 0; font-size: clamp(30px, 4.2vw, 54px); line-height: 1.03; letter-spacing: -0.04em; color: rgba(255,255,255,0.95); font-weight: 900; text-shadow: 0 2px 12px rgba(0,0,0,0.35); }
-    .lp-hero-sub { margin: 14px 0 0; font-size: 16px; line-height: 1.75; color: rgba(255,255,255,0.86); max-width: 62ch; text-shadow: 0 1px 8px rgba(0,0,0,0.28); }
+    .lp-hero-sub { margin: 14px auto 0; font-size: 16px; line-height: 1.75; color: rgba(255,255,255,0.86); max-width: 62ch; text-shadow: 0 1px 8px rgba(0,0,0,0.28); }
     .lp-hero-sub strong { color: rgba(255,255,255,0.94); font-weight: 800; }
     .lp-hero-kicker { margin: 0 0 10px; color: rgba(255,255,255,0.78); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 12px; }
-    .lp-cta-row { margin-top: 18px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .lp-cta-row { margin-top: 18px; display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; }
     .lp-btn { border-radius: 14px; padding: 12px 16px; font-weight: 800; border: 1px solid transparent; cursor: pointer; }
     .lp-btn-primary { background: linear-gradient(135deg, rgba(79,70,229,1), rgba(16,185,129,0.95)); color: #fff; box-shadow: 0 18px 50px rgba(79, 70, 229, 0.24); }
     .lp-btn-primary:hover { filter: brightness(1.05); }
@@ -51,7 +57,7 @@
     @media (max-width: 640px) { .lp-benefits { grid-template-columns: 1fr; } }
     .lp-card { border: 1px solid var(--border-color); border-radius: 18px; background: rgba(255,255,255,0.92); padding: 18px; box-shadow: 0 18px 60px rgba(10, 15, 25, 0.08); }
     .lp-card-title { margin: 10px 0 0; font-weight: 900; letter-spacing: -0.02em; color: var(--text-dark); }
-    .lp-card-text { margin: 10px 0 0; color: var(--text-muted); line-height: 1.7; }
+    .lp-card-text { margin: 10px 0 0; color: #1e293b; line-height: 1.7; font-weight: 500; }
     .lp-icon { width: 34px; height: 34px; border-radius: 14px; display: grid; place-items: center; background: rgba(79, 70, 229, 0.10); border: 1px solid rgba(79, 70, 229, 0.12); }
     .lp-icon svg { width: 18px; height: 18px; }
     .lp-simple-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
@@ -83,8 +89,66 @@
     .lp-progress-track { height: 10px; border-radius: 999px; background: #e5e7eb; overflow: hidden; border: 1px solid #d1d5db; }
     .lp-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #4f46e5, #10b981); transition: width 220ms ease; }
     .lp-progress-text { margin-top: 6px; color: #334155; font-size: 12px; }
+
+    /* Portal do Paciente - Side Buttons */
+    .lp-patient-portal-container {
+      position: absolute;
+      left: 40px;
+      bottom: 15%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      z-index: 10;
+    }
+    @media (max-width: 980px) {
+      .lp-patient-portal-container {
+        position: relative;
+        left: 0;
+        top: 0;
+        transform: none;
+        margin: 40px auto 0;
+        flex-direction: row;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+    }
+    .lp-btn-glass {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: #fff;
+      padding: 18px 24px;
+      border-radius: 16px;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      min-width: 200px;
+    }
+    .lp-btn-glass:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    }
   </style>
-  <script src="https://unpkg.com/@supabase/supabase-js@2" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+      if (typeof window.supabase === 'undefined') {
+          document.write('<script src="https://unpkg.com/@supabase/supabase-js@2"><\/script>');
+      }
+  </script>
+  <!-- Ferramenta de Debug para Mobile (VConsole) -->
+  <!-- <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
+  <script>
+    // Inicializa o VConsole apenas se houver o parâmetro ?debug=1 na URL ou se estiver no mobile (detectado pelo touch)
+    if (window.location.search.includes('debug=1') || ('ontouchstart' in window)) {
+      var vConsole = new window.VConsole();
+    }
+  </script> -->
 </head>
 <body>
   <div class="lp-shell">
@@ -109,11 +173,10 @@
           class="lp-video"
           autoplay
           muted
-          loop
           playsinline
           preload="none"
           poster="assets/videos/occ-hero-poster.svg"
-          data-src="assets/videos/occ-hero.mp4"
+          data-videos="assets/videos/occ-hero1.mp4,assets/videos/occ-hero2.mp4"
         ></video>
         <div class="lp-hero-scrim"></div>
       </div>
@@ -122,6 +185,12 @@
       <div class="lp-glow-2"></div>
 
       <div class="lp-hero-inner">
+        <!-- Botões do Portal do Paciente -->
+        <div class="lp-patient-portal-container">
+          <button id="btnPortalPaciente" class="lp-btn-glass">Portal do Paciente</button>
+          <button id="btnPortalJaTenhoConta" class="lp-btn-glass">Já tenho conta</button>
+        </div>
+
         <div>
           <p class="lp-hero-kicker">Premium SaaS • Leve • Seguro</p>
           <h1 class="lp-hero-title">Odonto Connect Cloud (OCC): Inteligência e Simplicidade a serviço do seu sorriso.</h1>
@@ -130,25 +199,23 @@
             <button id="btnOpenTrial" class="lp-btn lp-btn-primary">Testar 30 Dias Grátis</button>
             <a class="lp-btn lp-btn-secondary" href="#planos">Ver Planos</a>
           </div>
-          <div class="lp-subnote">Sem instalação. Auto-gerenciável. Acesso em casa, consultório e celular.</div>
-        </div>
-        <div class="lp-hero-card">
-          <div style="display: grid; gap: 10px;">
-            <div style="font-weight: 900; color: rgba(255,255,255,0.95); letter-spacing: -0.02em;">Sobre o OCC</div>
-            <div style="color: rgba(255,255,255,0.82); line-height: 1.75;">
-              ✨ Por que escolher a leveza do OCC?<br/>
-              Cadastro, Agenda, Orçamento e Financeiro funcionam em harmonia, sem distrações — com travas de segurança e privacidade inteligente.
-            </div>
-            <div style="display:flex; gap: 10px; flex-wrap: wrap; margin-top: 6px;">
-              <a class="lp-btn lp-btn-secondary" href="#beneficios" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">Conhecer Benefícios</a>
-              <a class="lp-btn lp-btn-secondary" href="#planos" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">Planos</a>
-            </div>
-          </div>
+          <div class="lp-subnote">Sem instalação. Auto-gerenciável. Acesso em casa, consultório e celular.<br><span style="font-weight: bold; color: #fff;">Sem limites de usuários.</span></div>
         </div>
       </div>
     </section>
 
     <main>
+      <section class="lp-surface" style="padding-bottom: 0;">
+        <div class="lp-card" style="margin: 0 auto; max-width: 1100px; border-left: 4px solid #2563eb; background: rgba(255,255,255,0.92); box-shadow: 0 18px 70px rgba(10, 15, 25, 0.08);">
+          <div style="padding: 24px;">
+            <h3 style="margin: 0 0 12px 0; color: #1e3a8a; font-size: 24px; font-weight: 900; letter-spacing: -0.02em;">🚀 Poder de Venda OCC</h3>
+            <p style="margin: 0 0 8px 0; color: #334155; font-size: 16px; line-height: 1.6;"><strong>Gestão Financeira Total:</strong> Configure Operadoras de Cartão/Maquininha, custos de Protéticos e custos fixos uma única vez. O OCC automatiza o financeiro e o cálculo de lucro real.</p>
+            <p style="margin: 0 0 8px 0; color: #334155; font-size: 16px; line-height: 1.6;"><strong>Hub Fiscal Agnóstico:</strong> Escolha livremente Focus NFe, NFe.io, PlugNotas ou Emissor Nacional. Sem venda casada e sem taxa de intermediação.</p>
+            <p style="margin: 0; color: #334155; font-size: 16px; line-height: 1.6;"><strong>Emissão Simples:</strong> O OCC resolve o Código IBGE, valida CPF e consolida o orçamento em uma única nota. Clique, emita e imprima.</p>
+          </div>
+        </div>
+      </section>
+
       <section class="lp-surface" id="beneficios">
         <h2 class="lp-section-title">✨ Por que escolher a leveza do OCC?</h2>
         <p class="lp-section-lead">O OCC foi criado para o dentista que não tem tempo a perder. Chega de sistemas complexos que parecem um painel de avião. Nós entregamos o que você realmente precisa: gestão ágil, segurança de dados e uma interface que entende o seu fluxo de trabalho.</p>
@@ -329,9 +396,9 @@
               <div class="lp-card-text">Altere status de orçamentos e acompanhe pagamentos de forma visual e intuitiva.</div>
             </div>
             <div class="lp-card">
-              <div class="lp-card-title">Suporte Sob Medida</div>
-              <div class="lp-card-text">Escolha o plano que cabe no seu bolso, com ou sem suporte telefônico, sempre com a mesma eficiência tecnológica.</div>
-            </div>
+                <div class="lp-card-title">Suporte Integrado e Eficiente</div>
+                <div class="lp-card-text">Esqueça filas de espera ou canais externos. Abra chamados e acompanhe o status do seu atendimento diretamente de dentro do painel do OCC, com histórico completo e suporte focado no sucesso da sua clínica.</div>
+              </div>
           </div>
         </div>
 
@@ -344,9 +411,10 @@
         </div>
       </section>
 
-      <section class="lp-surface" id="planos" style="padding-top: 10px;">
-        <h2 class="lp-section-title">Planos</h2>
-        <p class="lp-section-lead">Escolha o suporte ideal para sua rotina. O OCC mantém a mesma leveza e eficiência em qualquer plano.</p>
+      <section class="lp-surface" id="planos">
+        <h2 class="lp-section-title">Planos Disponíveis</h2>
+        <p class="lp-section-lead">Preços para Brasil</p>
+
         <div class="lp-plans" id="plansContainer">
           <div class="lp-plan">
             <h3>Carregando...</h3>
@@ -363,43 +431,57 @@
   </div>
 
   <div id="trialModalBackdrop" class="lp-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="trialModalTitle">
-    <div class="lp-modal">
-      <div class="lp-modal-header">
-        <h3 id="trialModalTitle" class="lp-modal-title">Criar clínica e testar por 30 dias</h3>
+    <div class="lp-modal" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; background: #ffffff; border-radius: 12px; box-shadow: 0px 10px 25px rgba(0, 0, 0, 0.1);">
+      <div class="lp-modal-header" style="flex-shrink: 0; padding: 12px 16px 0;">
+        <h3 id="trialModalTitle" class="lp-modal-title" style="margin-bottom: 5px;">Criar clínica</h3>
       </div>
-      <div class="lp-modal-body">
+      <div class="lp-modal-body" style="padding: 10px 16px 12px; overflow-y: auto; flex: 1;">
         <form id="trialForm" class="lp-form">
-          <div class="form-group">
-            <label for="trialClinicName">Nome da clínica *</label>
-            <input id="trialClinicName" type="text" required placeholder="Ex.: Clínica Gemini" />
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label for="trialClinicName" style="margin-bottom: 4px;">Nome da clínica *</label>
+            <input id="trialClinicName" type="text" required placeholder="Ex.: Clínica Gemini" style="padding: 8px 12px;" />
           </div>
-          <div class="form-group">
-            <label for="trialEmail">E-mail (login) *</label>
-            <input id="trialEmail" type="email" required autocapitalize="none" spellcheck="false" placeholder="contato@clinica.com.br" />
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label for="trialEmail" style="margin-bottom: 4px;">E-mail (login) *</label>
+            <input id="trialEmail" type="email" required autocapitalize="none" spellcheck="false" placeholder="contato@clinica.com.br" style="padding: 8px 12px;" />
           </div>
-          <div class="form-group">
-            <label for="trialCell">Celular</label>
-            <input id="trialCell" type="text" placeholder="(00) 00000-0000" maxlength="15" />
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label for="trialCell" style="margin-bottom: 4px;">Celular</label>
+            <input id="trialCell" type="text" placeholder="(00) 00000-0000" maxlength="15" style="padding: 8px 12px;" />
           </div>
-          <div class="form-group">
-            <label for="trialPlan">Plano escolhido *</label>
-            <select id="trialPlan" required>
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label for="trialPlan" style="margin-bottom: 4px;">Plano escolhido *</label>
+            <select id="trialPlan" required style="padding: 8px 12px;">
               <option value="">Selecione um plano</option>
             </select>
           </div>
-          <div class="form-group">
-            <label for="trialPassword">Senha *</label>
-            <input id="trialPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" />
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label for="trialPassword" style="margin-bottom: 4px;">Senha *</label>
+            <input id="trialPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" style="padding: 8px 12px;" />
           </div>
-          <div id="trialProgressWrap" class="lp-progress-wrap">
+          
+          <div class="form-group" style="margin-top: 10px; margin-bottom: 10px;">
+            <label style="margin-bottom: 4px;">Termos de Assinatura e Uso</label>
+            <div id="occTermosBox" style="max-height: 90px; overflow-y: scroll; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; background-color: #f8fafc; color: #334155; margin-bottom: 8px;">
+              <strong>Termos de Assinatura e Uso do Software OCC:</strong><br><br>
+              <strong>1. Reajuste Anual:</strong> O valor do plano contratado será atualizado e reajustado monetariamente a cada período de 12 (doze) meses, contados da data de criação da conta, com base na variação acumulada do índice IPCA/IBGE (ou outro que venha a substituí-lo legalmente).<br><br>
+              <strong>2. Política de Cancelamento:</strong> O direito de uso do software OCC - Odonto Connect Cloud poderá ser cancelado por ambas as partes (pelo cliente ou pela administração do OCC) a qualquer momento que desejar, sem aplicação de multas rescisórias ou cláusulas de fidelidade, bastando a interrupção da assinatura.
+            </div>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; user-select: none;">
+              <input type="checkbox" id="chk_termos_occ" disabled>
+              <span>Li e concordo com os Termos de Assinatura, Reajuste Anual e Cancelamento do OCC</span>
+            </label>
+          </div>
+
+          <div id="trialProgressWrap" class="lp-progress-wrap" style="margin-bottom: 10px;">
             <div class="lp-progress-track">
               <div id="trialProgressBar" class="lp-progress-bar"></div>
             </div>
             <div id="trialProgressText" class="lp-progress-text">Processando...</div>
           </div>
-          <div class="lp-modal-actions">
-            <button id="btnCloseTrial" type="button" class="lp-btn lp-btn-secondary">Cancelar</button>
-            <button id="btnSubmitTrial" type="submit" class="lp-btn lp-btn-primary">Criar e Entrar</button>
+          <div class="lp-modal-actions" style="margin-top: 5px;">
+            <button id="btnCloseTrial" type="button" class="lp-btn lp-btn-secondary" style="padding: 8px 16px;">Cancelar</button>
+            <button id="btnSubmitTrial" type="submit" class="lp-btn lp-btn-primary" style="padding: 8px 16px;">Criar e Entrar</button>
           </div>
           <div id="trialError" class="lp-error"></div>
           <div id="trialResult" class="lp-result"></div>
@@ -408,6 +490,151 @@
     </div>
   </div>
 
-  <script src="landing.js?v=20260331-0001"></script>
+  <div id="portalModalBackdrop" class="lp-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="portalModalTitle">
+    <div class="lp-modal">
+      <div class="lp-modal-header">
+        <h3 id="portalModalTitle" class="lp-modal-title">Acesso ao Portal do Paciente</h3>
+      </div>
+      <div class="lp-modal-body">
+        <form id="portalForm" class="lp-form">
+          <div class="form-group">
+            <label for="portalInput">CPF ou E-mail cadastrado *</label>
+            <input id="portalInput" type="text" required placeholder="Digite seu CPF ou E-mail" />
+          </div>
+
+          <div id="portalProgressWrap" class="lp-progress-wrap">
+            <div class="lp-progress-track">
+              <div id="portalProgressBar" class="lp-progress-bar"></div>
+            </div>
+            <div id="portalProgressText" class="lp-progress-text">Verificando...</div>
+          </div>
+          <div class="lp-modal-actions">
+            <button id="btnClosePortal" type="button" class="lp-btn lp-btn-secondary">Cancelar</button>
+            <button id="btnSubmitPortal" type="submit" class="lp-btn lp-btn-primary">Acessar</button>
+          </div>
+          <div id="portalError" class="lp-error"></div>
+          <div id="portalResult" class="lp-result"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="landing.js?v=20260601_SUCCESS_MODAL"></script>
+  <script>
+    // --- Lógica do Auto-Scroll (Vitrine) ---
+    let autoScrollAnimation = null;
+    let isAutoScrolling = false;
+    let scrollDirection = 1; // 1 desce, -1 sobe
+    let userInteracted = false;
+    let scrollSpeed = 1; // Ajuste a velocidade aqui (pixels por frame)
+
+    function autoScrollStep() {
+        if (userInteracted) {
+            console.log("AutoScrollStep ABORTADO pois userInteracted é true.");
+            return;
+        }
+
+        const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        let currentScroll = window.scrollY;
+
+        // Inverte direção nos limites
+        if (currentScroll >= maxScroll - 2) {
+            scrollDirection = -1; // Começa a subir
+        } else if (currentScroll <= 0 && scrollDirection === -1) {
+            scrollDirection = 1; // Começa a descer
+        }
+
+        // Força a rolagem usando scrollTo (mais confiável que scrollBy em alguns navegadores)
+        window.scrollTo(0, currentScroll + (scrollDirection * scrollSpeed));
+
+        autoScrollAnimation = requestAnimationFrame(autoScrollStep);
+    }
+
+    // Variável para permitir que o movimento do mouse cancele o auto-scroll
+    // Mas vamos ignorar os movimentos do mouse que ocorrem ANTES do auto-scroll iniciar
+    // para evitar que um pequeno tremor no mouse enquanto o vídeo 1 toca cancele o efeito.
+    let ignoreMouseMoves = true;
+
+    let hasStartedOnce = false;
+    let idleTimer = null;
+    const IDLE_TIMEOUT = 60000; // 1 minuto (60000 ms)
+
+    function resetIdleTimer() {
+        if (idleTimer) clearTimeout(idleTimer);
+        
+        // Só reiniciamos por inatividade se o auto-scroll já tiver sido acionado
+        // pelo menos uma vez pela playlist de vídeos
+        if (hasStartedOnce && !isAutoScrolling) {
+            idleTimer = setTimeout(() => {
+                console.log("AutoScroll RESTARTED by idle timeout (1 min).");
+                userInteracted = false;
+                startAutoScroll();
+            }, IDLE_TIMEOUT);
+        }
+    }
+
+    function startAutoScroll() {
+        if (isAutoScrolling) return; 
+        
+        console.log("AutoScroll STARTING!");
+        isAutoScrolling = true;
+        hasStartedOnce = true; // Marca que o sistema já usou o auto-scroll
+        userInteracted = false; 
+        
+        // Espera 1 segundo após iniciar o scroll antes de permitir que o mousemove o cancele
+        setTimeout(() => {
+            ignoreMouseMoves = false;
+        }, 1000);
+        
+        autoScrollAnimation = requestAnimationFrame(autoScrollStep);
+    }
+    
+    // Expõe globalmente de forma explícita
+    window.startAutoScroll = startAutoScroll;
+
+    function stopAutoScroll() {
+        isAutoScrolling = false;
+        if (autoScrollAnimation) {
+            cancelAnimationFrame(autoScrollAnimation);
+            autoScrollAnimation = null;
+        }
+    }
+
+    // Interrompe o auto-scroll se o usuário interagir
+    ['mousedown', 'wheel', 'touchstart', 'keydown'].forEach(evt => {
+        window.addEventListener(evt, () => {
+            userInteracted = true;
+            resetIdleTimer(); // Reseta o timer de 1 minuto
+            if (isAutoScrolling) {
+                console.log("AutoScroll STOPPED by " + evt);
+                stopAutoScroll();
+            }
+        }, { passive: true });
+    });
+
+    // Tratamento especial para mousemove para ignorar falsos positivos gerados pelo próprio scroll
+    window.addEventListener('mousemove', (e) => {
+        if (ignoreMouseMoves) return; // Só cancela se já começou a rolar
+        
+        // Filtro: ignorar movimentos muito pequenos (menos de 3 pixels) que podem ser gerados por vibração da mesa ou do próprio scroll do navegador
+        if (Math.abs(e.movementX) > 3 || Math.abs(e.movementY) > 3) {
+            resetIdleTimer(); // Movimentar o mouse conta como atividade para resetar o timer
+            if (isAutoScrolling) {
+                console.log("AutoScroll STOPPED by mousemove (X:" + e.movementX + " Y:" + e.movementY + ")");
+                userInteracted = true;
+                stopAutoScroll();
+            }
+        }
+    }, { passive: true });
+
+    // Restart inteligente: Se o usuário voltar para o topo da página, a vitrine reinicia
+    window.addEventListener('scroll', () => {
+        if (hasStartedOnce && !isAutoScrolling && window.scrollY <= 0) {
+            console.log("AutoScroll RESTARTED by scrolling to TOP.");
+            userInteracted = false;
+            startAutoScroll();
+        }
+    }, { passive: true });
+  </script>
 </body>
 </html>

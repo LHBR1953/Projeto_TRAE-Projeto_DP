@@ -11,11 +11,13 @@ cd /d C:\Projeto_TRAE\Projeto_DP
 
 :: Passo 1: Login (Caso a sessao tenha expirado)
 echo [1/3] Verificando autenticacao...
-call vercel login --confirm
+:: call vercel login (Comentado para nao travar se ja estiver logado)
+
+echo call vercel login
 
 :: Passo 2: Deploy de Producao (Forca a atualizacao do index.html e assets)
 echo [2/3] Enviando arquivos para producao...
-echo (Isso pode levar alguns segundos dependendo do tamanho do video)
+echo (Isso pode levar alguns segundos)
 call vercel --prod --yes
 
 :: Passo 3: Finalizacao
