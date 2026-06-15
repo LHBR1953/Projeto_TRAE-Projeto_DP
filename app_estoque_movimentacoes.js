@@ -43,7 +43,7 @@ async function estornarMovimentacao(logId) {
     showToast('Estorno realizado com sucesso.');
 }
 
-async function printMovimentacaoDiariaEstoque({ dateStr, profSeqId }) {
+async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
     if (!dateStr) { showToast('Selecione a data.', true); return; }
     const { startIso, endIso } = buildDayDateRangeUTC(dateStr);
 

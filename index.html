@@ -89,51 +89,6 @@
     .lp-progress-track { height: 10px; border-radius: 999px; background: #e5e7eb; overflow: hidden; border: 1px solid #d1d5db; }
     .lp-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #4f46e5, #10b981); transition: width 220ms ease; }
     .lp-progress-text { margin-top: 6px; color: #334155; font-size: 12px; }
-
-    /* Portal do Paciente - Side Buttons */
-    .lp-patient-portal-container {
-      position: absolute;
-      left: 40px;
-      bottom: 15%;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      z-index: 10;
-    }
-    @media (max-width: 980px) {
-      .lp-patient-portal-container {
-        position: relative;
-        left: 0;
-        top: 0;
-        transform: none;
-        margin: 40px auto 0;
-        flex-direction: row;
-        justify-content: center;
-        flex-wrap: wrap;
-      }
-    }
-    .lp-btn-glass {
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      color: #fff;
-      padding: 18px 24px;
-      border-radius: 16px;
-      font-weight: 700;
-      font-size: 15px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-      text-align: center;
-      min-width: 200px;
-    }
-    .lp-btn-glass:hover {
-      background: rgba(255, 255, 255, 0.2);
-      border-color: rgba(255, 255, 255, 0.3);
-      transform: translateY(-2px);
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
-    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
@@ -141,14 +96,6 @@
           document.write('<script src="https://unpkg.com/@supabase/supabase-js@2"><\/script>');
       }
   </script>
-  <!-- Ferramenta de Debug para Mobile (VConsole) -->
-  <!-- <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
-  <script>
-    // Inicializa o VConsole apenas se houver o parâmetro ?debug=1 na URL ou se estiver no mobile (detectado pelo touch)
-    if (window.location.search.includes('debug=1') || ('ontouchstart' in window)) {
-      var vConsole = new window.VConsole();
-    }
-  </script> -->
 </head>
 <body>
   <div class="lp-shell">
@@ -185,12 +132,6 @@
       <div class="lp-glow-2"></div>
 
       <div class="lp-hero-inner">
-        <!-- Botões do Portal do Paciente -->
-        <div class="lp-patient-portal-container">
-          <button id="btnPortalPaciente" class="lp-btn-glass">Portal do Paciente</button>
-          <button id="btnPortalJaTenhoConta" class="lp-btn-glass">Já tenho conta</button>
-        </div>
-
         <div>
           <p class="lp-hero-kicker">Premium SaaS • Leve • Seguro</p>
           <h1 class="lp-hero-title">Odonto Connect Cloud (OCC): Inteligência e Simplicidade a serviço do seu sorriso.</h1>
@@ -431,57 +372,57 @@
   </div>
 
   <div id="trialModalBackdrop" class="lp-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="trialModalTitle">
-    <div class="lp-modal" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; background: #ffffff; border-radius: 12px; box-shadow: 0px 10px 25px rgba(0, 0, 0, 0.1);">
-      <div class="lp-modal-header" style="flex-shrink: 0; padding: 12px 16px 0;">
-        <h3 id="trialModalTitle" class="lp-modal-title" style="margin-bottom: 5px;">Criar clínica</h3>
+    <div class="lp-modal">
+      <div class="lp-modal-header">
+        <h3 id="trialModalTitle" class="lp-modal-title">Criar clínica e testar por 30 dias</h3>
       </div>
-      <div class="lp-modal-body" style="padding: 10px 16px 12px; overflow-y: auto; flex: 1;">
+      <div class="lp-modal-body">
         <form id="trialForm" class="lp-form">
-          <div class="form-group" style="margin-bottom: 10px;">
-            <label for="trialClinicName" style="margin-bottom: 4px;">Nome da clínica *</label>
-            <input id="trialClinicName" type="text" required placeholder="Ex.: Clínica Gemini" style="padding: 8px 12px;" />
+          <div class="form-group">
+            <label for="trialClinicName">Nome da clínica *</label>
+            <input id="trialClinicName" type="text" required placeholder="Ex.: Clínica Gemini" />
           </div>
-          <div class="form-group" style="margin-bottom: 10px;">
-            <label for="trialEmail" style="margin-bottom: 4px;">E-mail (login) *</label>
-            <input id="trialEmail" type="email" required autocapitalize="none" spellcheck="false" placeholder="contato@clinica.com.br" style="padding: 8px 12px;" />
+          <div class="form-group">
+            <label for="trialEmail">E-mail (login) *</label>
+            <input id="trialEmail" type="email" required autocapitalize="none" spellcheck="false" placeholder="contato@clinica.com.br" />
           </div>
-          <div class="form-group" style="margin-bottom: 10px;">
-            <label for="trialCell" style="margin-bottom: 4px;">Celular</label>
-            <input id="trialCell" type="text" placeholder="(00) 00000-0000" maxlength="15" style="padding: 8px 12px;" />
+          <div class="form-group">
+            <label for="trialCell">Celular</label>
+            <input id="trialCell" type="text" placeholder="(00) 00000-0000" maxlength="15" />
           </div>
-          <div class="form-group" style="margin-bottom: 10px;">
-            <label for="trialPlan" style="margin-bottom: 4px;">Plano escolhido *</label>
-            <select id="trialPlan" required style="padding: 8px 12px;">
+          <div class="form-group">
+            <label for="trialPlan">Plano escolhido *</label>
+            <select id="trialPlan" required>
               <option value="">Selecione um plano</option>
             </select>
           </div>
-          <div class="form-group" style="margin-bottom: 10px;">
-            <label for="trialPassword" style="margin-bottom: 4px;">Senha *</label>
-            <input id="trialPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" style="padding: 8px 12px;" />
+          <div class="form-group">
+            <label for="trialPassword">Senha *</label>
+            <input id="trialPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" />
           </div>
           
-          <div class="form-group" style="margin-top: 10px; margin-bottom: 10px;">
-            <label style="margin-bottom: 4px;">Termos de Assinatura e Uso</label>
-            <div id="occTermosBox" style="max-height: 90px; overflow-y: scroll; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; background-color: #f8fafc; color: #334155; margin-bottom: 8px;">
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Termos de Assinatura e Uso</label>
+            <div id="occTermosBox" style="max-height: 140px; overflow-y: scroll; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; background-color: #f8fafc; color: #334155; margin-bottom: 10px;">
               <strong>Termos de Assinatura e Uso do Software OCC:</strong><br><br>
               <strong>1. Reajuste Anual:</strong> O valor do plano contratado será atualizado e reajustado monetariamente a cada período de 12 (doze) meses, contados da data de criação da conta, com base na variação acumulada do índice IPCA/IBGE (ou outro que venha a substituí-lo legalmente).<br><br>
               <strong>2. Política de Cancelamento:</strong> O direito de uso do software OCC - Odonto Connect Cloud poderá ser cancelado por ambas as partes (pelo cliente ou pela administração do OCC) a qualquer momento que desejar, sem aplicação de multas rescisórias ou cláusulas de fidelidade, bastando a interrupção da assinatura.
             </div>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; user-select: none;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; user-select: none;">
               <input type="checkbox" id="chk_termos_occ" disabled>
               <span>Li e concordo com os Termos de Assinatura, Reajuste Anual e Cancelamento do OCC</span>
             </label>
           </div>
 
-          <div id="trialProgressWrap" class="lp-progress-wrap" style="margin-bottom: 10px;">
+          <div id="trialProgressWrap" class="lp-progress-wrap">
             <div class="lp-progress-track">
               <div id="trialProgressBar" class="lp-progress-bar"></div>
             </div>
             <div id="trialProgressText" class="lp-progress-text">Processando...</div>
           </div>
-          <div class="lp-modal-actions" style="margin-top: 5px;">
-            <button id="btnCloseTrial" type="button" class="lp-btn lp-btn-secondary" style="padding: 8px 16px;">Cancelar</button>
-            <button id="btnSubmitTrial" type="submit" class="lp-btn lp-btn-primary" style="padding: 8px 16px;">Criar e Entrar</button>
+          <div class="lp-modal-actions">
+            <button id="btnCloseTrial" type="button" class="lp-btn lp-btn-secondary">Cancelar</button>
+            <button id="btnSubmitTrial" type="submit" class="lp-btn lp-btn-primary">Criar e Entrar</button>
           </div>
           <div id="trialError" class="lp-error"></div>
           <div id="trialResult" class="lp-result"></div>
@@ -490,36 +431,7 @@
     </div>
   </div>
 
-  <div id="portalModalBackdrop" class="lp-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="portalModalTitle">
-    <div class="lp-modal">
-      <div class="lp-modal-header">
-        <h3 id="portalModalTitle" class="lp-modal-title">Acesso ao Portal do Paciente</h3>
-      </div>
-      <div class="lp-modal-body">
-        <form id="portalForm" class="lp-form">
-          <div class="form-group">
-            <label for="portalInput">CPF ou E-mail cadastrado *</label>
-            <input id="portalInput" type="text" required placeholder="Digite seu CPF ou E-mail" />
-          </div>
-
-          <div id="portalProgressWrap" class="lp-progress-wrap">
-            <div class="lp-progress-track">
-              <div id="portalProgressBar" class="lp-progress-bar"></div>
-            </div>
-            <div id="portalProgressText" class="lp-progress-text">Verificando...</div>
-          </div>
-          <div class="lp-modal-actions">
-            <button id="btnClosePortal" type="button" class="lp-btn lp-btn-secondary">Cancelar</button>
-            <button id="btnSubmitPortal" type="submit" class="lp-btn lp-btn-primary">Acessar</button>
-          </div>
-          <div id="portalError" class="lp-error"></div>
-          <div id="portalResult" class="lp-result"></div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <script src="landing.js?v=20260601_SUCCESS_MODAL"></script>
+  <script src="landing.js?v=20260331-0001"></script>
   <script>
     // --- Lógica do Auto-Scroll (Vitrine) ---
     let autoScrollAnimation = null;

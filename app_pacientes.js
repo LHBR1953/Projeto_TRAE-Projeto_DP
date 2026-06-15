@@ -28,21 +28,7 @@ const patientPortalView = document.getElementById('patientPortalView');
 
 // Patient DOM Elements
 const btnAddNewPatient = document.getElementById('btnAddNew');
-
-if (btnAddNewPatient) {
-    btnAddNewPatient.addEventListener('click', () => {
-        if (window.showForm) window.showForm(false, 'patients');
-        else if (typeof showForm !== 'undefined') showForm(false, 'patients');
-    });
-}
 const btnBackPatient = document.getElementById('btnBack');
-
-if (btnBackPatient) {
-    btnBackPatient.addEventListener('click', () => {
-        if (window.showList) window.showList('patients');
-        else if (typeof showList !== 'undefined') showList('patients');
-    });
-}
 const btnCancelPatient = document.getElementById('btnCancelPatient');
 const patientForm = document.getElementById('patientForm');
 const patientsTableBody = document.getElementById('patientsTableBody');
@@ -596,6 +582,7 @@ function syncPatientProfissaoUI() {
 }
 
 // Auto-fill Patient Data from Datalist
+const budPacienteNomeInput = document.getElementById('budPacienteNome');
 
 // --- PRONTUÁRIO / PATIENT DETAILS LOGIC ---
 
@@ -1461,8 +1448,3 @@ async function openChatPaciente(pacienteId, pacienteNome) {
     };
     newInput.focus();
 }
-
-window.handlePatientCepLookup = handlePatientCepLookup;
-window.syncPatientProfissaoUI = syncPatientProfissaoUI;
-if (typeof showForm !== 'undefined') window.showForm = showForm;
-if (typeof showList !== 'undefined') window.showList = showList;

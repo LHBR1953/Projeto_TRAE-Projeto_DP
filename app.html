@@ -8,15 +8,9 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>OCC - Odonto Connect Cloud</title>
-    
-    <!-- PWA Admin Manifest -->
-    <link rel="manifest" href="manifest_admin.json">
-    <meta name="theme-color" content="#1e3a8a">
-    <link rel="apple-touch-icon" href="/assets/image_cb64a0_192.png">
-
     <link rel="icon" href="data:,">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260611_LOCAL_FORCE_FINAL">
+    <link rel="stylesheet" href="styles.css?v=20260515_mobile_fix">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
         #bootLoader {
@@ -130,16 +124,6 @@
             return true;
         };
     </script>
-<style>
-#btnWaSendBulk:disabled { 
-    background-color: #a0a0a0 !important; 
-    border-color: #a0a0a0 !important; 
-    cursor: not-allowed !important; 
-    opacity: 0.6 !important; 
-    pointer-events: none !important; 
-}
-</style>
-    <script src='https://unpkg.com/dexie/dist/dexie.js'></script>
 </head>
 
 <body>
@@ -183,19 +167,18 @@
                     Email ou senha incorretos.
                 </div>
             </form>
-            <div style="margin-top: 1rem; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.85rem; background: #f8fafc; display: flex; flex-direction: column;">
-                <div style="max-height: 140px; overflow-y: auto; padding-right: 8px; margin-bottom: 10px; scrollbar-width: thin;">
-                    <div style="font-size: 0.8rem; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: .03em;">Hub Fiscal Multiconectado</div>
-                    <div style="font-size: 0.82rem; color: #334155; margin-top: 6px;">Flexibilidade para emitir notas com Focus NFe, NFe.io, PlugNotas ou Emissor Nacional, sem venda casada.</div>
-                    
-                    <div style="font-size: 0.8rem; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: .03em; margin-top: 12px;">Gestão Financeira Total</div>
-                    <div style="font-size: 0.82rem; color: #334155; margin-top: 6px;">Configure as taxas de Operadoras de Cartão/Maquininha, custos de Protéticos e Custos Fixos uma única vez. O OCC automatiza todo o cálculo de lucro real para você.</div>
-                    <div style="font-size: 0.82rem; color: #334155; margin-top: 8px;"><strong>Hub Fiscal Agnóstico:</strong> Escolha o provedor de nota fiscal que você preferir (Focus NFe, NFe.io, etc). Sem taxas de intermediação, sem venda casada e com total autonomia.</div>
-                    <div style="font-size: 0.82rem; color: #334155; margin-top: 8px;">O OCC resolve o código IBGE, valida o CPF e consolida o orçamento em uma única nota. Clique, emita e imprima.</div>
-                </div>
-                <button type="button" id="btnOpenFiscalHubInfoLogin" class="btn btn-secondary" style="width: 100%; flex-shrink: 0;">
+            <div style="margin-top: 1rem; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.85rem; background: #f8fafc;">
+                <div style="font-size: 0.8rem; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: .03em;">Hub Fiscal Multiconectado</div>
+                <div style="font-size: 0.82rem; color: #334155; margin-top: 6px;">Flexibilidade para emitir notas com Focus NFe, NFe.io, PlugNotas ou Emissor Nacional, sem venda casada.</div>
+                <button type="button" id="btnOpenFiscalHubInfoLogin" class="btn btn-secondary" style="margin-top: 8px; width: 100%;">
                     <i class="ri-information-line"></i> Saiba Mais
                 </button>
+            </div>
+            <div style="margin-top: 0.8rem; border: 1px solid #dbeafe; border-radius: 10px; padding: 0.85rem; background: #ffffff;">
+                <div style="font-size: 0.8rem; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: .03em;">Gestão Financeira Total</div>
+                <div style="font-size: 0.82rem; color: #334155; margin-top: 6px;">Configure as taxas de Operadoras de Cartão/Maquininha, custos de Protéticos e Custos Fixos uma única vez. O OCC automatiza todo o cálculo de lucro real para você.</div>
+                <div style="font-size: 0.82rem; color: #334155; margin-top: 8px;"><strong>Hub Fiscal Agnóstico:</strong> Escolha o provedor de nota fiscal que você preferir (Focus NFe, NFe.io, etc). Sem taxas de intermediação, sem venda casada e com total autonomia.</div>
+                <div style="font-size: 0.82rem; color: #334155; margin-top: 8px;">O OCC resolve o código IBGE, valida o CPF e consolida o orçamento em uma única nota. Clique, emita e imprima.</div>
             </div>
         </div>
 
@@ -272,9 +255,6 @@
             </div>
 
             <nav class="sidebar-nav">
-                <button id="btnInstallApp" class="nav-item" style="display: none; color: var(--primary-color); font-weight: 600;">
-                    <i class="ri-download-cloud-2-line"></i> <span>Instalar Aplicativo</span>
-                </button>
                 <div class="nav-section">Aplicações</div>
                 <button id="navDashboard" class="nav-item">
                     <i class="ri-dashboard-3-line"></i> <span>Dashboard</span>
@@ -319,19 +299,9 @@
                 <button id="navFinanceiro" class="nav-item">
                     <i class="ri-money-dollar-circle-line"></i> <span>Financeiro</span>
                 </button>
-                <button id="navMarketingToggle" class="nav-item nav-item-atendimento">
-                    <i class="ri-megaphone-line"></i> 
-                    <span class="nav-item-label">Marketing</span>
-                    <i id="navMarketingToggleIcon" class="ri-arrow-down-s-line nav-toggle-icon"></i>
+                <button id="navMarketing" class="nav-item">
+                    <i class="ri-megaphone-line"></i> <span>Marketing</span>
                 </button>
-                <div id="navMarketingSubmenu" class="atendimento-submenu" style="display: none;">
-                    <button id="navMarketing" class="nav-item nav-subitem">
-                        <i class="ri-mail-send-line"></i> <span>Campanhas E-mail</span>
-                    </button>
-                    <button id="navWhatsappMarketing" class="nav-item nav-subitem">
-                        <i class="ri-whatsapp-line"></i> <span>Campanhas WhatsApp</span>
-                    </button>
-                </div>
                 <button id="navCommissions" class="nav-item">
                     <i class="ri-hand-coin-line"></i> <span>Comissões</span>
                 </button>
@@ -356,12 +326,9 @@
                 </button>
 
                 <div class="nav-section mt-4" id="navSuporteSection">Suporte</div>
-                  <button id="navChatPacientes" class="nav-item">
-                      <i class="ri-message-3-line"></i> <span>Central do Paciente</span>
-                  </button>
-                  <button id="navSuporteTickets" class="nav-item">
-                      <i class="ri-customer-service-2-line"></i> <span>Tickets</span>
-                  </button>
+                <button id="navSuporteTickets" class="nav-item">
+                    <i class="ri-customer-service-2-line"></i> <span>Tickets</span>
+                </button>
 
                 <div class="nav-section mt-4" id="navConfigSection" style="display: none;">Configurações</div>
                 <button id="navEmpresas" class="nav-item" style="display: none;">
@@ -419,18 +386,8 @@
                 </button>
                 <h2>OCC - Odonto Connect Cloud <span id="headerLoggedUser" style="font-size: 0.85rem; font-weight: normal; color: var(--text-muted); margin-left: 8px;"></span></h2>
                 <div class="header-company" id="headerCompanyBox">
-                    <div style="position: relative;" id="globalChatContainer">
-                        <button id="btnGlobalChat" class="btn btn-secondary" style="display:none; padding: 0.45rem 0.75rem; border-radius: 10px; font-weight: 700; gap: 0.45rem; position: relative;" onclick="if(typeof showList === 'function') showList('chat_pacientes', 'navChatPacientes');">
-                            <i class="ri-message-3-line"></i>
-                            <span id="global-chat-badge" style="display: none; position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border-radius: 50%; padding: 2px 6px; font-size: 10px; font-weight: bold;">0</span>
-                        </button>
-                        <div id="globalChatPopover" style="display: none; position: absolute; top: 110%; right: 0; width: 320px; background: #ffffff; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-radius: 8px; border: 1px solid #e2e8f0; z-index: 9999; padding: 12px; flex-direction: column; gap: 8px;">
-                            <div style="font-weight: 600; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 4px; color: #1e293b;">Mensagens Pendentes</div>
-                            <div id="globalChatPopoverList" style="max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;"></div>
-                        </div>
-                    </div>
                     <button id="btnAdminManualOCC" class="btn btn-secondary" style="display:none; padding: 0.45rem 0.75rem; border-radius: 10px; font-weight: 700; gap: 0.45rem;">
-                        <i class="ri-book-open-line"></i> Manual do Admin   
+                        <i class="ri-book-open-line"></i> Manual do Admin
                     </button>
                     <img id="headerCompanyLogo" alt="Logo da empresa" class="hidden">
                     <div id="headerCompanyName">—</div>
@@ -849,15 +806,6 @@
                                 <input type="email" id="occ_paciente_email" name="occ_paciente_email" autocomplete="new-password" autocapitalize="none" spellcheck="false" placeholder="email@exemplo.com">
                             </div>
                         </div>
-                        <div class="form-row" style="margin-top: 1rem;">
-                            <div class="checkbox-group">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="whatsappAtivo" checked>
-                                    <span class="checkmark"></span>
-                                    WhatsApp Ativo (Permitir Campanhas)
-                                </label>
-                            </div>
-                        </div>
                     </div>
 
                     <div class="form-card">
@@ -1005,8 +953,6 @@
                 </form>
             </section>
 
-
-
             <!-- PROFESSIONAL LIST VIEW -->
             <section id="professionalListView" class="view-section hidden">
                 <div class="section-header">
@@ -1136,27 +1082,6 @@
                                     <option value="Inativo">Inativo</option>
                                 </select>
                             </div>
-
-                            <div class="form-group">
-                                <label for="profTempoConsulta">Consulta Minutos *</label>
-                                <select id="profTempoConsulta" required>
-                                    <option value="0">0</option>
-                                    <option value="15" selected>15</option>
-                                    <option value="30">30</option>
-                                    <option value="45">45</option>
-                                    <option value="60">60</option>
-                                    <option value="75">75</option>
-                                    <option value="90">90</option>
-                                    <option value="105">105</option>
-                                    <option value="120">120</option>
-                                    <option value="150">150</option>
-                                    <option value="180">180</option>
-                                    <option value="210">210</option>
-                                    <option value="240">240</option>
-                                    <option value="720">720</option>
-                                </select>
-                                <small class="form-hint" style="color: var(--text-muted); font-size: 0.75rem;">Intervalo de atendimento entre Agendas.</small>
-                            </div>
                         </div>
 
                         <!-- Comissões (Dinâmico) -->
@@ -1250,168 +1175,112 @@
                                         <tr>
                                             <td style="text-align:center;"><input type="checkbox" id="agendaDay1Enabled"></td>
                                             <td>Segunda-feira</td>
-                                            <td><select id="agendaDay1Start" class="form-control"></select></td>
-                                            <td><select id="agendaDay1End" class="form-control"></select></td>
+                                            <td><input type="time" id="agendaDay1Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay1End" class="form-control"></td>
                                             <td>
                                                 <select id="agendaDay1Slot" class="form-control">
-                                                    <option value="" selected>Padrão</option>
+                                                    <option value="10">10</option>
                                                     <option value="15">15</option>
-                                                    <option value="30">30</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
                                                     <option value="45">45</option>
                                                     <option value="60">60</option>
-                                                    <option value="75">75</option>
-                                                    <option value="90">90</option>
-                                                    <option value="105">105</option>
-                                                    <option value="120">120</option>
-                                                    <option value="150">150</option>
-                                                    <option value="180">180</option>
-                                                    <option value="210">210</option>
-                                                    <option value="240">240</option>
-                                                    <option value="720">720</option>
                                                 </select>
                                             </td>
                                         </tr>
                                         <tr>
                                             <td style="text-align:center;"><input type="checkbox" id="agendaDay2Enabled"></td>
                                             <td>Terça-feira</td>
-                                            <td><select id="agendaDay2Start" class="form-control"></select></td>
-                                            <td><select id="agendaDay2End" class="form-control"></select></td>
+                                            <td><input type="time" id="agendaDay2Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay2End" class="form-control"></td>
                                             <td>
                                                 <select id="agendaDay2Slot" class="form-control">
-                                                    <option value="" selected>Padrão</option>
+                                                    <option value="10">10</option>
                                                     <option value="15">15</option>
-                                                    <option value="30">30</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
                                                     <option value="45">45</option>
                                                     <option value="60">60</option>
-                                                    <option value="75">75</option>
-                                                    <option value="90">90</option>
-                                                    <option value="105">105</option>
-                                                    <option value="120">120</option>
-                                                    <option value="150">150</option>
-                                                    <option value="180">180</option>
-                                                    <option value="210">210</option>
-                                                    <option value="240">240</option>
-                                                    <option value="720">720</option>
                                                 </select>
                                             </td>
                                         </tr>
                                         <tr>
                                             <td style="text-align:center;"><input type="checkbox" id="agendaDay3Enabled"></td>
                                             <td>Quarta-feira</td>
-                                            <td><select id="agendaDay3Start" class="form-control"></select></td>
-                                            <td><select id="agendaDay3End" class="form-control"></select></td>
+                                            <td><input type="time" id="agendaDay3Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay3End" class="form-control"></td>
                                             <td>
                                                 <select id="agendaDay3Slot" class="form-control">
-                                                    <option value="" selected>Padrão</option>
+                                                    <option value="10">10</option>
                                                     <option value="15">15</option>
-                                                    <option value="30">30</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
                                                     <option value="45">45</option>
                                                     <option value="60">60</option>
-                                                    <option value="75">75</option>
-                                                    <option value="90">90</option>
-                                                    <option value="105">105</option>
-                                                    <option value="120">120</option>
-                                                    <option value="150">150</option>
-                                                    <option value="180">180</option>
-                                                    <option value="210">210</option>
-                                                    <option value="240">240</option>
-                                                    <option value="720">720</option>
                                                 </select>
                                             </td>
                                         </tr>
                                         <tr>
                                             <td style="text-align:center;"><input type="checkbox" id="agendaDay4Enabled"></td>
                                             <td>Quinta-feira</td>
-                                            <td><select id="agendaDay4Start" class="form-control"></select></td>
-                                            <td><select id="agendaDay4End" class="form-control"></select></td>
+                                            <td><input type="time" id="agendaDay4Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay4End" class="form-control"></td>
                                             <td>
                                                 <select id="agendaDay4Slot" class="form-control">
-                                                    <option value="" selected>Padrão</option>
+                                                    <option value="10">10</option>
                                                     <option value="15">15</option>
-                                                    <option value="30">30</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
                                                     <option value="45">45</option>
                                                     <option value="60">60</option>
-                                                    <option value="75">75</option>
-                                                    <option value="90">90</option>
-                                                    <option value="105">105</option>
-                                                    <option value="120">120</option>
-                                                    <option value="150">150</option>
-                                                    <option value="180">180</option>
-                                                    <option value="210">210</option>
-                                                    <option value="240">240</option>
-                                                    <option value="720">720</option>
                                                 </select>
                                             </td>
                                         </tr>
                                         <tr>
                                             <td style="text-align:center;"><input type="checkbox" id="agendaDay5Enabled"></td>
                                             <td>Sexta-feira</td>
-                                            <td><select id="agendaDay5Start" class="form-control"></select></td>
-                                            <td><select id="agendaDay5End" class="form-control"></select></td>
+                                            <td><input type="time" id="agendaDay5Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay5End" class="form-control"></td>
                                             <td>
                                                 <select id="agendaDay5Slot" class="form-control">
-                                                    <option value="" selected>Padrão</option>
+                                                    <option value="10">10</option>
                                                     <option value="15">15</option>
-                                                    <option value="30">30</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
                                                     <option value="45">45</option>
                                                     <option value="60">60</option>
-                                                    <option value="75">75</option>
-                                                    <option value="90">90</option>
-                                                    <option value="105">105</option>
-                                                    <option value="120">120</option>
-                                                    <option value="150">150</option>
-                                                    <option value="180">180</option>
-                                                    <option value="210">210</option>
-                                                    <option value="240">240</option>
-                                                    <option value="720">720</option>
                                                 </select>
                                             </td>
                                         </tr>
                                         <tr>
                                             <td style="text-align:center;"><input type="checkbox" id="agendaDay6Enabled"></td>
                                             <td>Sábado</td>
-                                            <td><select id="agendaDay6Start" class="form-control"></select></td>
-                                            <td><select id="agendaDay6End" class="form-control"></select></td>
+                                            <td><input type="time" id="agendaDay6Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay6End" class="form-control"></td>
                                             <td>
                                                 <select id="agendaDay6Slot" class="form-control">
-                                                    <option value="" selected>Padrão</option>
+                                                    <option value="10">10</option>
                                                     <option value="15">15</option>
-                                                    <option value="30">30</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
                                                     <option value="45">45</option>
                                                     <option value="60">60</option>
-                                                    <option value="75">75</option>
-                                                    <option value="90">90</option>
-                                                    <option value="105">105</option>
-                                                    <option value="120">120</option>
-                                                    <option value="150">150</option>
-                                                    <option value="180">180</option>
-                                                    <option value="210">210</option>
-                                                    <option value="240">240</option>
-                                                    <option value="720">720</option>
                                                 </select>
                                             </td>
                                         </tr>
                                         <tr>
                                             <td style="text-align:center;"><input type="checkbox" id="agendaDay7Enabled"></td>
                                             <td>Domingo</td>
-                                            <td><select id="agendaDay7Start" class="form-control"></select></td>
-                                            <td><select id="agendaDay7End" class="form-control"></select></td>
+                                            <td><input type="time" id="agendaDay7Start" class="form-control"></td>
+                                            <td><input type="time" id="agendaDay7End" class="form-control"></td>
                                             <td>
                                                 <select id="agendaDay7Slot" class="form-control">
-                                                    <option value="" selected>Padrão</option>
+                                                    <option value="10">10</option>
                                                     <option value="15">15</option>
-                                                    <option value="30">30</option>
+                                                    <option value="20">20</option>
+                                                    <option value="30" selected>30</option>
                                                     <option value="45">45</option>
                                                     <option value="60">60</option>
-                                                    <option value="75">75</option>
-                                                    <option value="90">90</option>
-                                                    <option value="105">105</option>
-                                                    <option value="120">120</option>
-                                                    <option value="150">150</option>
-                                                    <option value="180">180</option>
-                                                    <option value="210">210</option>
-                                                    <option value="240">240</option>
-                                                    <option value="720">720</option>
                                                 </select>
                                             </td>
                                         </tr>
@@ -2392,9 +2261,9 @@
                             Defina o que este usuário pode fazer em cada área do sistema.
                         </p>
 
-                        <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                        <div class="table-container">
                             <table id="permissionsTable" style="font-size: 0.85rem;">
-                                <thead style="position: sticky; top: 0; background-color: #fff; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                                <thead>
                                     <tr>
                                         <th>Módulo/Tabela</th>
                                         <th style="text-align: center;">Ver (Select)</th>
@@ -2545,35 +2414,6 @@
                                     <input type="file" id="myCompanyLogoFile" accept="image/*" style="flex: 1;">
                                     <input type="hidden" id="myCompanyLogoBase64">
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-card">
-                        <h3 class="card-title">Horário de Funcionamento Padrão</h3>
-                        <p style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Estes horários definem os limites de agendamento na grade semanal dos profissionais.</p>
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label for="myCompanyInicioSemana">Seg a Sex (Início) *</label>
-                                <input type="time" id="myCompanyInicioSemana" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="myCompanyFimSemana">Seg a Sex (Fim) *</label>
-                                <input type="time" id="myCompanyFimSemana" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="myCompanyInicioSabado">Sábado (Início) *</label>
-                                <input type="time" id="myCompanyInicioSabado" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="myCompanyFimSabado">Sábado (Fim) *</label>
-                                <input type="time" id="myCompanyFimSabado" required>
-                            </div>
-                            <div class="form-group span-2" style="display:flex; align-items:center;">
-                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:500;">
-                                    <input type="checkbox" id="myCompanyDomingoFechado" style="width:18px; height:18px; margin:0;">
-                                    <span>Domingo Fechado</span>
-                                </label>
                             </div>
                         </div>
                     </div>
@@ -2905,27 +2745,6 @@
                                 <input type="date" id="empresaDataVencimento">
                             </div>
 
-                            <div class="form-group">
-                                <label for="empresaTempoConsulta">Consulta Minutos</label>
-                                <select id="empresaTempoConsulta">
-                                    <option value="0">0</option>
-                                    <option value="15">15</option>
-                                    <option value="30" selected>30</option>
-                                    <option value="45">45</option>
-                                    <option value="60">60</option>
-                                    <option value="75">75</option>
-                                    <option value="90">90</option>
-                                    <option value="105">105</option>
-                                    <option value="120">120</option>
-                                    <option value="150">150</option>
-                                    <option value="180">180</option>
-                                    <option value="210">210</option>
-                                    <option value="240">240</option>
-                                    <option value="720">720</option>
-                                </select>
-                                <small class="form-hint" style="color: var(--text-muted); font-size: 0.75rem;">Intervalo padrão de atendimento entre Agendas da clínica.</small>
-                            </div>
-
                             <div class="form-group span-2">
                                 <label for="empresaLogo">Logotipo (Arquivo)</label>
                                 <div style="display: flex; align-items: center; gap: 15px;">
@@ -2937,35 +2756,6 @@
                                     <input type="file" id="empresaLogoFile" accept="image/*" style="flex: 1;">
                                     <input type="hidden" id="empresaLogoBase64">
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-card">
-                        <h3 class="card-title">Horário de Funcionamento Padrão</h3>
-                        <p style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Estes horários definem os limites de agendamento na grade semanal dos profissionais desta empresa.</p>
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label for="emp_horario_inicio_semana">Seg a Sex (Início) *</label>
-                                <input type="time" id="emp_horario_inicio_semana" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="emp_horario_fim_semana">Seg a Sex (Fim) *</label>
-                                <input type="time" id="emp_horario_fim_semana" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="emp_horario_inicio_sabado">Sábado (Início) *</label>
-                                <input type="time" id="emp_horario_inicio_sabado" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="emp_horario_fim_sabado">Sábado (Fim) *</label>
-                                <input type="time" id="emp_horario_fim_sabado" required>
-                            </div>
-                            <div class="form-group span-2" style="display:flex; align-items:center;">
-                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:500;">
-                                    <input type="checkbox" id="emp_domingo_fechado" style="width:18px; height:18px; margin:0;">
-                                    <span>Domingo Fechado</span>
-                                </label>
                             </div>
                         </div>
                     </div>
@@ -3104,7 +2894,6 @@
                                     <th>Profissional</th>
                                     <th>Status</th>
                                     <th>Valor Total</th>
-                                    <th>Valor Pago</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
@@ -3645,114 +3434,9 @@
                         <pre id="mkSmtpResult" class="hidden" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 12px 0 0;"></pre>
                     </div>
                 </div>
-              </section>
+            </section>
 
-              <!-- WHATSAPP MARKETING VIEW -->
-              <section id="whatsappMarketingView" class="view-section hidden">
-                  <div class="section-header">
-                      <div>
-                          <h2><i class="ri-whatsapp-line"></i> Campanhas WhatsApp</h2>
-                          <p>Fidelização e contato direto via WhatsApp Web.</p>
-                      </div>
-                  </div>
-
-                  <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
-                      <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
-                          <button id="btnWaMarketingTabAniversariantes" class="btn btn-secondary active">Aniversariantes</button>
-                          <button id="btnWaMarketingTabInvalidos" class="btn btn-secondary">Números Inválidos</button>
-                      </div>
-                  </div>
-
-                  <div id="waMarketingTabAniversariantes">
-                      <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
-                          <div style="display:flex; gap: 1.5rem; align-items:flex-end; flex-wrap: wrap;">
-                              <div class="form-group" style="min-width: 220px; margin-bottom: 0;">
-                                  <label for="waFilterPeriod">Período de Aniversário</label>
-                                  <select id="waFilterPeriod" class="form-control">
-                                      <option value="hoje">Hoje</option>
-                                      <option value="semana">Esta Semana (Próximos 7 dias)</option>
-                                      <option value="mes">Este Mês</option>
-                                  </select>
-                              </div>
-                              <div style="display:flex; align-items:center; gap: 0.75rem; margin-bottom: 0;">
-                                  <button id="btnWaRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar Lista</button>
-                              </div>
-                          </div>
-                      </div>
-
-                      <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
-                          <h3 style="margin-top: 0; margin-bottom: 1rem;">Mensagem Personalizada</h3>
-                          <div style="display:flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
-                              <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;">
-                                  <input type="radio" name="waTemplate" value="parabens" checked>
-                                  Parabéns!
-                              </label>
-                              <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;">
-                                  <input type="radio" name="waTemplate" value="limpeza">
-                                  Promoção de Limpeza
-                              </label>
-                              <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;">
-                                  <input type="radio" name="waTemplate" value="retorno">
-                                  Agende seu Retorno
-                              </label>
-                          </div>
-                          <div class="form-group" style="margin-bottom: 0;">
-                              <textarea id="waMessageText" class="form-control" rows="4" placeholder="Digite sua mensagem aqui... Use {nome} para substituir pelo nome do paciente.">Feliz aniversário, {nome}! 🎉 Desejamos muitas felicidades e um sorriso sempre radiante!</textarea>
-                          </div>
-                      </div>
-
-                      <div class="card" style="border: 2px solid #2c3e50; border-radius: 8px;">
-                          <div style="display:flex; justify-content: space-between; align-items:center; padding: 1rem 1rem 0; gap: 1rem; flex-wrap: wrap;">
-                              <h3 style="margin:0;">Lista de Pacientes</h3>
-                              <div style="display:flex; align-items:center; gap: 0.75rem;">
-                                  <span id="waPatientsSummary" style="color: var(--text-muted);">—</span>
-                                  <button id="btnWaSendBulk" class="btn btn-primary" onclick="generateWaLinks()" disabled><i class="ri-links-line"></i> Gerar Links de Envio</button>
-                              </div>
-                          </div>
-                          <div style="max-height: 500px; overflow-y: auto; overflow-x: auto; margin-top: 1rem;">
-                              <table class="main-table" id="waPatientsTable">
-                                  <thead>
-                                      <tr>
-                                          <th style="width: 44px; text-align: center; position: sticky; top: 0; background: #fff; z-index: 1;"><input type="checkbox" id="waSelectAll"></th>
-                                          <th style="position: sticky; top: 0; background: #fff; z-index: 1;">Paciente</th>
-                                          <th style="width: 180px; position: sticky; top: 0; background: #fff; z-index: 1;">WhatsApp</th>
-                                          <th style="width: 180px; position: sticky; top: 0; background: #fff; z-index: 1;">Nascimento</th>
-                                          <th style="width: 160px; position: sticky; top: 0; background: #fff; z-index: 1;">Status</th>
-                                          <th style="width: 120px; text-align:center; position: sticky; top: 0; background: #fff; z-index: 1;">Ação</th>
-                                      </tr>
-                                  </thead>
-                                  <tbody id="waPatientsBody">
-                                      <tr><td colspan="6" style="text-align:center; padding: 2rem; color: var(--text-muted);">Nenhum paciente encontrado.</td></tr>
-                                  </tbody>
-                              </table>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div id="waMarketingTabInvalidos" class="hidden">
-                      <div class="card" style="border: 2px solid var(--danger-color); border-radius: 8px;">
-                          <div style="display:flex; justify-content:space-between; align-items:center; padding: 1rem 1rem 0; margin-bottom: 1rem;">
-                              <h3 class="card-title" style="margin:0;"><i class="ri-forbid-line" style="color:var(--danger-color);"></i> Lista de Números Inválidos</h3>
-                          </div>
-                          <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                              <table class="main-table">
-                                  <thead>
-                                      <tr>
-                                          <th style="position: sticky; top: 0; background: #fff; z-index: 1;">PACIENTE</th>
-                                          <th style="position: sticky; top: 0; background: #fff; z-index: 1;">TELEFONE / CELULAR</th>
-                                          <th style="text-align:center; position: sticky; top: 0; background: #fff; z-index: 1;">AÇÃO</th>
-                                      </tr>
-                                  </thead>
-                                  <tbody id="waInvalidosBody">
-                                      <tr><td colspan="3" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando...</td></tr>
-                                  </tbody>
-                              </table>
-                          </div>
-                      </div>
-                  </div>
-              </section>
-
-              <!-- COMMISSIONS VIEW -->
+            <!-- COMMISSIONS VIEW -->
             <section id="commissionsView" class="view-section hidden">
                 <div class="section-header">
                     <div>
@@ -3981,19 +3665,17 @@
                     </div>
                 </div>
 
-                <div id="agendaWarningMsg" style="display: none; background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-weight: 500;"></div>
-
                 <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
                     <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="min-width: 210px; margin-bottom: 0;">
+                            <label for="agendaDate">Data</label>
+                            <input id="agendaDate" type="date" class="form-control">
+                        </div>
                         <div id="agendaProfessionalGroup" class="form-group" style="flex: 1; min-width: 280px; margin-bottom: 0;">
                             <label for="agendaProfessional">Profissional</label>
                             <select id="agendaProfessional" class="form-control">
                                 <option value="">Selecione...</option>
                             </select>
-                        </div>
-                        <div class="form-group" style="min-width: 210px; margin-bottom: 0;">
-                            <label for="agendaDate">Data</label>
-                            <input id="agendaDate" type="date" class="form-control">
                         </div>
                         <div class="form-group" style="margin-bottom: 0; display: flex; gap: 0.5rem;">
                             <button id="btnAgendaRefresh" class="btn btn-secondary"><i class="ri-refresh-line"></i> Atualizar</button>
@@ -4111,57 +3793,6 @@
                         <div id="proteseEmptyState" class="empty-state hidden">
                             <i class="ri-tools-line"></i>
                             <p>Nenhuma ordem protética encontrada.</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- CHAT PACIENTES VIEW -->
-            <section id="chatPacientesView" class="view-section hidden">
-                <div class="section-header">
-                    <div>
-                        <h2><i class="ri-message-3-line"></i> Central do Paciente</h2>
-                        <p>Atendimento e conversas com pacientes pelo portal.</p>
-                    </div>
-                </div>
-
-                <div class="card" style="padding: 0; display: flex; height: 600px; max-height: calc(100vh - 150px); overflow: hidden;">
-                    <!-- Left Column: Patient List -->
-                    <div style="width: 300px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: #fff;">
-                        <div style="padding: 15px; border-bottom: 1px solid var(--border-color); background: #f8fafc;">
-                            <h3 style="margin: 0; font-size: 14px; color: var(--text-color);">Pacientes</h3>
-                        </div>
-                        <div id="chatPacientesList" style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
-                            <!-- Items will be injected here -->
-                            <p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 20px;">Carregando...</p>
-                        </div>
-                    </div>
-
-                    <!-- Right Column: Chat Window -->
-                    <div style="flex: 1; display: flex; flex-direction: column; background: #f1f5f9;">
-                        <!-- Chat Header -->
-                        <div style="padding: 15px 20px; border-bottom: 1px solid var(--border-color); background: #fff; display: flex; align-items: center; justify-content: space-between;">
-                            <h3 id="chatActivePatientName" style="margin: 0; font-size: 16px; color: var(--text-color);">Selecione um paciente</h3>
-                        </div>
-
-                        <!-- Chat Messages -->
-                        <div id="chatActiveMessages" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
-                            <div style="display: flex; height: 100%; align-items: center; justify-content: center; color: var(--text-muted);">
-                                Selecione um paciente na lista ao lado para ver as mensagens.
-                            </div>
-                        </div>
-
-                        <!-- Chat Input -->
-                        <div style="padding: 15px 20px; border-top: 1px solid var(--border-color); background: #fff; display: flex; flex-direction: column; gap: 8px;">
-                            <input type="file" id="chatAdminFileInput" style="display: none" accept=".pdf" onchange="uploadArquivoAdminChat(this)">
-                            <input type="text" id="chatAdminInput" placeholder="Digite sua mensagem..." class="form-control" style="width: 100%; padding: 12px 14px; font-size: 13px;" disabled>    
-                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                                <button id="btnAdminAnexo" onclick="document.getElementById('chatAdminFileInput').click()" class="btn btn-secondary" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 16px; height: 38px; font-size: 14px;" title="Anexar PDF" disabled>
-                                    <span>📎</span>
-                                    <span>Anexar PDF</span>
-                                </button>
-                                <button id="btnSendAdminChat" class="btn btn-primary" style="width: 140px; height: 38px; display: flex; align-items: center; justify-content: center;" disabled>Enviar</button>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -4854,70 +4485,33 @@
             </div>
 
             <div id="modalAgenda" class="modal-overlay hidden">
-                <div class="modal-content" style="max-width: 560px; max-height: 85vh; display: flex; flex-direction: column;">
+                <div class="modal-content" style="max-width: 560px;">
                     <div class="modal-header">
                         <h3 id="modalAgendaTitle"><i class="ri-calendar-event-line"></i> Novo Agendamento</h3>
                         <button type="button" class="btn-close-modal" id="btnCloseModalAgenda">
                             <i class="ri-close-line"></i>
                         </button>
                     </div>
-                    <div class="modal-body" style="overflow-y: auto; flex: 1;">
+                    <div class="modal-body">
                         <form id="formAgenda" style="display: flex; flex-direction: column; gap: 1rem;">
                             <input type="hidden" id="agendaId">
-                            <div class="form-group" style="position: relative;">
-                                <label for="agendaPacienteBusca">Paciente (Nome ou CPF)</label>
-                                <input type="text" id="agendaPacienteBusca" class="form-control" placeholder="Digite para buscar..." autocomplete="off">
-                                <input type="hidden" id="agendaPaciente">
-                                <div id="agendaPacienteDropdown" class="border border-gray-300 rounded-b shadow-lg" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
-                            </div>
-                            
-                            <div id="cadastroExpressoContainer" style="display: none; background: #f8fafc; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 1rem;">
-                                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #334155;"><i class="ri-user-add-line"></i> Cadastro Rápido de Paciente</h4>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                    <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="font-size: 12px;">Nome Completo *</label>
-                                        <input type="text" id="expNome" class="form-control" style="padding: 6px 10px; font-size: 13px;" required>
-                                    </div>
-                                    <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="font-size: 12px;">CPF *</label>
-                                        <input type="text" id="expCpf" class="form-control" style="padding: 6px 10px; font-size: 13px;" oninput="this.value = maskCPF(this.value)" maxlength="14" required>
-                                    </div>
-                                    <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="font-size: 12px;">Celular *</label>
-                                        <input type="text" id="expCelular" class="form-control" style="padding: 6px 10px; font-size: 13px;" oninput="this.value = maskCellphone(this.value)" required maxlength="15">
-                                    </div>
-                                    <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="font-size: 12px;">CEP</label>
-                                        <input type="text" id="expCep" class="form-control" style="padding: 6px 10px; font-size: 13px;" oninput="this.value = maskCEP(this.value)" onblur="buscarCepExpresso(this.value)" maxlength="9">
-                                    </div>
-                                </div>
-                                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
-                                    <button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="cancelarCadastroExpresso()">Cancelar</button>
-                                    <button type="button" class="btn btn-primary" style="padding: 4px 10px; font-size: 12px;" onclick="salvarCadastroExpresso()">Salvar Paciente</button>
-                                </div>
-                            </div>
                             <div class="form-group">
-                                <label for="agendaTitulo">Título *</label>
-                                <select id="agendaTitulo" class="form-control" required>
-                                    <option value="Consulta" selected>Consulta</option>
-                                    <option value="Avaliação">Avaliação</option>
-                                    <option value="Retorno">Retorno</option>
-                                    <option value="Urgência">Urgência</option>
+                                <label for="agendaPaciente">Paciente</label>
+                                <select id="agendaPaciente" class="form-control">
+                                    <option value="">(Sem paciente)</option>
                                 </select>
                             </div>
-                            <div class="form-group" style="display: flex; gap: 10px;">
-                                <div style="flex: 1;">
-                                    <label for="agendaDataInput">Data</label>
-                                    <input id="agendaDataInput" type="date" class="form-control" required readonly style="background-color: #f1f5f9;">
-                                </div>
-                                <div style="flex: 1;">
-                                    <label for="agendaInicio">Hora Início</label>
-                                    <select id="agendaInicio" class="form-control" required></select>
-                                </div>
-                                <div style="flex: 1;">
-                                    <label for="agendaFim">Hora Fim</label>
-                                    <select id="agendaFim" class="form-control" required></select>
-                                </div>
+                            <div class="form-group">
+                                <label for="agendaTitulo">Título</label>
+                                <input id="agendaTitulo" type="text" class="form-control" placeholder="Ex: Consulta / Retorno">
+                            </div>
+                            <div class="form-group">
+                                <label for="agendaInicio">Início</label>
+                                <input id="agendaInicio" type="datetime-local" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="agendaFim">Fim</label>
+                                <input id="agendaFim" type="datetime-local" class="form-control" required>
                             </div>
                             <div class="form-group">
                                 <label for="agendaStatus">Status</label>
@@ -4932,12 +4526,12 @@
                                 <label for="agendaObs">Observações</label>
                                 <textarea id="agendaObs" class="form-control" rows="3" placeholder="Anotações..."></textarea>
                             </div>
+                            <div style="display:flex; gap: 0.75rem; justify-content: flex-end;">
+                                <button type="button" id="btnAgendaDelete" class="btn btn-danger hidden"><i class="ri-delete-bin-line"></i> Excluir</button>
+                                <button type="button" id="btnAgendaCancel" class="btn btn-secondary">Cancelar</button>
+                                <button type="submit" id="btnAgendaSave" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
+                            </div>
                         </form>
-                    </div>
-                    <div class="modal-footer" style="display:flex; gap: 0.75rem; justify-content: flex-end; padding: 1rem; border-top: 1px solid var(--border-color); background: #fff; border-radius: 0 0 16px 16px;">
-                        <button type="button" id="btnAgendaDelete" class="btn btn-danger hidden"><i class="ri-delete-bin-line"></i> Excluir</button>
-                        <button type="button" id="btnAgendaCancel" class="btn btn-secondary">Cancelar</button>
-                        <button type="button" onclick="saveAgendaFromModal()" id="btnAgendaSave" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
                     </div>
                 </div>
             </div>
@@ -5346,34 +4940,6 @@
     </div>
 
     <!-- Modal para Captura de Câmera -->
-    <!-- Modal Laudo Atendimento -->
-    <div id="modalLaudoAtendimento" class="modal-overlay hidden">
-        <div class="modal-content" style="max-width: 600px; width: 95%;">
-            <div class="modal-header">
-                <h3><i class="ri-file-edit-line"></i> Evolução Clínica (Temporária)</h3>
-                <button type="button" class="btn-icon" onclick="document.getElementById('modalLaudoAtendimento').classList.add('hidden')"><i class="ri-close-line"></i></button>
-            </div>
-            <div class="modal-body">
-                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
-                    O texto padrão abaixo é gerado automaticamente e não pode ser editado. Utilize o campo de "Observações Livres" para adicionar suas notas clínicas. O laudo só será salvo definitivamente no prontuário ao clicar em <strong>Finalizar</strong>.
-                </p>
-                <div class="form-group">
-                    <label>Evolução Padrão (Automática)</label>
-                    <textarea id="laudoAtendimentoTextoPadrao" rows="3" style="width: 100%; background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; cursor: not-allowed;" disabled></textarea>
-                </div>
-                <div class="form-group" style="margin-top: 1rem;">
-                    <label>Observações Livres (Opcional)</label>
-                    <textarea id="laudoAtendimentoTexto" rows="4" style="width: 100%;" placeholder="Digite aqui os detalhes adicionais do procedimento, intercorrências, materiais utilizados, etc..."></textarea>
-                </div>
-                <input type="hidden" id="laudoAtendimentoItemId">
-            </div>
-            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 1rem;">
-                <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalLaudoAtendimento').classList.add('hidden')">Cancelar</button>
-                <button type="button" class="btn btn-primary" onclick="saveLaudoTemporario()"><i class="ri-save-line"></i> Salvar (Temporário)</button>
-            </div>
-        </div>
-    </div>
-
     <div id="cameraModal" class="modal-overlay hidden">
         <div class="modal-content camera-modal">
             <div class="modal-header">
@@ -5923,44 +5489,102 @@
             <div class="modal-body" style="overflow: auto; padding-left: 10mm;">
                 <div id="manual-content">
                     <h1>OCC — Guia do Usuário (Administrador da Clínica) 🦷✨</h1>
-                    <p>Bem-vindo(a)! Este guia definitivo e detalhado foi feito para você, <strong>Administrador(a) da Clínica</strong>. Aqui, explicamos o funcionamento campo a campo das 23 telas e módulos que compõem o ecossistema do OCC.</p>
-                    <hr>
+                    <p>Bem-vindo(a)! Este guia é para você, <strong>Administrador(a) da Clínica</strong>, que acabou de receber o acesso ao OCC.</p>
 
-                    <h2>1. Dashboard ⏱️</h2>
-                    <p><strong>Objetivo:</strong> Visão executiva e indicadores em tempo real da unidade.</p>
+                    <h2>1) Primeiro acesso 🔐</h2>
+                    <ol>
+                        <li>Abra o OCC no link que você recebeu 🌐</li>
+                        <li>Faça login com:
+                            <ul>
+                                <li>📧 <strong>E-mail</strong>: o e-mail da clínica</li>
+                                <li>🔑 <strong>Senha inicial</strong>: a senha enviada pelo responsável do sistema</li>
+                            </ul>
+                        </li>
+                        <li>✅ Ao entrar, você já está no ambiente da sua clínica</li>
+                    </ol>
+                    <p><em>Dica: troque a senha assim que possível 🔁🛡️</em></p>
+
+                    <h2>2) Entendendo o menu 🧭</h2>
                     <ul>
-                        <li><strong>Faturamento Diário/Mensal:</strong> Cards mostrando a soma de receitas pagas no período.</li>
-                        <li><strong>Consultas do Dia:</strong> Número total de agendamentos para a data atual.</li>
-                        <li><strong>Gráficos de Receitas vs Despesas:</strong> Comparativo visual de lucratividade.</li>
-                        <li><strong>Inadimplência:</strong> Alerta de pacientes com parcelas vencidas.</li>
+                        <li>⏱️ Dashboard (Indicadores do dia e visão executiva da unidade)</li>
+                        <li>👤 Pacientes</li>
+                        <li>👥 Profissionais</li>
+                        <li>🧰 Serviços</li>
+                        <li>📅 Agenda (se sua clínica usar)</li>
+                        <li>📑 Orçamentos</li>
+                        <li>🦷 Odontograma (dentro do orçamento)</li>
+                        <li>💰 Comissões</li>
+                        <li>🩺 Atendimento</li>
+                        <li>🏭 Produção Protética (Fluxo de custódia com QR Code)</li>
+                        <li>📣 Marketing (crie campanhas e recupere pacientes)</li>
+                        <li>🔐 Gerenciar usuários</li>
+                        <li>🕵️ Auditar Cancelados</li>
+                    </ul>
+                    <p><strong>Obs.:</strong> o cadastro de <strong>novas clínicas</strong> é restrito ao dono do sistema (SuperAdmin) 🔒</p>
+
+                    <h2>3) Configurar o logotipo da clínica 🏥🖼️</h2>
+                    <ol>
+                        <li>Vá em <strong>Configurações → Minha Clínica</strong> 🏠🏥</li>
+                        <li>Confira se os dados estão corretos ✏️</li>
+                        <li>Em <strong>Logotipo (Arquivo)</strong>:
+                            <ul>
+                                <li>selecione a imagem 📷</li>
+                                <li>aguarde aparecer a prévia 👀</li>
+                            </ul>
+                        </li>
+                        <li>Clique em <strong>Salvar</strong> 💾✅</li>
+                    </ol>
+                    <p>Pronto! Seu logotipo passa a aparecer no sistema e em relatórios 📄✨</p>
+
+                    <h2>4) Cadastrar seus primeiros dentistas/profissionais 👩‍⚕️🧑‍⚕️</h2>
+                    <ol>
+                        <li>No menu, abra <strong>Profissionais</strong> 👥</li>
+                        <li>Clique em <strong>Novo Profissional</strong> ➕</li>
+                        <li>Preencha:
+                            <ul>
+                                <li>🧾 Nome</li>
+                                <li>🧠 Especialidade (se tiver)</li>
+                                <li>📞 Contato (opcional)</li>
+                            </ul>
+                        </li>
+                        <li>Clique em <strong>Salvar</strong> ✅</li>
+                    </ol>
+                    <p><em>Dica: cadastre também recepção/auxiliar se vocês quiserem controlar permissões por usuário 👩‍💼👨‍💼</em></p>
+
+                    <h2>5) Criar usuários (logins) da equipe 👤🔑</h2>
+                    <p>Para cada pessoa que vai usar o sistema (dentista, recepção, auxiliar):</p>
+                    <ol>
+                        <li>Abra <strong>Usuários (Admin)</strong> 👤⚙️</li>
+                        <li>Clique em <strong>Novo Usuário</strong> ➕</li>
+                        <li>Informe:
+                            <ul>
+                                <li>📧 E-mail do colaborador</li>
+                                <li>🔑 Senha inicial (você define)</li>
+                                <li>🏷️ Perfil (Dentista / Recepção / Auxiliar / Admin)</li>
+                            </ul>
+                        </li>
+                        <li>Clique em <strong>Salvar Usuário</strong> ✅</li>
+                    </ol>
+                    <ul>
+                        <li>✅ O usuário já fica ativo (não precisa confirmação por e-mail) ⚡</li>
+                        <li>🔐 O perfil define o que a pessoa pode ver e fazer</li>
+                        <li>🛡️ Você pode ajustar permissões conforme sua rotina</li>
                     </ul>
 
-                    <h2>2. Pacientes 👤</h2>
-                    <p><strong>Objetivo:</strong> Centralizar o cadastro e o prontuário de saúde.</p>
-                    <ul>
-                        <li><strong>Nome, CPF/RG, Nascimento:</strong> Identificação básica (usada também no Marketing).</li>
-                        <li><strong>Contatos:</strong> Telefone/WhatsApp e E-mail para a régua de relacionamento.</li>
-                        <li><strong>Anamnese (Histórico Médico):</strong> Checkboxes para Alergias, Diabetes, Hipertensão e campo livre para Observações Clínicas.</li>
-                    </ul>
-
-                    <h2>3. Profissionais 👥</h2>
-                    <p><strong>Objetivo:</strong> Cadastrar a equipe clínica e definir regras financeiras.</p>
-                    <ul>
-                        <li><strong>Nome e CRO:</strong> Identificação oficial do dentista.</li>
-                        <li><strong>% de Comissão Padrão:</strong> Porcentagem base que o profissional ganha sobre serviços executados.</li>
-                        <li><strong>Cor na Agenda:</strong> Seletor de cor para facilitar a visualização no calendário.</li>
-                    </ul>
-
-                    <h2>4. Especialidades 🧰</h2>
-                    <p><strong>Objetivo:</strong> Categorizar as áreas de atendimento (ex: Ortodontia, Implantodontia).</p>
-
-                    <h2>5. Serviços 🧾</h2>
-                    <p><strong>Objetivo:</strong> Sua tabela de preços e procedimentos.</p>
-                    <ul>
-                        <li><strong>Descrição e Valor Base:</strong> Nome comercial e preço padrão.</li>
-                        <li><strong>Exige Odontograma:</strong> Se marcado, o sistema obrigará o dentista a selecionar os dentes (elementos) ao orçar este serviço.</li>
-                    </ul>
-                    
+                    <h2>6) Configurar serviços (tabela de preços) 🧾💰</h2>
+                    <ol>
+                        <li>Abra <strong>Serviços/Estoque</strong> 🧰</li>
+                        <li>Clique em <strong>Novo Serviço</strong> ➕</li>
+                        <li>Preencha:
+                            <ul>
+                                <li>📝 Descrição (ex.: “Restauração”, “Canal”, “Coroa”)</li>
+                                <li>💵 Valor</li>
+                                <li>🦷 Se exige seleção por dente/elemento (quando aplicável)</li>
+                            </ul>
+                        </li>
+                        <li>Clique em <strong>Salvar</strong> ✅</li>
+                    </ol>
+                    <p><em>Dica: se o serviço for “por dente”, marque a opção de cálculo/elemento 🦷📌</em></p>
                     <div style="margin: 10px 0 18px; padding: 12px 14px; border: 1px solid rgba(16,185,129,0.35); background: rgba(16,185,129,0.08); border-radius: 12px;">
                         <div style="font-weight: 900; margin-bottom: 6px;">Importar Inteligência OCC</div>
                         <div style="color: rgba(15,23,42,0.75);">Se você preferir começar com um catálogo padrão (preços médios), estoque com conversão e kits com biossegurança, use a importação. Você continua livre para editar tudo depois.</div>
@@ -5970,67 +5594,60 @@
                         </div>
                     </div>
 
-                    <h2>6. Estoque: Inventário 📦</h2>
-                    <p><strong>Objetivo:</strong> Cadastrar os produtos físicos comprados (Quantidade Atual, Estoque Mínimo e Custo).</p>
+                    <h2>7) Cadastrar o primeiro paciente 👤📇</h2>
+                    <ol>
+                        <li>Abra <strong>Pacientes</strong> 👤</li>
+                        <li>Clique em <strong>Novo Paciente</strong> ➕</li>
+                        <li>Preencha o básico:
+                            <ul>
+                                <li>🧾 Nome</li>
+                                <li>📞 Telefone/WhatsApp</li>
+                                <li>📧 E-mail (se tiver)</li>
+                            </ul>
+                        </li>
+                        <li>Clique em <strong>Salvar</strong> ✅</li>
+                    </ol>
 
-                    <h2>7. Estoque: Modelos de Uso 🛠️</h2>
-                    <p><strong>Objetivo:</strong> Criar "Kits" (ex: Kit Avaliação = 1 Luva + 1 Máscara) para facilitar a baixa no estoque.</p>
+                    <h2>8) Criar o primeiro orçamento com odontograma 🦷📋</h2>
+                    <ol>
+                        <li>Abra <strong>Orçamentos</strong> 📑</li>
+                        <li>Clique em <strong>Novo Orçamento</strong> ➕</li>
+                        <li>Selecione o <strong>Paciente</strong> 👤</li>
+                        <li>Para adicionar itens:
+                            <ul>
+                                <li>selecione o <strong>Serviço</strong> 🧰</li>
+                                <li>se o serviço exigir dentes/elementos, clique em <strong>Odontograma</strong> 🦷</li>
+                            </ul>
+                        </li>
+                        <li>No odontograma:
+                            <ul>
+                                <li>toque/clique nos dentes desejados 🦷🦷🦷</li>
+                                <li>confirme em <strong>Confirmar Seleção</strong> ✅</li>
+                            </ul>
+                        </li>
+                        <li>Confira valores e clique em <strong>Salvar Orçamento</strong> 💾✅</li>
+                    </ol>
 
-                    <h2>8. Estoque: Vínculo de Serviços 🔗</h2>
-                    <p><strong>Objetivo:</strong> A mágica da automação. Ligar um serviço (Extração) a um material (Anestésico). A baixa no estoque ocorre automaticamente ao concluir o atendimento.</p>
-
-                    <h2>9. Estoque: Movimentações 🔄</h2>
-                    <p><strong>Objetivo:</strong> Registrar entradas (compras) e saídas manuais (perdas/vencimentos).</p>
-
-                    <h2>10. Estoque: Relatórios 📊</h2>
-                    <p><strong>Objetivo:</strong> Mostrar produtos abaixo do "Estoque Mínimo" que precisam ser comprados e o valor do capital imobilizado.</p>
-
-                    <h2>11. Orçamentos 📑</h2>
-                    <p><strong>Objetivo:</strong> Criação e negociação de planos de tratamento.</p>
+                    <h2>9) Rotina rápida (para começar bem) 🚀</h2>
                     <ul>
-                        <li><strong>Odontograma Interativo:</strong> Mapa dentário gráfico para seleção de dentes afetados.</li>
-                        <li><strong>Valor e Desconto:</strong> Campo para aplicar abatimentos em R$ ou %.</li>
-                        <li><strong>Status:</strong> Pendente, Aprovado (quando pago) ou Cancelado.</li>
+                        <li>👤 Cadastre pacientes</li>
+                        <li>👩‍⚕️ Cadastre dentistas/profissionais</li>
+                        <li>🧾 Cadastre os serviços e valores</li>
+                        <li>🦷 Faça o primeiro orçamento com odontograma</li>
+                        <li>💳 Registre pagamentos quando necessário</li>
                     </ul>
 
-                    <h2>12. Financeiro 💰</h2>
-                    <p><strong>Objetivo:</strong> Controle total do fluxo de caixa (Receitas e Despesas).</p>
-                    <ul>
-                        <li><strong>Orçamentos Pendentes:</strong> Fila aguardando o clique em "Receber" para liberar o procedimento para o dentista.</li>
-                    </ul>
-
-                    <h2>13. Comissões 💸</h2>
-                    <p><strong>Objetivo:</strong> Fechamento da folha de pagamento dos dentistas, cruzando os serviços "Concluídos" com os "Pagos".</p>
-
-                    <h2>14. Marketing 📣</h2>
-                    <p><strong>Objetivo:</strong> Régua de relacionamento. Filtre aniversariantes ou pacientes ausentes e faça o disparo da campanha via WhatsApp Web.</p>
-
-                    <h2>15. Atendimento: Consulta / Avaliação 🩺</h2>
-                    <p><strong>Objetivo:</strong> Tela do dentista para o 1º contato. Liste procedimentos e clique em "Salvar Avaliação" para gerar um Orçamento Pendente.</p>
-
-                    <h2>16. Atendimento: Atend. Profissional 🦷</h2>
-                    <p><strong>Objetivo:</strong> Tela de execução. Veja pacientes liberados, escreva a Evolução Clínica e marque os serviços como "Concluídos".</p>
-
-                    <h2>17. Agenda 📅</h2>
-                    <p><strong>Objetivo:</strong> Grade visual de horários. Agende pacientes e atualize o status (Confirmado, Aguardando, Finalizado).</p>
-
-                    <h2>18. Produção Protética 🏭</h2>
-                    <p><strong>Objetivo:</strong> Rastreabilidade de laboratório. Crie pedidos, gere a etiqueta com QR Code para o motoboy e acompanhe o status da peça.</p>
-
-                    <h2>19. Suporte / Tickets 🆘</h2>
-                    <p><strong>Objetivo:</strong> Falar com a equipe de desenvolvimento do OCC, abrindo chamados com prints de tela anexados.</p>
-
-                    <h2>20. Usuários Admin 🔐</h2>
-                    <p><strong>Objetivo:</strong> Criar os acessos (logins) para a equipe. Defina e-mail, senha inicial e o Perfil de Acesso (Admin, Recepção, Dentista, Auxiliar).</p>
-
-                    <h2>21. Minha Clínica 🏥</h2>
-                    <p><strong>Objetivo:</strong> Dados oficiais (CNPJ, Telefone) e upload do Logotipo (que passará a estampar o sistema e os recibos).</p>
-
-                    <h2>22. Parâmetros Financeiros ⚙️</h2>
-                    <p><strong>Objetivo:</strong> Informar as taxas de juros da sua maquininha de cartão para o cálculo de lucro líquido real.</p>
-
-                    <h2>23. Orçamentos Cancelados 🕵️</h2>
-                    <p><strong>Objetivo:</strong> Auditoria de orçamentos rejeitados. Analise os motivos de cancelamento e o valor perdido para traçar estratégias de recuperação.</p>
+                    <h2>10) Dúvidas comuns ❓</h2>
+                    <h3>“Meus dados ficam separados de outras clínicas?” 🛡️</h3>
+                    <p>Sim ✅ Cada clínica trabalha dentro do seu próprio ambiente (empresa). Seus usuários, pacientes, orçamentos e campanhas ficam isolados.</p>
+                    <h3>“Eu consigo cadastrar novas clínicas?” 🏢</h3>
+                    <p>Sim! O OCC foi desenhado para acompanhar o seu crescimento. Como Administrador, você tem total autonomia para expandir sua operação.</p>
+                    <p><strong>Multiclínicas:</strong> Você pode cadastrar novas unidades de atendimento diretamente pelo seu painel de gestão.</p>
+                    <p><strong>Gestão Unificada:</strong> Uma vez criada a nova unidade, você consegue alternar entre elas, gerindo agendas, financeiros e estoques de forma individual ou consolidada.</p>
+                    <p><strong>Configuração Instantânea:</strong> Cada nova clínica já nasce com as travas de segurança e o padrão de inteligência do OCC, pronta para operar em minutos.</p>
+                    <p>💡 <strong>Dica:</strong> Lembre-se de configurar os profissionais e usuários específicos para cada nova unidade após o cadastro.</p>
+                    <h3>“Esqueci a senha de um usuário” 🔑</h3>
+                    <p>Crie uma nova senha pelo módulo <strong>Usuários (Admin)</strong> ou peça suporte ao responsável do sistema 🛠️</p>
                 </div>
             </div>
         </div>
@@ -6162,46 +5779,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-    <!-- App Scripts (Modularized - 27 Units) -->
-    <script src="app_v22.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_dashboard.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_agenda.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_pacientes.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    
-    <!-- Atendimento -->
-    <script src="app_atendimento_consulta.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_atendimento_profissional.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    
-    <!-- Financeiro e Comercial -->
-    <script src="app_orcamentos.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_financeiro.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_comissoes.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_producao_protetica.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    
-    <!-- Estoque -->
-    <script src="app_estoque_inventario.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_estoque_modelos.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_estoque_vinculo.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_estoque_movimentacoes.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_estoque_relatorios.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    
-    <!-- Cadastros Base -->
-    <script src="app_profissionais.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_especialidades.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_servicos.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_marketing.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    
-    <!-- Suporte -->
-    <script src="app_suporte_central.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_suporte_tickets.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    
-    <!-- Configurações -->
-    <script src="app_config_empresas.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_config_assinaturas.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_config_minhaclinica.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_config_parametros.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_config_usuarios.js?v=20260611_LOCAL_FORCE_FINAL"></script>
-    <script src="app_config_audit.js?v=20260611_LOCAL_FORCE_FINAL"></script>
+    <!-- App Script -->
+    <script src="app_v22.js?v=20260524_AVALIACAO_FIX3"></script>
     <script>
         (function () {
             const areasClinicas = ['Dentística', 'Endodontia', 'Periodontia', 'Cirurgia', 'Implantodontia', 'Ortodontia', 'Harmonização Facial', 'Instrumental', 'Prótese', 'Biossegurança', 'Geral'];
@@ -6265,94 +5844,6 @@
                 if (t && t.id === 'inventoryTipoInventario') window.__forceInventoryAreaOptions(t);
             }, true);
         })();
-    </script>
-    <!-- Modal de Links do WhatsApp -->
-    <div id="waLinksModal" class="modal-overlay hidden">
-        <div class="modal-content" style="max-width: 600px; width: 95%;">
-            <div class="modal-header">
-                <h3><i class="ri-links-line"></i> Links de Envio (WhatsApp)</h3>
-                <button type="button" class="btn-close-modal" onclick="document.getElementById('waLinksModal').classList.add('hidden')">
-                    <i class="ri-close-line"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
-                    <h4 style="margin-top: 0; margin-bottom: 0.5rem; color: #166534;"><i class="ri-information-line"></i> Como enviar:</h4>
-                    <ol style="margin: 0; padding-left: 1.2rem; color: #166534; font-size: 0.9rem; line-height: 1.4;">
-                        <li>Clique em <strong>'Copiar Link'</strong> no paciente desejado (a fila será travada).</li>
-                        <li>Vá para a aba do WhatsApp Web.</li>
-                        <li>Clique na barra de endereços do navegador (ou aperte <strong>CTRL + L</strong>).</li>
-                        <li>Pressione <strong>CTRL + V</strong> e aperte Enter para abrir a conversa.</li>
-                    </ol>
-                </div>
-                <div class="card" style="border: 2px solid #22c55e; border-radius: 8px; margin-bottom: 0;">
-                    <div id="waLinksContainer" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 440px; overflow-y: auto; padding: 1rem;">
-                        <!-- Links serão injetados aqui -->
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // UX logic: Hide build badge in production
-        (function() {
-            const host = window.location.hostname;
-            if (host !== 'localhost' && host !== '127.0.0.1') {
-                const badge = document.getElementById('buildBadge');
-                if (badge) {
-                    badge.style.display = 'none';
-                }
-            }
-        })();
-
-        // Register Service Worker for PWA
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js')
-                    .then(reg => console.log('SW registrado com sucesso no admin', reg.scope))
-                    .catch(err => console.log('Falha ao registrar SW no admin', err));
-            });
-        }
-
-        // PWA Install Logic
-        let deferredPrompt;
-        const btnInstallApp = document.getElementById('btnInstallApp');
-
-        window.addEventListener('beforeinstallprompt', (e) => {
-            // Prevent the mini-infobar from appearing on mobile
-            e.preventDefault();
-            // Stash the event so it can be triggered later.
-            deferredPrompt = e;
-            // The button will be shown later in app_v22.js during login validation
-            // if the user has an active plan (TRIAL, A, or Y).
-        });
-
-        if (btnInstallApp) {
-            btnInstallApp.addEventListener('click', async () => {
-                if (deferredPrompt) {
-                    // Show the install prompt
-                    deferredPrompt.prompt();
-                    // Wait for the user to respond to the prompt
-                    const { outcome } = await deferredPrompt.userChoice;
-                    console.log(`User response to the install prompt: ${outcome}`);
-                    // We've used the prompt, and can't use it again, throw it away
-                    deferredPrompt = null;
-                    // Hide the button
-                    btnInstallApp.style.display = 'none';
-                }
-            });
-        }
-
-        window.addEventListener('appinstalled', () => {
-            // Hide the app-provided install promotion
-            if (btnInstallApp) {
-                btnInstallApp.style.display = 'none';
-            }
-            // Clear the deferredPrompt so it can be garbage collected
-            deferredPrompt = null;
-            console.log('PWA was installed');
-        });
     </script>
 </body>
 

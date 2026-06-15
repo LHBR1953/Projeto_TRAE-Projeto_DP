@@ -282,58 +282,19 @@ async function confirmAtendimentoItem({ budgetId, itemId, agendamentoId }, { sup
         }
 
         const denteRegiao = checkItem?.sub_divisao || checkItem?.subdivisao || 'Não especificado';
+        const defaultText = `Procedimento finalizado conforme orçamento. Profissional: ${profName}. Dente/Região: ${denteRegiao}.`;
         
-        // Captura do valor real digitado dinamicamente direto do DOM, conforme diretriz.
-        const laudoTextArea = document.getElementById('laudoAtendimentoTexto');
-        const modalItemIdInput = document.getElementById('laudoAtendimentoItemId');
-        let customLaudo = '';
-
-        // Garante que o texto capturado do DOM pertence exatamente a este item que está sendo finalizado
-        if (laudoTextArea && modalItemIdInput && String(modalItemIdInput.value) === String(itemId)) {
-            customLaudo = laudoTextArea.value.trim();
-        }
-
-        // Fallback seguro: se o campo estiver vazio ou for de outro item, tenta recuperar da memória temporária
-        if (!customLaudo && window.__occCustomLaudos && window.__occCustomLaudos[itemId]) {
-            customLaudo = window.__occCustomLaudos[itemId];
-        }
-
-        // INSERÇÃO DIRETA E ASSÍNCRONA DA EVOLUÇÃO
-        // Se houver observações livres, insere o registro unificado no prontuário ANTES de atualizar o status do item.
-        // O trigger do banco possui uma trava (where not exists) e não criará um registro duplicado.
-        if (customLaudo && b && (b.pacienteid || b.paciente_id)) {
-            try {
-                const servicoNome = checkItem?.descricao || 'Procedimento';
-                let descHtml = `<p><strong>Procedimento:</strong> ${servicoNome}</p>`;
-                if (denteRegiao !== 'Não especificado') {
-                    descHtml += `<p><strong>Elementos/Dentes:</strong> ${denteRegiao}</p>`;
-                }
-                descHtml += `<p><strong>Profissional:</strong> ${profName}</p>`;
-                descHtml += `<p><strong>Evolução:</strong> ${customLaudo.replace(/\n/g, '<br>')}</p>`;
-
-                await db.from('paciente_evolucao').insert([{
-                    empresa_id: currentEmpresaId,
-                    paciente_id: b.pacienteid || b.paciente_id,
-                    profissional_id: executorId,
-                    descricao: descHtml,
-                    dente_regiao: denteRegiao !== 'Não especificado' ? denteRegiao : null,
-                    orcamento_id: budgetId || checkItem?.orcamento_id,
-                    orcamento_item_id: itemId,
-                    origem: 'orcamento',
-                    auto_gerado: true
-                }]);
-            } catch (evErr) {
-                console.warn('Falha ao inserir evolução personalizada:', evErr);
-            }
-        }
+        const obsLivre = window.__occCustomLaudos && window.__occCustomLaudos[itemId] ? `\n\nObservações Adicionais:\n${window.__occCustomLaudos[itemId]}` : '';
+        const textoLaudo = defaultText + obsLivre;
 
         // UPDATE ATÔMICO
-        // Atualiza apenas o status e o profissional em orcamento_itens.
+        // Envia status, profissional_id e laudo_clinico de uma só vez
         const { data, error } = await withTimeout(
             db.from('orcamento_itens')
                 .update({ 
                     status: 'Finalizado',
-                    profissional_id: executorId
+                    profissional_id: executorId,
+                    laudo_clinico: textoLaudo
                 })
                 .eq('empresa_id', currentEmpresaId)
                 .eq('id', itemId)

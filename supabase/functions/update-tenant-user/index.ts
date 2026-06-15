@@ -17,21 +17,20 @@ function normalizeRole(input: unknown): string {
 }
 
 function buildFullPermissions() {
-    return {
-        dashboard: { select: true, insert: true, update: true, delete: true },
-        pacientes: { select: true, insert: true, update: true, delete: true },
-        profissionais: { select: true, insert: true, update: true, delete: true },
-        especialidades: { select: true, insert: true, update: true, delete: true },
-        servicos: { select: true, insert: true, update: true, delete: true },
-        orcamentos: { select: true, insert: true, update: true, delete: true },
-        financeiro: { select: true, insert: true, update: true, delete: true },
-        comissoes: { select: true, insert: true, update: true, delete: true },
-        marketing: { select: true, insert: true, update: true, delete: true },
-        atendimento: { select: true, insert: true, update: true, delete: true },
-        agenda: { select: true, insert: true, update: true, delete: true },
-        protese: { select: true, insert: true, update: true, delete: true },
-        tickets: { select: true, insert: true, update: true, delete: true },
-    };
+  return {
+    dashboard: { select: true, insert: true, update: true, delete: true },
+    pacientes: { select: true, insert: true, update: true, delete: true },
+    profissionais: { select: true, insert: true, update: true, delete: true },
+    especialidades: { select: true, insert: true, update: true, delete: true },
+    servicos: { select: true, insert: true, update: true, delete: true },
+    orcamentos: { select: true, insert: true, update: true, delete: true },
+    financeiro: { select: true, insert: true, update: true, delete: true },
+    comissoes: { select: true, insert: true, update: true, delete: true },
+    marketing: { select: true, insert: true, update: true, delete: true },
+    atendimento: { select: true, insert: true, update: true, delete: true },
+    agenda: { select: true, insert: true, update: true, delete: true },
+    protese: { select: true, insert: true, update: true, delete: true },
+  };
 }
 
 Deno.serve(async (req) => {

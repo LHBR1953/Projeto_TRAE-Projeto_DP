@@ -77,7 +77,7 @@ function isValidCPF(cpf) {
 
 // const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 // const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-// const APP_BUILD = '20260611_FINANCEIRO_PRODUCAO';
+// const APP_BUILD = '20260606_CLEAN_ARCH_EVOLUTION_FIX1';
 
 // const AUTO_SEED_SPECIALTIES = false;
 
@@ -92,13 +92,6 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 60000) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const mergedOptions = { ...options, signal: controller.signal };
-
-    // [OCC SECURITY] Bloqueio físico de queries zumbis textuais de financeiro_transacoes no wrapper de fetch do estoque
-    if (String(url).includes('financeiro_transacoes') && String(url).match(/eq\.mq0/)) {
-        console.warn('[OCC SECURITY] Interceptada e bloqueada query zumbi para financeiro_transacoes com ID textual na linha 95 do estoque!');
-        return Promise.resolve(new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-    }
-
     return fetch(url, mergedOptions)
         .catch(err => {
             if (window.__dpDebug.enabled) {
@@ -114,16 +107,16 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 60000) {
         });
 }
 
-// if (typeof window.supabase === 'undefined') {
-//     alert('Erro crítico: Não foi possível carregar a biblioteca de banco de dados (Supabase). Verifique sua conexão com a internet ou se há algum bloqueador de anúncios/firewall impedindo o acesso aos servidores CDN.');
-//     throw new Error('Supabase client not loaded');
-// }
+if (typeof window.supabase === 'undefined') {
+    alert('Erro crítico: Não foi possível carregar a biblioteca de banco de dados (Supabase). Verifique sua conexão com a internet ou se há algum bloqueador de anúncios/firewall impedindo o acesso aos servidores CDN.');
+    throw new Error('Supabase client not loaded');
+}
 
-// const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
-//     global: {
-//         fetch: (url, options) => fetchWithTimeout(url, options, 60000)
-//     }
-// });
+const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
+    global: {
+        fetch: (url, options) => fetchWithTimeout(url, options, 60000)
+    }
+});
 
 setInterval(() => {
     const el = document.getElementById('buildBadge');
@@ -1426,6 +1419,16 @@ async function getPatientDeleteBlockers(patient) {
             'agenda_agendamentos'
         );
         if (hasAgenda) blocks.push('Agenda');
+        const hasFin = await existsAnyRow(
+            db.from('financeiro_transacoes').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_id', patSeq),
+            'financeiro_transacoes'
+        );
+        if (hasFin) blocks.push('Financeiro');
+        const hasFinDest = await existsAnyRow(
+            db.from('financeiro_transacoes').select('id').eq('empresa_id', currentEmpresaId).eq('paciente_destino_id', patSeq),
+            'financeiro_transacoes:destino'
+        );
+        if (hasFinDest) blocks.push('Financeiro');
     }
 
     return Array.from(new Set(blocks));
@@ -1450,6 +1453,11 @@ async function getProfessionalDeleteBlockers(prof) {
             'agenda_agendamentos:prof'
         );
         if (hasAgenda) blocks.push('Agenda');
+        const hasCom = await existsAnyRow(
+            db.from('financeiro_comissoes').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
+            'financeiro_comissoes'
+        );
+        if (hasCom) blocks.push('Comissões');
         const hasItemsExec = await existsAnyRow(
             db.from('orcamento_itens').select('id').eq('empresa_id', currentEmpresaId).eq('profissional_id', profSeq),
             'orcamento_itens:prof'
@@ -2315,8 +2323,10 @@ function buildSaPlan(scopeRaw, empresaId, tableNameRaw, clearAuditFlag) {
 
     const baseAll = () => {
         add('orcamento_itens');
+        add('orcamento_pagamentos');
         add('orcamentos');
         add('orcamento_cancelados');
+        add('financeiro_comissoes');
         add('financeiro_transacoes');
         add('agenda_agendamentos');
         add('agenda_disponibilidade');
@@ -2356,7 +2366,9 @@ function buildSaPlan(scopeRaw, empresaId, tableNameRaw, clearAuditFlag) {
         add('especialidades');
         if (clearAudit) add('occ_audit_log');
     } else if (scope === 'FINANCE') {
+        add('financeiro_comissoes');
         add('financeiro_transacoes');
+        add('orcamento_pagamentos');
         if (clearAudit) add('occ_audit_log');
     } else if (scope === 'AGENDA') {
         add('agenda_agendamentos');
@@ -2369,6 +2381,7 @@ function buildSaPlan(scopeRaw, empresaId, tableNameRaw, clearAuditFlag) {
         if (clearAudit) add('occ_audit_log');
     } else if (scope === 'BUDGETS') {
         add('orcamento_itens');
+        add('orcamento_pagamentos');
         add('orcamentos');
         add('orcamento_cancelados');
         if (clearAudit) add('occ_audit_log');
@@ -2389,6 +2402,7 @@ function buildSaPlan(scopeRaw, empresaId, tableNameRaw, clearAuditFlag) {
             add('especialidades');
         } else if (t === 'orcamentos') {
             add('orcamento_itens');
+            add('orcamento_pagamentos');
             add('orcamentos');
         } else if (t === 'profissionais') {
             add('agenda_disponibilidade');
@@ -2479,8 +2493,8 @@ function initSuperAdminCleanupUI() {
     refreshSaEmpresaOptions({ keepSelection: true });
 
     const tableOptions = [
-        'orcamentos', 'orcamento_itens', 'orcamento_cancelados',
-        'financeiro_transacoes',
+        'orcamentos', 'orcamento_itens', 'orcamento_pagamentos', 'orcamento_cancelados',
+        'financeiro_transacoes', 'financeiro_comissoes',
         'pacientes', 'paciente_evolucao', 'paciente_documentos',
         'profissionais', 'especialidades', 'especialidade_subdivisoes', 'servicos',
         'agenda_agendamentos', 'agenda_disponibilidade',
@@ -2665,6 +2679,7 @@ async function initializeApp(isContextSwitch = false) {
             db.from('especialidade_subdivisoes').select('*').eq('empresa_id', currentEmpresaId),
             db.from('servicos').select('*').eq('empresa_id', currentEmpresaId).order('descricao', { ascending: true }),
             bQuery,
+            db.from('orcamento_pagamentos').select('*').eq('empresa_id', currentEmpresaId),
             (isSuperAdmin
                 ? db.from('empresas').select('*').order('nome')
                 : db.from('empresas').select('*').eq('id', currentEmpresaId))
@@ -2676,7 +2691,8 @@ async function initializeApp(isContextSwitch = false) {
         const subdivisionsRes = results[3];
         const servicesRes = results[4];
         let budgetsRes = results[5];
-        const empresasRes = results[6];
+        const paymentsRes = results[6];
+        const empresasRes = results[7];
 
         if (patientsRes.error) throw patientsRes.error;
         if (professionalsRes && professionalsRes.error) throw professionalsRes.error;
@@ -2684,6 +2700,7 @@ async function initializeApp(isContextSwitch = false) {
         if (subdivisionsRes.error) throw subdivisionsRes.error;
         if (servicesRes.error) throw servicesRes.error;
         if (budgetsRes.error) throw budgetsRes.error;
+        // if (paymentsRes.error) throw paymentsRes.error; // Removed: Handled below
         if (empresasRes.error) throw empresasRes.error;
 
         patients = patientsRes.data || [];
@@ -2780,6 +2797,28 @@ async function initializeApp(isContextSwitch = false) {
         }
 
         let allPayments = [];
+        if (paymentsRes.error) {
+            console.warn("Table 'orcamento_pagamentos' not found. Financial features disabled until SQL is applied.");
+        } else {
+            allPayments = paymentsRes.data || [];
+        }
+
+        // Attach payments to budgets
+        budgets.forEach(b => {
+            const idLongo = String(b && b.id || '').trim().toLowerCase();
+            const idCurto = String(b && b.seqid || '').trim();
+            const bPayments = allPayments.filter(p => {
+                const idBanco = String(p && p.orcamento_id || '').trim().toLowerCase();
+                if (!idBanco) return false;
+                // No banco, p.orcamento_id agora sempre será um UUID longo.
+                // Mas para retrocompatibilidade, comparamos com ambos.
+                if (idBanco.length > 10) return idBanco === idLongo;
+                return idBanco === idCurto;
+            });
+            b.pagamentos = bPayments;
+            b.total_pago = bPayments.reduce((acc, curr) => acc + Number(curr.valor_pago || curr.valor || 0), 0);
+            b.total_pago_na_epoca = b.total_pago; // Fallback to ensure display logic finds it
+        });
         bindEstoqueModule();
         bindNumericMasks();
         await loadEstoqueData(true);
@@ -2790,7 +2829,8 @@ async function initializeApp(isContextSwitch = false) {
             specialties: specialties.length,
             subdivisions: subdivisions.length,
             services: services.length,
-            budgets: budgets.length
+            budgets: budgets.length,
+            payments: allPayments.length
         });
 
         if (AUTO_SEED_SPECIALTIES && specialties.length === 0) {
@@ -3149,29 +3189,29 @@ const inventoryReportsView = document.getElementById('inventoryReportsView');
 // const empresaLogoBase64 = document.getElementById('empresaLogoBase64');
 // const logoPreviewContainer = document.getElementById('logoPreviewContainer');
 
-// const systemModules = [
-//     { id: 'agenda', label: 'Agenda' },
-//     { id: 'atendimento', label: 'Atendimento' },
-//     { id: 'audit_cancelados', label: 'Audit Cancelados' },
-//     { id: 'chat_pacientes', label: 'Central do Paciente' },
-//     { id: 'comissoes', label: 'Comissões' },
-//     { id: 'dashboard', label: 'Dashboard' },
-//     { id: 'especialidades', label: 'Especialidades' },
-//     { id: 'estoque_inventario', label: 'Estoque: Inventário' },
-//     { id: 'estoque_modelos', label: 'Estoque: Modelos de Uso' },
-//     { id: 'estoque_movimentacoes', label: 'Estoque: Movimentações' },
-//     { id: 'estoque_relatorios', label: 'Estoque: Relatórios' },
-//     { id: 'estoque_vinculos', label: 'Estoque: Vínculo de Serviços' },
-//     { id: 'financeiro', label: 'Financeiro' },
-//     { id: 'ia', label: 'Inteligência OCC' },
-//     { id: 'marketing', label: 'Marketing' },
-//     { id: 'orcamentos', label: 'Orçamentos' },
-//     { id: 'pacientes', label: 'Pacientes' },
-//     { id: 'protese', label: 'Produção Protética' },
-//     { id: 'profissionais', label: 'Profissionais' },
-//     { id: 'servicos', label: 'Serviços/Estoque' },
-//     { id: 'tickets', label: 'Suporte / Tickets' }
-// ];
+const systemModules = [
+    { id: 'agenda', label: 'Agenda' },
+    { id: 'atendimento', label: 'Atendimento' },
+    { id: 'audit_cancelados', label: 'Audit Cancelados' },
+    { id: 'chat_pacientes', label: 'Central do Paciente' },
+    { id: 'comissoes', label: 'Comissões' },
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'especialidades', label: 'Especialidades' },
+    { id: 'estoque_inventario', label: 'Estoque: Inventário' },
+    { id: 'estoque_modelos', label: 'Estoque: Modelos de Uso' },
+    { id: 'estoque_movimentacoes', label: 'Estoque: Movimentações' },
+    { id: 'estoque_relatorios', label: 'Estoque: Relatórios' },
+    { id: 'estoque_vinculos', label: 'Estoque: Vínculo de Serviços' },
+    { id: 'financeiro', label: 'Financeiro' },
+    { id: 'ia', label: 'Inteligência OCC' },
+    { id: 'marketing', label: 'Marketing' },
+    { id: 'orcamentos', label: 'Orçamentos' },
+    { id: 'pacientes', label: 'Pacientes' },
+    { id: 'protese', label: 'Produção Protética' },
+    { id: 'profissionais', label: 'Profissionais' },
+    { id: 'servicos', label: 'Serviços/Estoque' },
+    { id: 'tickets', label: 'Suporte / Tickets' }
+];
 
 function buildFullPermissions() {
     const perms = {};
@@ -3424,16 +3464,16 @@ function renderPermissionsGrid(existingPerms = null, targetEmpresaId = null) {
 // const comissionImp = document.getElementById('comissionImp');
 
 // const agendaCard = document.getElementById('agendaCard');
-// const agendaFields = Array.from({ length: 7 }).map((_, i) => {
-//     const day = i + 1;
-//     return {
-//         day,
-//         enabled: document.getElementById(`agendaDay${day}Enabled`),
-//         start: document.getElementById(`agendaDay${day}Start`),
-//         end: document.getElementById(`agendaDay${day}End`),
-//         slot: document.getElementById(`agendaDay${day}Slot`)
-//     };
-// });
+const agendaFields = Array.from({ length: 7 }).map((_, i) => {
+    const day = i + 1;
+    return {
+        day,
+        enabled: document.getElementById(`agendaDay${day}Enabled`),
+        start: document.getElementById(`agendaDay${day}Start`),
+        end: document.getElementById(`agendaDay${day}End`),
+        slot: document.getElementById(`agendaDay${day}Slot`)
+    };
+});
 
 // Specialty DOM Elements
 // const btnNewSpecialty = document.getElementById('btnNewSpecialty');
@@ -3829,6 +3869,18 @@ function setActiveTab(tab) {
         showForcePasswordChangeModal();
         return;
     }
+    if (financialOnboardingLocked && tab !== 'financialParams') {
+        showToast('Configure os Parâmetros Financeiros para liberar o sistema.', true);
+        showFinancialOnboardingModal();
+        if (!setActiveTab.__onboardingRedirecting) {
+            setActiveTab.__onboardingRedirecting = true;
+            try { setActiveTab('financialParams'); } finally { setActiveTab.__onboardingRedirecting = false; }
+        }
+        return;
+    }
+    if (tab === 'financialParams') {
+        hideFinancialOnboardingModal();
+    }
     console.log("setActiveTab called with:", tab);
     window.scrollTo(0, 0);
 
@@ -3934,22 +3986,31 @@ function setActiveTab(tab) {
         const navAssinaturasEl = document.getElementById('navAssinaturas');
         if (navAssinaturasEl) navAssinaturasEl.classList.add('active');
         showList('assinaturas');
+        // Forçar renderização e busca
+        if (typeof fetchConfigPlanos === 'function') fetchConfigPlanos();
+        if (typeof fetchAssinaturas === 'function') fetchAssinaturas();
     } else if (tab === 'myCompany') {
         if (navMyCompany) navMyCompany.classList.add('active');
         showList('myCompany');
     } else if (tab === 'financialParams') {
         if (navFinancialParams) navFinancialParams.classList.add('active');
         showList('financialParams');
-    } else if (tab === 'financeiro') {
-        const navFin = document.getElementById('navFinanceiro');
-        if (navFin) navFin.classList.add('active');
-        const views = (viewMapping && viewMapping.financeiro) ? viewMapping.financeiro : [];
-        views.forEach(v => { if (v) v.classList.remove('hidden'); });
-        console.log('[OCC SECURITY] Estoque mantendo apenas roteamento visual do financeiro');
     } else if (tab === 'cancelledBudgets') {
         const navCB = document.getElementById('navCancelledBudgets');
         if (navCB) navCB.classList.add('active');
         showList('cancelledBudgets');
+    } else if (tab === 'financeiro') {
+        const navFin = document.getElementById('navFinanceiro');
+        if (navFin) navFin.classList.add('active');
+        showList('financeiro');
+        // Define Visão Geral como default
+        if (typeof setStockReportsActive === 'function') {
+            setStockReportsActive('home');
+        }
+    } else if (tab === 'commissions') {
+        const navC = document.getElementById('navCommissions');
+        if (navC) navC.classList.add('active');
+        showList('commissions');
     } else if (tab === 'marketing') {
         if (navMarketingToggle) navMarketingToggle.classList.add('expanded');
         if (navMarketing) navMarketing.classList.add('active');
@@ -3962,6 +4023,10 @@ function setActiveTab(tab) {
         if (navMarketingSubmenu) navMarketingSubmenu.style.display = 'block';
         if (navMarketingToggleIcon) navMarketingToggleIcon.className = 'ri-arrow-up-s-line';
         showList('whatsappMarketing');
+        // Força a atualização do array default ao entrar no menu
+        loadTabData('whatsappMarketing', true).then(() => {
+            renderWhatsappMarketingList();
+        });
     } else if (tab === 'atendimento') {
         if (navAtendimentoToggle) navAtendimentoToggle.classList.add('expanded');
         if (navAtendimento) navAtendimento.classList.add('active');
@@ -4049,12 +4114,12 @@ async function loadTabData(tab) {
     const updates = [];
 
     // Pacientes
-    if (['patients', 'budgets', 'atendimento', 'consultaAvaliacao', 'dashboard', 'marketing', 'whatsappMarketing'].includes(tab)) {
+    if (['patients', 'budgets', 'atendimento', 'consultaAvaliacao', 'financeiro', 'dashboard', 'marketing', 'whatsappMarketing'].includes(tab)) {
         updates.push(db.from('pacientes').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }).then(res => { if(res.data) patients = res.data; }));
     }
 
     // Profissionais
-    if (['professionals', 'agenda', 'atendimento', 'consultaAvaliacao', 'budgets', 'dashboard'].includes(tab)) {
+    if (['professionals', 'agenda', 'atendimento', 'consultaAvaliacao', 'budgets', 'financeiro', 'dashboard'].includes(tab)) {
         updates.push(db.from('profissionais').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }).then(res => { if(res.data) professionals = res.data; }));
     }
 
@@ -4084,7 +4149,7 @@ async function loadTabData(tab) {
     }
 
     // Orçamentos e Itens
-    if (['budgets', 'atendimento', 'consultaAvaliacao', 'cancelledBudgets', 'dashboard'].includes(tab)) {
+    if (['budgets', 'atendimento', 'consultaAvaliacao', 'financeiro', 'cancelledBudgets', 'dashboard'].includes(tab)) {
         let bQuery = db.from('orcamentos').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: false });
         if (typeof isSuperAdmin !== 'undefined' && !isSuperAdmin && typeof isAdminRole !== 'undefined' && !isAdminRole()) {
             const uEmail = String(currentUser && currentUser.email ? currentUser.email : '').trim().toLowerCase();
@@ -5672,19 +5737,19 @@ async function tryCloseBudgetFromItems(budgetId) {
     return { closed: statusNow === 'executado', budget: budgetRow };
 }
 
-// const STOCK_MASTER_MODEL_DEFS = [
-//     { key: 'biosseguranca', nome: 'Kit Biossegurança' },
-//     { key: 'clinico', nome: 'Kit Clínico Geral' },
-//     { key: 'dentistica', nome: 'Kit Dentística' },
-//     { key: 'ortodontia', nome: 'Kit Ortodontia' },
-//     { key: 'implantodontia', nome: 'Kit Implantodontia' },
-//     { key: 'endodontia', nome: 'Kit Endodontia' },
-//     { key: 'periodontia', nome: 'Kit Periodontia' },
-//     { key: 'cirurgia', nome: 'Kit Cirurgia' },
-//     { key: 'harmonizacao', nome: 'Kit Harmonização Facial' },
-//     { key: 'odontopediatria', nome: 'Kit Odontopediatria' },
-//     { key: 'protese', nome: 'Kit Prótese Dentária' }
-// ];
+const STOCK_MASTER_MODEL_DEFS = [
+    { key: 'biosseguranca', nome: 'Kit Biossegurança' },
+    { key: 'clinico', nome: 'Kit Clínico Geral' },
+    { key: 'dentistica', nome: 'Kit Dentística' },
+    { key: 'ortodontia', nome: 'Kit Ortodontia' },
+    { key: 'implantodontia', nome: 'Kit Implantodontia' },
+    { key: 'endodontia', nome: 'Kit Endodontia' },
+    { key: 'periodontia', nome: 'Kit Periodontia' },
+    { key: 'cirurgia', nome: 'Kit Cirurgia' },
+    { key: 'harmonizacao', nome: 'Kit Harmonização Facial' },
+    { key: 'odontopediatria', nome: 'Kit Odontopediatria' },
+    { key: 'protese', nome: 'Kit Prótese Dentária' }
+];
 
 function resolveStockMasterKeyFromService(serv, specialtyById) {
     const desc = normalizeKey(String(serv && serv.descricao || ''));
@@ -7750,6 +7815,100 @@ function bindEstoqueModule() {
     if (btnStockReportInventory) btnStockReportInventory.addEventListener('click', () => setStockReportsActive('inventory'));
     if (btnStockReportKits) btnStockReportKits.addEventListener('click', () => setStockReportsActive('kits'));
     if (btnStockReportApuracao) btnStockReportApuracao.addEventListener('click', () => { setStockReportsActive('financial_apportion'); });
+    if (document.getElementById('btnMenuContaPaciente')) {
+        document.getElementById('btnMenuContaPaciente').addEventListener('click', () => {
+            stockReportsActiveKey = 'conta_paciente';
+            const financeiroView = document.getElementById('financeiroView');
+            const reportPanel = document.getElementById('stockReportPanel');
+            const homePanel = document.getElementById('stockReportsHomePanel');
+            const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
+            const cardSaldo = document.getElementById('finPainelSaldo');
+            const cardExtrato = document.getElementById('finExtratoCard');
+            const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
+            const cardConciliacao = document.getElementById('financeiroConciliacaoFiscalWrapper');
+
+            if (reportPanel) reportPanel.classList.add('hidden');
+            if (homePanel) homePanel.classList.add('hidden');
+            if (cardBusca) cardBusca.style.display = 'block';
+            
+            // Oculta a emissão por padrão, a menos que haja busca
+            if (cardEmissao) cardEmissao.style.display = 'none';
+            if (cardConciliacao) cardConciliacao.style.display = 'none';
+            
+            // Mostra o Extrato e oculta os filtros (ou mantém, mas o padrão original era sem os filtros em cima, apenas a tabela)
+            // Como agora o Extrato virou um card com filtros, podemos apenas mostrar ele
+            if (cardExtrato) cardExtrato.style.display = 'block';
+
+            // Força reset de botões
+            const topButtons = financeiroView.querySelectorAll('.section-header .btn');
+            topButtons.forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
+            document.getElementById('btnMenuContaPaciente').classList.remove('btn-secondary');
+            document.getElementById('btnMenuContaPaciente').classList.add('btn-primary');
+        });
+    }
+
+    if (document.getElementById('btnMenuExtratoTransacoes')) {
+        document.getElementById('btnMenuExtratoTransacoes').addEventListener('click', () => {
+            // "Esconde" as outras telas de relatório e mostra o Extrato
+            stockReportsActiveKey = 'extrato'; // Para saber onde estamos
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            const navFin = document.getElementById('navFinanceiro');
+            if(navFin) navFin.classList.add('active');
+
+            const financeiroView = document.getElementById('financeiroView');
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            if(financeiroView) financeiroView.classList.remove('hidden');
+
+            const reportPanel = document.getElementById('stockReportPanel');
+            const homePanel = document.getElementById('stockReportsHomePanel');
+            const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
+            const cardSaldo = document.getElementById('finPainelSaldo');
+            const cardExtrato = document.getElementById('finExtratoCard');
+            const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
+            const cardConciliacao = document.getElementById('financeiroConciliacaoFiscalWrapper');
+            
+            if (reportPanel) reportPanel.classList.add('hidden');
+            if (homePanel) homePanel.classList.add('hidden');
+            if (cardBusca) cardBusca.style.display = 'none';
+            if (cardSaldo) cardSaldo.classList.add('hidden');
+            if (cardEmissao) cardEmissao.style.display = 'none';
+            if (cardConciliacao) cardConciliacao.style.display = 'none';
+
+            if (cardExtrato) {
+                cardExtrato.style.display = 'block';
+                // Remove preenchimento do combo que não existe mais, já que agora é um campo de texto livre
+
+                // Preenche datas default se vazio
+                const extStart = document.getElementById('extratoFilterStart');
+                const extEnd = document.getElementById('extratoFilterEnd');
+                if(extStart && !extStart.value) {
+                    const d = new Date();
+                    extStart.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+                }
+                if(extEnd && !extEnd.value) {
+                    const d = new Date();
+                    extEnd.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                }
+
+                // Dispara o filtro automaticamente ao abrir a aba
+                if(document.getElementById('btnFiltrarExtrato')) {
+                    document.getElementById('btnFiltrarExtrato').click();
+                }
+            }
+            
+            // Força reset de botões do menu do financeiro
+            const topButtons = financeiroView.querySelectorAll('.section-header .btn');
+            topButtons.forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
+            document.getElementById('btnMenuExtratoTransacoes').classList.remove('btn-secondary');
+            document.getElementById('btnMenuExtratoTransacoes').classList.add('btn-primary');
+            
+            const btnNovaTransacao = document.getElementById('btnNovaTransacao');
+            if (btnNovaTransacao) {
+                btnNovaTransacao.classList.remove('btn-secondary');
+                btnNovaTransacao.classList.add('btn-primary');
+            }
+        });
+    }
     if (btnStockReportBack) btnStockReportBack.addEventListener('click', () => setStockReportsActive('home'));
     syncStockReportInitialAdjustButton();
     if (btnStockReportPrint) btnStockReportPrint.addEventListener('click', printStockReportActive);

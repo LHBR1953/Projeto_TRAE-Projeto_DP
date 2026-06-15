@@ -741,3 +741,23 @@ Siga estritamente as regras de interface abaixo:
    * **CANCELAR:** Para fechar o modal imediatamente e descartar as alterações, sem dar refresh na página e sem perder o contexto anterior do usuário.
    * **SALVAR:** Para processar a query assíncrona no Supabase e salvar os dados de forma segura.
 3. **Comportamento Visual:** O modal deve possuir um fundo escurecido semi-transparente (backdrop blur ou overlay escuro) para dar foco total ao PANEL de edição, impedindo que o usuário clique em elementos da página de fundo enquanto o formulário estiver aberto.
+
+
+
+## 🔍 PADRONIZAÇÃO DE CAMPOS DE PESQUISA E BUSCA (AUTOCOMPLETE PROGRESSIVO)
+
+[⚠️ DIRETRIZ DE UX CRÍTICA]: Todo e qualquer campo de input destinado a buscas/pesquisas no sistema cujas tabelas de origem contenham colunas de identificação e cadastro (como: `nome`, `endereco`, `cpf`, `descricao`, `email`/`e-mail`), ou qualquer outro campo de busca explicitamente solicitado pelo usuário, DEVE obrigatoriamente implementar o comportamento de **Busca Progressiva Dinâmica**.
+
+Siga estritamente os requisitos de desenvolvimento abaixo:
+
+1. **Filtro Letra por Letra (Debounce Inteligente):** A busca no banco/módulo local deve disparar de forma progressiva conforme o usuário digita (letra por letra ou número por número), aplicando um pequeno delay (debounce de ~300ms) para não sobrecarregar as chamadas do Supabase.
+2. **Abertura Automática do PANEL com bordas de Resultados:**
+   * Assim que o usuário começar a digitar, um componente visual de **PANEL suspenso (Dropdown/Floating Card)** deve se abrir logo abaixo do input.
+   * Este PANEL deve listar de forma limpa os registros correspondentes encontrados.
+   * O container do PANEL deve possuir um limite máximo de altura (`max-height`) e a propriedade `overflow-y: auto;` ativa para permitir a rolagem por **Scroll** caso existam muitos registros.
+3. **Acessibilidade e Navegação por Teclado:**
+   * O PANEL deve interceptar os eventos do teclado, permitindo que o usuário navegue para cima e para baixo entre os resultados utilizando as **Teclas de Setas (ArrowUp / ArrowDown)**.
+   * O registro atualmente selecionado pelas setas deve ganhar um destaque visual (mudança na cor de fundo/hover).
+4. **Gatilho de Input (Ação de Confirmação):**
+   * Ao pressionar a tecla **[ENTER]** sobre o registro selecionado, ou ao dar um **[CLICK]** com o mouse sobre ele, o modal/PANEL de resultados deve ser fechado imediatamente.
+   * O campo de input deve ser preenchido e injetado automaticamente com o valor do registro escolhido, disparando em segundo plano a ação de carregamento ou preenchimento do restante da tela com coerência absoluta.

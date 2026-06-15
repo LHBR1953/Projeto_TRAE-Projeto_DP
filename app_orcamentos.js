@@ -1213,7 +1213,7 @@ async function viewCancelledBudgets() {
     }
 }
 // --- budPacienteNomeInput LISTENERS ---
-const budPacienteNomeInput = document.getElementById('budPacienteNome');
+}
 if (budPacienteNomeInput) {
     budPacienteNomeInput.removeAttribute('list');
     const suggestionBox = document.createElement('div');

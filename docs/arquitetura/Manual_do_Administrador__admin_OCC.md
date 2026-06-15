@@ -5,7 +5,7 @@
 
 <br><br><br>
 
-<p align="center"><strong>Guia do Usuário: 23 Telas e Módulos (Campo a Campo)</strong></p>
+<p align="center"><strong>Guia do Usuário: 25 Telas e Módulos (Campo a Campo)</strong></p>
 
 <br><br><br><br><br><br><br><br><br><br>
 <div style="page-break-after: always;"></div>
@@ -33,14 +33,16 @@
 - [18. Produção Protética](#18-produção-protética-)
 - [19. Suporte / Tickets](#19-suporte--tickets-)
 - [20. Usuários Admin](#20-usuários-admin-)
-- [21. Minha Clínica](#21-minha-clínica-)
-- [22. Parâmetros Financeiros](#22-parâmetros-financeiros-️)
-- [23. Orçamentos Cancelados](#23-orçamentos-cancelados-️)
+- [21. Empresas (Gestão de Redes)](#21-empresas-gestão-de-redes-)
+- [22. Assinaturas](#22-assinaturas-)
+- [23. Minha Clínica](#23-minha-clínica-)
+- [24. Parâmetros Financeiros](#24-parâmetros-financeiros-️)
+- [25. Orçamentos Cancelados](#25-orçamentos-cancelados-️)
 
 <div style="page-break-after: always;"></div>
 
 # Introdução 🔐
-Bem-vindo(a)! Este guia definitivo e detalhado foi feito para você, Administrador(a) da Clínica. Aqui, explicamos o funcionamento **campo a campo** das exatas 23 telas e módulos que compõem o ecossistema do OCC.
+Bem-vindo(a)! Este guia definitivo e detalhado foi feito para você, Administrador(a) da Clínica. Aqui, explicamos o funcionamento **campo a campo** das exatas 25 telas e módulos que compõem o ecossistema do OCC.
 
 ---
 
@@ -193,18 +195,31 @@ Bem-vindo(a)! Este guia definitivo e detalhado foi feito para você, Administrad
 - **Senha Inicial:** Definida por você.
 - **Perfil de Acesso:** "Admin" (acesso total), "Recepção" (agenda e financeiro), "Dentista" (bloqueado na própria agenda e orçamentos), "Auxiliar" (estoque).
 
-# 21. Minha Clínica 🏥
+# 21. Empresas (Gestão de Redes) 🏢
+**Objetivo:** Para donos de mais de uma clínica.
+**Campos da Tela:**
+- **Nova Unidade:** Permite cadastrar uma filial.
+- **Chaveador de Unidades:** Botão no topo do sistema para alternar a visão (ver o faturamento da Clínica A ou da Clínica B de forma separada).
+
+# 22. Assinaturas 📝
+**Objetivo:** Gestão do seu plano OCC.
+**Campos da Tela:**
+- **Plano Atual:** Ex: "Plano Clínicas PRO".
+- **Limites:** Quantidade de usuários cadastrados vs Permitidos no plano.
+- **Faturas:** Histórico de pagamentos da mensalidade do software.
+
+# 23. Minha Clínica 🏥
 **Objetivo:** Configurações globais da unidade ativa.
 **Campos da Tela:**
 - **Razão Social, CNPJ, Telefone:** Dados oficiais.
 - **Logotipo:** Upload de imagem (jpg/png) que passará a estampar o topo do sistema e os PDFs de orçamentos impressos.
 
-# 22. Parâmetros Financeiros ⚙️
+# 24. Parâmetros Financeiros ⚙️
 **Objetivo:** Automação de taxas.
 **Campos da Tela:**
 - **Taxas de Cartão:** Campo para informar os juros da sua maquininha (Débito, Crédito à Vista, Parcelado). O sistema usará isso para calcular o lucro líquido real no Financeiro.
 
-# 23. Orçamentos Cancelados 🕵️
+# 25. Orçamentos Cancelados 🕵️
 **Objetivo:** Auditoria e recuperação de vendas.
 **Campos da Tela:**
 - **Lista de Rejeitados:** Todos os orçamentos que os pacientes não fecharam.
