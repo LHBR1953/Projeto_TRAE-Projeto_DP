@@ -143,10 +143,12 @@ async function seedSpecialtiesForEmpresa(
     for (const sub of (templateSubs || [])) {
       const mappedSpecId = oldToNew.get(String(sub && sub.especialidade_id || ""));
       if (!mappedSpecId) continue;
+      const subName = String(sub && sub.nome || "").trim();
+      const cleanName = subName.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
       const { error } = await supabaseAdmin.from("especialidade_subdivisoes").insert({
         id: crypto.randomUUID(),
         especialidade_id: mappedSpecId,
-        nome: String(sub && sub.nome || "").trim(),
+        nome: cleanName,
         empresa_id: target,
       });
       if (error) throw error;
@@ -157,18 +159,21 @@ async function seedSpecialtiesForEmpresa(
   const fallback = buildDefaultSpecialtyTemplate();
   for (const spec of fallback) {
     const specId = crypto.randomUUID();
+    const specName = String(spec.nome || "").trim();
+    const cleanSpecName = specName.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
     const { error: specErr } = await supabaseAdmin.from("especialidades").insert({
       id: specId,
       seqid: Number(spec.seqid || 0),
-      nome: String(spec.nome || "").trim(),
+      nome: cleanSpecName,
       empresa_id: target,
     });
     if (specErr) throw specErr;
     for (const subName of (spec.subs || [])) {
+      const cleanSubName = String(subName || "").replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
       const { error: subErr } = await supabaseAdmin.from("especialidade_subdivisoes").insert({
         id: crypto.randomUUID(),
         especialidade_id: specId,
-        nome: String(subName || "").trim(),
+        nome: cleanSubName,
         empresa_id: target,
       });
       if (subErr) throw subErr;

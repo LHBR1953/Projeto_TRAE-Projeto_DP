@@ -272,6 +272,20 @@ function getSafeSavedTab() {
 }
 
 function showLoginUi() {
+    try {
+        hidePrivacyScreensaver();
+        const screensaver = document.getElementById('privacyScreensaver');
+        if (screensaver) {
+            screensaver.style.display = 'none';
+            screensaver.classList.add('hidden');
+        }
+    } catch(e) {}
+    
+    try {
+        document.body.style.overflow = '';
+        document.body.style.pointerEvents = 'auto';
+    } catch(e) {}
+
     const bootLoader = document.getElementById('bootLoader');
     const loginView = document.getElementById('loginView');
     const appContainer = document.getElementById('appContainer');
@@ -1011,6 +1025,20 @@ function showPrivacyScreensaver() {
     const wrap = document.getElementById('privacyScreensaver');
     if (!wrap) return;
     if (document.getElementById('loginView') && document.getElementById('loginView').style.display !== 'none') return;
+
+    // COERÇÃO NO SAVESCREEN: Destruir o token de autenticação ativa da memória imediatamente
+    try {
+        explicitLogoutRequested = true; // Força a exibição do loginView no onAuthStateChange
+        if (db && db.auth) db.auth.signOut().catch(() => {});
+        if (typeof localStorage !== 'undefined') {
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    localStorage.removeItem(key);
+                }
+            });
+        }
+    } catch (e) { }
+
     const { nome, logo } = getPrivacyScreensaverBranding();
     const nameEl = document.getElementById('privacyScreensaverCompanyName');
     const logoEl = document.getElementById('privacyScreensaverLogo');
@@ -1964,7 +1992,7 @@ async function confirmSubdivisionImport() {
     let skipped = 0;
     let semVinculo = 0;
     for (const nameRaw of parsed) {
-        const name = String(nameRaw || '').trim().toUpperCase();
+        let name = String(nameRaw || '').trim().toUpperCase();
         if (!name) continue;
         const major = extractSubdivisionMajorCode(name);
         const targetSpecialtyId = major ? String(specMap.get(major) || '') : '';
@@ -1972,6 +2000,7 @@ async function confirmSubdivisionImport() {
             semVinculo += 1;
             continue;
         }
+        name = name.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
         if (!existingBySpec.has(targetSpecialtyId)) existingBySpec.set(targetSpecialtyId, new Set());
         const set = existingBySpec.get(targetSpecialtyId);
         if (set.has(name)) {
@@ -2623,10 +2652,11 @@ async function initializeApp(isContextSwitch = false) {
                     newSpec.subdivisoes = [];
                     // Insert subdivisions for this default specialty
                     for (let subName of def.subs) {
+                        let nomeClean = subName.replace(/^\d+\.\d+\s*-\s*/, '').trim();
                         const subData = {
                             id: generateId(),
                             especialidade_id: specId,
-                            nome: subName,
+                            nome: nomeClean,
                             empresa_id: currentEmpresaId
                         };
                         const { data: newSub } = await db.from('especialidade_subdivisoes').insert(subData).select().single();
@@ -13103,29 +13133,20 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
     const formaKey = forma ? normalizeKey(forma) : '';
 
     let paymentsRaw = [];
-    let payDateCol = 'created_at';
     try {
-        const qByDateCol = async (dateCol) => {
-            const { data, error } = await withTimeout(
-                db.from('orcamento_pagamentos')
-                    .select('*')
-                    .eq('empresa_id', currentEmpresaId)
-                    .gte(dateCol, startIso)
-                    .lte(dateCol, endIso)
-                    .order(dateCol, { ascending: true }),
-                20000,
-                `pagamentos_pacientes:orcamento_pagamentos:${dateCol}`
-            );
-            if (error) throw error;
-            return Array.isArray(data) ? data : [];
-        };
-        try {
-            paymentsRaw = await qByDateCol('created_at');
-            payDateCol = 'created_at';
-        } catch {
-            paymentsRaw = await qByDateCol('data_pagamento');
-            payDateCol = 'data_pagamento';
-        }
+        const { data, error } = await withTimeout(
+            db.from('financeiro_transacoes')
+                .select('*')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('tipo', 'CREDITO')
+                .gte('data_transacao', startIso)
+                .lte('data_transacao', endIso)
+                .order('data_transacao', { ascending: true }),
+            20000,
+            `pagamentos_pacientes:financeiro_transacoes`
+        );
+        if (error) throw error;
+        paymentsRaw = Array.isArray(data) ? data : [];
     } catch (err) {
         const msg = err && err.message ? err.message : 'Erro desconhecido';
         showToast(`Falha ao carregar pagamentos: ${msg}`, true);
@@ -13133,50 +13154,41 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
     }
 
     if (formaKey) {
-        paymentsRaw = paymentsRaw.filter(p => normalizeKey(String(p.forma_pagamento || '')) === formaKey);
+        paymentsRaw = paymentsRaw.filter(p => normalizeKey(String(p.forma_pagamento || p.categoria || '')) === formaKey);
     }
 
-    const budgetBySeqid = new Map((budgets || []).map(b => [String(b.seqid), b]));
     const patientById = new Map((patients || []).map(p => [String(p.id), p]));
     const patientBySeq = new Map((patients || []).map(p => [String(p.seqid), p]));
 
-    const seqids = Array.from(new Set(paymentsRaw.map(p => String(p.orcamento_id || '')).filter(Boolean)));
-    const seqidToPacienteUuid = new Map();
-    seqids.forEach(s => {
-        const b = budgetBySeqid.get(String(s));
-        const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
-        if (pid) seqidToPacienteUuid.set(String(s), pid);
-    });
-    const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
-    if (missingSeq.length) {
-        try {
-            const { data: orcs, error: oErr } = await withTimeout(
-                db.from('orcamentos')
-                    .select('seqid,paciente_id,pacienteid,pacientenome')
-                    .eq('empresa_id', currentEmpresaId)
-                    .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
-                15000,
-                'pagamentos_pacientes:orcamentos:seqid'
-            );
-            if (!oErr && Array.isArray(orcs)) {
-                orcs.forEach(o => {
-                    const pid = String(o.pacienteid || o.paciente_id || '');
-                    if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
-                });
-            }
-        } catch { }
-    }
-
     const rows = paymentsRaw.map(p => {
-        const dt = p[payDateCol] ? new Date(p[payDateCol]) : null;
+        const dt = p.data_transacao ? new Date(p.data_transacao) : null;
         const hora = dt ? formatTimeHHMM(dt) : '—';
         const data = dt ? dt.toLocaleDateString('pt-BR') : '—';
-        const seq = String(p.orcamento_id || '');
-        const pacUuid = seqidToPacienteUuid.get(seq) || '';
-        const pac = pacUuid ? (patientById.get(pacUuid) || patientBySeq.get(pacUuid)) : null;
-        const pacNome = pac ? String(pac.nome || '') : (seq ? `Orçamento #${seq}` : '—');
-        const formaLabel = String(p.forma_pagamento || '—');
-        const valor = Number(p.valor_pago || 0);
+        
+        let seq = String(p.referencia_id || '');
+        if (!seq && p.orcamento_id) seq = String(p.orcamento_id);
+        if (!seq) {
+            let obsNorm = String(p.observacoes || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const match = obsNorm.match(/(?:Orc\.?\s*#|Orcamento\s*#|Orcamento\s+)\s*(\d{1,})/i);
+            if (match) seq = String(match[1]);
+        }
+        
+        let pacNome = '—';
+        if (p.paciente_id) {
+            const pac = patientBySeq.get(String(p.paciente_id)) || patientById.get(String(p.paciente_id));
+            if (pac) pacNome = pac.nome;
+        }
+        if (pacNome === '—' && seq) {
+            const b = (budgets || []).find(bg => String(bg.seqid) === seq || String(bg.id) === seq);
+            if (b) {
+                const pac = patientBySeq.get(String(b.paciente_id || b.pacienteid)) || patientById.get(String(b.paciente_id || b.pacienteid));
+                if (pac) pacNome = pac.nome;
+            }
+        }
+        if (pacNome === '—' && seq) pacNome = `Orçamento #${seq}`;
+
+        const formaLabel = String(p.forma_pagamento || p.categoria || '—');
+        const valor = Number(p.valor || 0);
         return { data, hora, orc: seq || '—', paciente: pacNome, forma: formaLabel, valor };
     });
 
@@ -14080,74 +14092,57 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
 
         let paymentsRows = [];
         try {
-            const tryFetchByDateCol = async (dateCol) => {
+            let paymentsRaw = [];
+            try {
                 const { data, error } = await withTimeout(
-                    db.from('orcamento_pagamentos')
+                    db.from('financeiro_transacoes')
                         .select('*')
                         .eq('empresa_id', currentEmpresaId)
-                        .gte(dateCol, startIso)
-                        .lte(dateCol, endIso)
-                        .order(dateCol, { ascending: true }),
+                        .eq('tipo', 'CREDITO')
+                        .gte('data_transacao', startIso)
+                        .lte('data_transacao', endIso)
+                        .order('data_transacao', { ascending: true }),
                     15000,
-                    `fechamento:orcamento_pagamentos:${dateCol}`
+                    `fechamento:financeiro_transacoes`
                 );
                 if (error) throw error;
-                return { rows: Array.isArray(data) ? data : [], dateCol };
-            };
-
-            let paymentsRaw = [];
-            let payDateCol = 'created_at';
-            try {
-                const res = await tryFetchByDateCol('created_at');
-                paymentsRaw = res.rows;
-                payDateCol = res.dateCol;
-            } catch {
-                const res = await tryFetchByDateCol('data_pagamento');
-                paymentsRaw = res.rows;
-                payDateCol = res.dateCol;
+                paymentsRaw = Array.isArray(data) ? data : [];
+            } catch (err) {
+                console.warn("Erro ao buscar transações financeiras para fechamento:", err);
             }
 
-            const budgetBySeqid = new Map((budgets || []).map(b => [String(b.seqid), b]));
             const patientById = new Map((patients || []).map(p => [String(p.id), p]));
             const patientBySeq = new Map((patients || []).map(p => [String(p.seqid), p]));
 
-            const seqids = Array.from(new Set(paymentsRaw.map(p => String(p.orcamento_id || '')).filter(Boolean)));
-            const seqidToPacienteUuid = new Map();
-            seqids.forEach(s => {
-                const b = budgetBySeqid.get(String(s));
-                const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
-                if (pid) seqidToPacienteUuid.set(String(s), pid);
-            });
-            const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
-            if (missingSeq.length) {
-                try {
-                    const { data: orcs, error: oErr } = await withTimeout(
-                        db.from('orcamentos')
-                            .select('seqid,paciente_id,pacienteid')
-                            .eq('empresa_id', currentEmpresaId)
-                            .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
-                        15000,
-                        'fechamento:orcamentos:seqid'
-                    );
-                    if (!oErr && Array.isArray(orcs)) {
-                        orcs.forEach(o => {
-                            const pid = String(o.pacienteid || o.paciente_id || '');
-                            if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
-                        });
-                    }
-                } catch { }
-            }
-
             paymentsRows = paymentsRaw.map(p => {
-                const dt = p[payDateCol] ? new Date(p[payDateCol]) : null;
+                const dt = p.data_transacao ? new Date(p.data_transacao) : null;
                 const hora = dt ? formatTimeHHMM(dt) : '—';
-                const seq = String(p.orcamento_id || '');
-                const pacUuid = seqidToPacienteUuid.get(seq) || '';
-                const pac = pacUuid ? (patientById.get(pacUuid) || patientBySeq.get(pacUuid)) : null;
-                const pacNome = pac ? String(pac.nome || '') : (seq ? `Orçamento #${seq}` : '—');
-                const forma = String(p.forma_pagamento || '—');
-                const valor = Number(p.valor_pago || 0);
-                return { hora, pacNome, forma, valor };
+                
+                let seq = String(p.referencia_id || '');
+                if (!seq && p.orcamento_id) seq = String(p.orcamento_id);
+                if (!seq) {
+                    let obsNorm = String(p.observacoes || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const match = obsNorm.match(/(?:Orc\.?\s*#|Orcamento\s*#|Orcamento\s+)\s*(\d{1,})/i);
+                    if (match) seq = String(match[1]);
+                }
+                
+                let pacNome = '—';
+                if (p.paciente_id) {
+                    const pac = patientBySeq.get(String(p.paciente_id)) || patientById.get(String(p.paciente_id));
+                    if (pac) pacNome = pac.nome;
+                }
+                if (pacNome === '—' && seq) {
+                    const b = (budgets || []).find(bg => String(bg.seqid) === seq || String(bg.id) === seq);
+                    if (b) {
+                        const pac = patientBySeq.get(String(b.paciente_id || b.pacienteid)) || patientById.get(String(b.paciente_id || b.pacienteid));
+                        if (pac) pacNome = pac.nome;
+                    }
+                }
+                if (pacNome === '—' && seq) pacNome = `Orçamento #${seq}`;
+
+                const forma = String(p.forma_pagamento || p.categoria || '—');
+                const valor = Number(p.valor || 0);
+                return { hora, pacNome, forma, valor, orcSeq: seq };
             });
         } catch {
             paymentsRows = [];
@@ -25492,6 +25487,11 @@ if (loginForm) {
             // Re-initialize app to pull active user mapping
             await initializeApp();
             
+            if (!currentUser || !currentEmpresaId) {
+                // If context is missing after initial boot, try to reload it explicitly
+                await loadCurrentUserData();
+            }
+
             if (!currentUser || !currentEmpresaId) {
                 throw new Error("Não foi possível carregar o ambiente da clínica. Sua conta pode não ter os vínculos necessários.");
             }

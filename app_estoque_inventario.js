@@ -1076,6 +1076,20 @@ function showPrivacyScreensaver() {
     const wrap = document.getElementById('privacyScreensaver');
     if (!wrap) return;
     if (document.getElementById('loginView') && document.getElementById('loginView').style.display !== 'none') return;
+
+    // COERÇÃO NO SAVESCREEN: Destruir o token de autenticação ativa da memória imediatamente
+    try {
+        explicitLogoutRequested = true;
+        if (db && db.auth) db.auth.signOut().catch(() => {});
+        if (typeof localStorage !== 'undefined') {
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    localStorage.removeItem(key);
+                }
+            });
+        }
+    } catch (e) { }
+
     const { nome, logo } = getPrivacyScreensaverBranding();
     const nameEl = document.getElementById('privacyScreensaverCompanyName');
     const logoEl = document.getElementById('privacyScreensaverLogo');
