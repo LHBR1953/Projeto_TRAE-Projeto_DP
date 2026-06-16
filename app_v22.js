@@ -10405,7 +10405,7 @@ function renderTable(data = [], type = 'patients') {
         data.forEach(s => {
             const tr = document.createElement('tr');
             tr.dataset.id = String(s.id || '');
-            let sub = s.subdivisao ? s.subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim() : '';
+            let sub = s.subdivisao ? s.subdivisao.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim() : '';
             tr.innerHTML = `
                 <td>${s && s.codigo_servico ? String(s.codigo_servico) : String(s.seqid || '')}</td>
                 <td><strong>${s.descricao}</strong></td>
@@ -11270,7 +11270,7 @@ async function refreshServSubdivisaoLookupForEmpresa(empresaId) {
         if (!sid) return;
         let label = String(sub && sub.nome || '').trim();
         if (!label) return;
-        label = label.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+        label = label.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
         const search = normalizeKey(label);
         map.set(label, sid);
         byId.set(sid, label);
@@ -21814,7 +21814,7 @@ function renderSubSpecTable() {
             tr.style.cssText += rowStyle;
 
             let n = sub && sub.nome ? sub.nome : '';
-            n = n.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+            n = n.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
 
             tr.innerHTML = `
                 <td style="padding: 8px;">${n}</td>
@@ -21839,7 +21839,7 @@ window.editSubSpec = function (index) {
     editingSubSpecIndex = index;
     const nameInput = document.getElementById('subSpecNome');
     let n = sub.nome || '';
-    n = n.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+    n = n.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
     nameInput.value = n;
     nameInput.focus();
 
@@ -22493,11 +22493,11 @@ window.editService = function (id) {
         if (!subLabelEl) return;
         if (directId) {
             let label = String(__subdivLookupById.get(directId) || '');
-            label = label.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+            label = label.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
             subLabelEl.value = label;
         } else {
             let label = String(s.subdivisao || '').trim();
-            label = label.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+            label = label.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
             subLabelEl.value = label;
         }
     };
@@ -22963,9 +22963,10 @@ function populateBudgetServiceDropdown() {
                     if (!raw) {
                         subSelectPick.value = '-';
                     } else {
-                        let opt = Array.from(subSelectPick.options || []).find(o => String(o.value || '').trim() === raw) || null;
+                        const rawClean = raw.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
+                        let opt = Array.from(subSelectPick.options || []).find(o => String(o.value || '').trim() === rawClean) || null;
                         if (!opt) {
-                            const rawKey = normalizeKey(raw);
+                            const rawKey = normalizeKey(rawClean);
                             opt = Array.from(subSelectPick.options || []).find(o => {
                                 const v = String(o.value || '');
                                 const tail = v.includes('-') ? v.split('-').slice(1).join('-') : v;
@@ -22976,11 +22977,11 @@ function populateBudgetServiceDropdown() {
                             subSelectPick.value = String(opt.value || '');
                         } else {
                             const dyn = document.createElement('option');
-                            dyn.value = raw;
-                            dyn.textContent = raw;
-                            dyn.dataset.subnome = raw;
+                            dyn.value = rawClean;
+                            dyn.textContent = rawClean;
+                            dyn.dataset.subnome = rawClean;
                             subSelectPick.appendChild(dyn);
-                            subSelectPick.value = raw;
+                            subSelectPick.value = rawClean;
                         }
                     }
                 }
@@ -23183,18 +23184,17 @@ function populateBudgetItemSubdivisaoDropdown() {
     specialties.forEach(spec => {
         if (spec.subdivisoes && spec.subdivisoes.length > 0) {
             const optgroup = document.createElement('optgroup');
-            optgroup.label = `${spec.seqid} - ${spec.nome}`;
+            let specNameClean = String(spec.nome || '').replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
+            optgroup.label = specNameClean;
 
             spec.subdivisoes.forEach((sub, i) => {
-                const subCode = `${spec.seqid}.${i + 1}`;
                 let nomeClean = String(sub && sub.nome || '').trim();
                 // Remove existing prefix like "1.1 - ", "8.10 - ", etc. to avoid duplication
-                nomeClean = nomeClean.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+                nomeClean = nomeClean.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
                 
-                const displayStr = `${subCode} - ${nomeClean}`;
                 const opt = document.createElement('option');
-                opt.value = displayStr;
-                opt.textContent = displayStr;
+                opt.value = nomeClean;
+                opt.textContent = nomeClean;
                 opt.dataset.subid = String(sub && sub.id || '');
                 opt.dataset.subnome = String(sub && sub.nome || '');
                 optgroup.appendChild(opt);
@@ -23318,7 +23318,7 @@ function updateBudgetItemFromService(serviceId) {
             if (!raw) {
                 subSelect.value = '-';
             } else {
-                const rawTrim = raw;
+                const rawTrim = raw.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
                 subSelect.value = rawTrim;
                 if (subSelect.value !== rawTrim) {
                     const options = Array.from(subSelect.options);
@@ -23725,7 +23725,7 @@ if (btnSaveAddItem) {
             // Use form field values as fallbacks in case servData lookup fails (e.g. type mismatch with DB IDs)
             const servicoDescricao = servData ? servData.descricao : (document.getElementById('budItemDescricao').value || servId);
             let subdivisao = document.getElementById('budItemSubdivisao').value || (servData ? servData.subdivisao : '') || '-';
-            subdivisao = subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+            subdivisao = subdivisao.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
             const descricaoAtendimento = document.getElementById('budItemDescricaoAtendimento')?.value || '';
 
             if (editingBudgetItemId) {
@@ -23854,7 +23854,7 @@ function renderBudgetItemsTable() {
         const toothDisplay = teethArr.length > 0 ? escapeHtml(teethArr.join(' • ')) : '—';
         
         let sub = item.subdivisao || '';
-        sub = sub.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+        sub = sub.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
 
         // Status badge logic
         const statusColors = {
@@ -24001,7 +24001,7 @@ window.editBudgetItem = function (itemId) {
     document.getElementById('budItemDescricaoAtendimento').value = item.descricaoAtendimento || '';
     
     let subValue = item.subdivisao || '';
-    subValue = subValue.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+    subValue = subValue.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
     document.getElementById('budItemSubdivisao').value = subValue;
     
     document.getElementById('budItemValor').value = item.valor !== undefined ? formatCurrencyBR(item.valor) : '';
@@ -24195,7 +24195,7 @@ if (budgetForm) {
                     protetico_id: proteticoObj ? parseInt(proteticoObj.seqid) : null,
                     valor_protetico: item.valorProtetico || 0,
                     profissional_id: executorObj ? parseInt(executorObj.seqid) : null,
-                    subdivisao: item.subdivisao ? item.subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim() : '',
+                    subdivisao: item.subdivisao ? item.subdivisao.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim() : '',
                     descricao_atendimento: item.descricaoAtendimento || '', // Capture locally, no DB column yet probably
                     status: item.status || 'Pendente'
                 };
@@ -24559,7 +24559,7 @@ window.editBudget = function (id) {
             : [];
             
         let sub = item.subdivisao || (servData ? servData.subdivisao : '-');
-        sub = sub.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+        sub = sub.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
 
         return {
             id: item.id,
@@ -24687,7 +24687,7 @@ window.printBudget = function (id) {
         const executorNome = executorData ? executorData.nome : (item.executorNome || '-');
         
         let sub = item.subdivisao || (servData ? servData.subdivisao : '-');
-        sub = sub.replace(/^\d+\.\d+\s*-\s*/, '').trim();
+        sub = sub.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim();
         
         const subtotal = (parseFloat(item.valor || 0) * parseInt(item.qtde || 1));
         return `
@@ -25108,7 +25108,7 @@ window.printService = function (id) {
                                                     </div>
                                                     <div class="info-row">
                                                         <span class="label">Subdivis\u00e3o</span>
-                                                        <span class="value">${s.subdivisao ? s.subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim() : '-'}</span>
+                                                        <span class="value">${s.subdivisao ? s.subdivisao.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim() : '-'}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -25160,7 +25160,7 @@ window.printServiceList = function (subFilter = '', orientation = 'landscape', f
         const bodyRows = chunk.map((s) => {
             const tipoCalculo = String(s && s.tipo_calculo || 'Fixo');
             const odontograma = (s && s.exige_elemento) ? 'SIM' : 'NÃO';
-            let sub = s.subdivisao ? s.subdivisao.replace(/^\d+\.\d+\s*-\s*/, '').trim() : '-';
+            let sub = s.subdivisao ? s.subdivisao.replace(/^\d+(\.\d+)?\s*-\s*/, '').trim() : '-';
             return `
                 <tr>
                     <td>${s.seqid || ''}</td>
