@@ -466,13 +466,7 @@ begin
   where c.table_schema = 'public' and c.table_name = 'servicos' and c.column_name = 'empresa_id';
 
   select string_agg(format('%I', c.column_name), ', ' order by c.ordinal_position),
-         string_agg(
-           case 
-             when c.column_name = 'subdivisao' then format('regexp_replace(t.%I, ''^\d+(\.\d+)?\s*-\s*'', '''')', c.column_name)
-             else format('t.%I', c.column_name)
-           end,
-           ', ' order by c.ordinal_position
-         )
+         string_agg(format('t.%I', c.column_name), ', ' order by c.ordinal_position)
   into v_cols, v_sel
   from information_schema.columns c
   join information_schema.columns s

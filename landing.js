@@ -3,45 +3,6 @@ const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
 const db = (window.supabase && typeof window.supabase.createClient === 'function')
   ? window.supabase.createClient(supabaseUrl, supabaseKey)
   : null;
-
-// RESET DE SESSÃO NA LANDING PAGE: 
-// Estar na Landing Page significa estar DESLOGADO. Destruímos o Token na entrada.
-if (db && db.auth) {
-    db.auth.signOut().catch(() => {});
-}
-try {
-    if (typeof localStorage !== 'undefined') {
-        Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                localStorage.removeItem(key);
-            }
-        });
-    }
-} catch (e) { console.warn('Erro ao limpar localStorage na landing page', e); }
-
-// REMOÇÃO DE CAMADAS DE BLOQUEIO / OVERLAYS:
-// Se houver lixo do Back-Forward Cache (telas cinzas, modals abertos ou screensaver)
-try {
-    const screensaver = document.getElementById('privacyScreensaver');
-    if (screensaver) {
-        screensaver.style.display = 'none';
-        screensaver.classList.add('hidden');
-        screensaver.remove(); // Destrói para garantir
-    }
-    
-    const trialBackdrop = document.getElementById('trialModalBackdrop');
-    if (trialBackdrop) trialBackdrop.style.display = 'none';
-    
-    // Força liberação do scroll e pointer
-    document.body.style.overflow = '';
-    document.body.style.pointerEvents = 'auto';
-    document.documentElement.style.pointerEvents = 'auto';
-    document.documentElement.style.overflow = '';
-    
-    const heroText = document.querySelector('.lp-hero-inner');
-    if (heroText) heroText.style.pointerEvents = 'auto';
-} catch(e) {}
-
 let cachedPlanos = [];
 
 function maskCell(value) {

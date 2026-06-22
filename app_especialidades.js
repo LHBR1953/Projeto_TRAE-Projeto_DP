@@ -88,7 +88,7 @@ async function confirmSpecialtyImport() {
     if (specialtyImportStatus) specialtyImportStatus.textContent = 'Carregando estado atual...';
 
     const { data: existingSpecs, error: sErr } = await withTimeout(
-        db.from('especialidades').select('id,nome,seqid').eq('empresa_id', empresaId),
+        db.from(getDbTable('especialidades')).select('id,nome,seqid').eq('empresa_id', empresaId),
         20000,
         'specImport:especialidades'
     );
@@ -114,7 +114,7 @@ async function confirmSpecialtyImport() {
             maxSeq += 1;
             const specData = { id: generateId(), seqid: maxSeq, nome: specKey, empresa_id: empresaId };
             const { data: ins, error } = await withTimeout(
-                db.from('especialidades').insert(specData).select('id,seqid,nome').single(),
+                db.from(getDbTable('especialidades')).insert(specData).select('id,seqid,nome').single(),
                 20000,
                 'specImport:insertEspecialidade'
             );

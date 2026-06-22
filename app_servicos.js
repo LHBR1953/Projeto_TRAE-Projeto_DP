@@ -112,13 +112,13 @@ async function confirmServiceImport() {
 
     if (serviceImportStatus) serviceImportStatus.textContent = 'Carregando itens atuais...';
     const { data: existing, error } = await withTimeout(
-        db.from('servicos').select('id,descricao,subdivisao,subdivisao_id,ie,tipo_calculo,exige_elemento,seqid,codigo_servico,valor').eq('empresa_id', empresaId),
+        db.from(getDbTable('servicos')).select('id,descricao,subdivisao,subdivisao_id,ie,tipo_calculo,exige_elemento,seqid,codigo_servico,valor').eq('empresa_id', empresaId),
         20000,
         'srvImport:servicos'
     );
     if (error) { showToast('Falha ao carregar serviços.', true); return; }
     const { data: allSubs, error: subErr } = await withTimeout(
-        db.from('especialidade_subdivisoes').select('id,nome').eq('empresa_id', empresaId),
+        db.from(getDbTable('especialidade_subdivisoes')).select('id,nome').eq('empresa_id', empresaId),
         20000,
         'srvImport:subdivisoes'
     );
@@ -172,7 +172,7 @@ async function confirmServiceImport() {
                     subdivisao_id: resolvedSub.id || null
                 };
                 const { error: uErr } = await withTimeout(
-                    db.from('servicos').update(upd).eq('id', found.id),
+                    db.from(getDbTable('servicos')).update(upd).eq('id', found.id),
                     20000,
                     'srvImport:update'
                 );
@@ -203,7 +203,7 @@ async function confirmServiceImport() {
             empresa_id: empresaId
         };
         const { error: iErr } = await withTimeout(
-            db.from('servicos').insert(ins),
+            db.from(getDbTable('servicos')).insert(ins),
             20000,
             'srvImport:insert'
         );
@@ -228,7 +228,7 @@ async function exportServicesXlsx() {
     const empresaId = getEffectiveImportEmpresaId();
     if (!empresaId) { showToast('Empresa inválida.', true); return; }
     const { data, error } = await withTimeout(
-        db.from('servicos')
+        db.from(getDbTable('servicos'))
             .select('seqid,descricao,valor,ie,tipo_calculo,exige_elemento,subdivisao')
             .eq('empresa_id', empresaId)
             .order('seqid', { ascending: true }),
@@ -285,7 +285,7 @@ async function fetchServiceModelIdFromDb(serviceId) {
     if (!isUuidLike(sid)) {
         const seq = Number(sid);
         if (Number.isFinite(seq)) {
-            let sq = db.from('servicos')
+            let sq = db.from(getDbTable('servicos'))
                 .select('id')
                 .eq('seqid', seq)
                 .maybeSingle();
@@ -294,7 +294,7 @@ async function fetchServiceModelIdFromDb(serviceId) {
         }
     }
     if (!isUuidLike(sid)) return '';
-    let q = db.from('service_mapping')
+    let q = db.from(getDbTable('service_mapping'))
         .select('model_id')
         .eq('service_id', sid)
         .maybeSingle();
@@ -308,14 +308,14 @@ async function fetchServicoFromDb(serviceId) {
     const sid = String(serviceId || '').trim();
     if (!sid) return null;
     const empId = String(currentEmpresaId || '').trim();
-    let q = db.from('servicos')
+    let q = db.from(getDbTable('servicos'))
         .select('id,descricao,subdivisao,empresa_id')
         .eq('empresa_id', empId)
         .eq('id', sid)
         .maybeSingle();
     let { data, error } = await withTimeout(q, 15000, 'servicos:one');
     if (error && isDbMissingColumnError(error, 'empresa_id')) {
-        q = db.from('servicos')
+        q = db.from(getDbTable('servicos'))
             .select('id,descricao,subdivisao')
             .eq('id', sid)
             .maybeSingle();
@@ -347,16 +347,16 @@ async function saveServiceModelMapping(serviceId, modelId) {
     const sid = String(serviceId || '').trim();
     if (!sid) return;
     const empId = String(currentEmpresaId || '').trim();
-    let delRes = await db.from('service_mapping').delete().eq('service_id', sid).eq('empresa_id', empId);
+    let delRes = await db.from(getDbTable('service_mapping')).delete().eq('service_id', sid).eq('empresa_id', empId);
     if (delRes && delRes.error && isDbMissingColumnError(delRes.error, 'empresa_id')) {
-        delRes = await db.from('service_mapping').delete().eq('service_id', sid);
+        delRes = await db.from(getDbTable('service_mapping')).delete().eq('service_id', sid);
     }
     if (delRes && delRes.error) throw delRes.error;
     const mid = String(modelId || '').trim();
     if (!mid) return;
-    let insRes = await db.from('service_mapping').insert({ service_id: sid, model_id: mid, empresa_id: empId });
+    let insRes = await db.from(getDbTable('service_mapping')).insert({ service_id: sid, model_id: mid, empresa_id: empId });
     if (insRes && insRes.error && isDbMissingColumnError(insRes.error, 'empresa_id')) {
-        insRes = await db.from('service_mapping').insert({ service_id: sid, model_id: mid });
+        insRes = await db.from(getDbTable('service_mapping')).insert({ service_id: sid, model_id: mid });
     }
     if (insRes && insRes.error) throw insRes.error;
 }
@@ -515,9 +515,9 @@ async function refreshServSubdivisaoLookupForEmpresa(empresaId) {
         return;
     }
     if (__subdivLookupEmpresaId === emp && __subdivLookupMap && __subdivLookupMap.size > 0) return;
-    const subsRes = await db.from('especialidade_subdivisoes').select('id,nome,especialidade_id').eq('empresa_id', emp).order('nome', { ascending: true });
+    const subsRes = await db.from(getDbTable('especialidade_subdivisoes')).select('id,nome,especialidade_id').eq('empresa_id', emp).order('nome', { ascending: true });
     if (subsRes.error) throw subsRes.error;
-    const specsRes = await db.from('especialidades').select('id,nome,seqid').eq('empresa_id', emp);
+    const specsRes = await db.from(getDbTable('especialidades')).select('id,nome,seqid').eq('empresa_id', emp);
     if (specsRes.error) throw specsRes.error;
     const specById = new Map((specsRes.data || []).map(s => [String(s.id), s]));
     const map = new Map();

@@ -12,7 +12,7 @@ cd /d C:\Projeto_TRAE\Projeto_DP
 :: Passo 1: Login (Caso a sessao tenha expirado)
 echo [1/3] Verificando autenticacao...
 
-echo call vercel login
+call vercel login --confirm
 
 :: Passo 2: Deploy de Producao (Forca a atualizacao do index.html e assets)
 echo [2/3] Enviando arquivos para producao...

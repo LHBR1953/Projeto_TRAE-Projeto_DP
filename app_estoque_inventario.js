@@ -1076,20 +1076,6 @@ function showPrivacyScreensaver() {
     const wrap = document.getElementById('privacyScreensaver');
     if (!wrap) return;
     if (document.getElementById('loginView') && document.getElementById('loginView').style.display !== 'none') return;
-
-    // COERÇÃO NO SAVESCREEN: Destruir o token de autenticação ativa da memória imediatamente
-    try {
-        explicitLogoutRequested = true;
-        if (db && db.auth) db.auth.signOut().catch(() => {});
-        if (typeof localStorage !== 'undefined') {
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                    localStorage.removeItem(key);
-                }
-            });
-        }
-    } catch (e) { }
-
     const { nome, logo } = getPrivacyScreensaverBranding();
     const nameEl = document.getElementById('privacyScreensaverCompanyName');
     const logoEl = document.getElementById('privacyScreensaverLogo');
@@ -1671,13 +1657,13 @@ async function confirmServiceImport() {
 
     if (serviceImportStatus) serviceImportStatus.textContent = 'Carregando itens atuais...';
     const { data: existing, error } = await withTimeout(
-        db.from('servicos').select('id,descricao,subdivisao,subdivisao_id,ie,tipo_calculo,exige_elemento,seqid,codigo_servico,valor').eq('empresa_id', empresaId),
+        db.from(getDbTable('servicos')).select('id,descricao,subdivisao,subdivisao_id,ie,tipo_calculo,exige_elemento,seqid,codigo_servico,valor').eq('empresa_id', empresaId),
         20000,
         'srvImport:servicos'
     );
     if (error) { showToast('Falha ao carregar serviços.', true); return; }
     const { data: allSubs, error: subErr } = await withTimeout(
-        db.from('especialidade_subdivisoes').select('id,nome').eq('empresa_id', empresaId),
+        db.from(getDbTable('especialidade_subdivisoes')).select('id,nome').eq('empresa_id', empresaId),
         20000,
         'srvImport:subdivisoes'
     );
@@ -1731,7 +1717,7 @@ async function confirmServiceImport() {
                     subdivisao_id: resolvedSub.id || null
                 };
                 const { error: uErr } = await withTimeout(
-                    db.from('servicos').update(upd).eq('id', found.id),
+                    db.from(getDbTable('servicos')).update(upd).eq('id', found.id),
                     20000,
                     'srvImport:update'
                 );
@@ -1762,7 +1748,7 @@ async function confirmServiceImport() {
             empresa_id: empresaId
         };
         const { error: iErr } = await withTimeout(
-            db.from('servicos').insert(ins),
+            db.from(getDbTable('servicos')).insert(ins),
             20000,
             'srvImport:insert'
         );
@@ -1787,7 +1773,7 @@ async function exportServicesXlsx() {
     const empresaId = getEffectiveImportEmpresaId();
     if (!empresaId) { showToast('Empresa inválida.', true); return; }
     const { data, error } = await withTimeout(
-        db.from('servicos')
+        db.from(getDbTable('servicos'))
             .select('seqid,descricao,valor,ie,tipo_calculo,exige_elemento,subdivisao')
             .eq('empresa_id', empresaId)
             .order('seqid', { ascending: true }),
@@ -1928,7 +1914,7 @@ async function exportSpecialtiesXlsx() {
     const empresaId = getEffectiveImportEmpresaId();
     if (!empresaId) { showToast('Empresa inválida.', true); return; }
     const { data, error } = await withTimeout(
-        db.from('especialidades')
+        db.from(getDbTable('especialidades'))
             .select('id,seqid,nome,empresa_id')
             .eq('empresa_id', empresaId)
             .order('seqid', { ascending: true }),
@@ -1949,7 +1935,7 @@ async function exportSubdivisionsXlsx() {
     const empresaId = getEffectiveImportEmpresaId();
     if (!empresaId) { showToast('Empresa inválida.', true); return; }
     const { data: specs, error: specErr } = await withTimeout(
-        db.from('especialidades')
+        db.from(getDbTable('especialidades'))
             .select('id,seqid,nome,empresa_id')
             .eq('empresa_id', empresaId),
         20000,
@@ -1958,7 +1944,7 @@ async function exportSubdivisionsXlsx() {
     if (specErr) { showToast('Falha ao exportar subdivisões.', true); return; }
     const bySpecId = new Map((specs || []).map(s => [String(s && s.id || ''), s]));
     const { data, error } = await withTimeout(
-        db.from('especialidade_subdivisoes')
+        db.from(getDbTable('especialidade_subdivisoes'))
             .select('id,especialidade_id,nome,empresa_id')
             .eq('empresa_id', empresaId),
         20000,
@@ -2063,7 +2049,7 @@ async function confirmSpecialtyImport() {
     if (specialtyImportStatus) specialtyImportStatus.textContent = 'Carregando estado atual...';
 
     const { data: existingSpecs, error: sErr } = await withTimeout(
-        db.from('especialidades').select('id,nome,seqid').eq('empresa_id', empresaId),
+        db.from(getDbTable('especialidades')).select('id,nome,seqid').eq('empresa_id', empresaId),
         20000,
         'specImport:especialidades'
     );
@@ -2089,7 +2075,7 @@ async function confirmSpecialtyImport() {
             maxSeq += 1;
             const specData = { id: generateId(), seqid: maxSeq, nome: specKey, empresa_id: empresaId };
             const { data: ins, error } = await withTimeout(
-                db.from('especialidades').insert(specData).select('id,seqid,nome').single(),
+                db.from(getDbTable('especialidades')).insert(specData).select('id,seqid,nome').single(),
                 20000,
                 'specImport:insertEspecialidade'
             );
@@ -2125,8 +2111,8 @@ async function refreshSpecialtiesGridForEmpresa(empresaId) {
     const empId = String(empresaId || '').trim();
     if (!empId) return;
     const [specRes, subRes] = await Promise.all([
-        db.from('especialidades').select('*').eq('empresa_id', empId).order('seqid', { ascending: true }),
-        db.from('especialidade_subdivisoes').select('*').eq('empresa_id', empId)
+        db.from(getDbTable('especialidades')).select('*').eq('empresa_id', empId).order('seqid', { ascending: true }),
+        db.from(getDbTable('especialidade_subdivisoes')).select('*').eq('empresa_id', empId)
     ]);
     if (specRes.error || subRes.error) return;
     const specs = Array.isArray(specRes.data) ? specRes.data : [];
@@ -2153,7 +2139,7 @@ async function confirmSubdivisionImport() {
     if (!empresaId) { showToast('Empresa inválida.', true); return; }
 
     const { data: specs, error: specErr } = await withTimeout(
-        db.from('especialidades')
+        db.from(getDbTable('especialidades'))
             .select('id,nome,seqid')
             .eq('empresa_id', empresaId),
         20000,
@@ -2175,7 +2161,7 @@ async function confirmSubdivisionImport() {
 
     if (subdivisionImportStatus) subdivisionImportStatus.textContent = 'Carregando subdivisões atuais...';
     const { data: existingSubs, error: subErr } = await withTimeout(
-        db.from('especialidade_subdivisoes')
+        db.from(getDbTable('especialidade_subdivisoes'))
             .select('nome,especialidade_id')
             .eq('empresa_id', empresaId)
             .in('especialidade_id', Array.from(specMap.values())),
@@ -2212,7 +2198,7 @@ async function confirmSubdivisionImport() {
         }
         const row = { id: generateId(), empresa_id: empresaId, especialidade_id: targetSpecialtyId, nome: name };
         const { error } = await withTimeout(
-            db.from('especialidade_subdivisoes').insert(row),
+            db.from(getDbTable('especialidade_subdivisoes')).insert(row),
             20000,
             'subImport:insert'
         );
@@ -2689,9 +2675,9 @@ async function initializeApp(isContextSwitch = false) {
         const results = await Promise.all([
             db.from('pacientes').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }),
             Promise.resolve(professionalsResponse), // Keep index 1 intact
-            db.from('especialidades').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }),
-            db.from('especialidade_subdivisoes').select('*').eq('empresa_id', currentEmpresaId),
-            db.from('servicos').select('*').eq('empresa_id', currentEmpresaId).order('descricao', { ascending: true }),
+            db.from(getDbTable('especialidades')).select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }),
+            db.from(getDbTable('especialidade_subdivisoes')).select('*').eq('empresa_id', currentEmpresaId),
+            db.from(getDbTable('servicos')).select('*').eq('empresa_id', currentEmpresaId).order('descricao', { ascending: true }),
             bQuery,
             db.from('orcamento_pagamentos').select('*').eq('empresa_id', currentEmpresaId),
             (isSuperAdmin
@@ -2870,7 +2856,7 @@ async function initializeApp(isContextSwitch = false) {
                     empresa_id: currentEmpresaId
                 };
 
-                const { data: newSpec } = await db.from('especialidades').insert(specData).select().single();
+                const { data: newSpec } = await db.from(getDbTable('especialidades')).insert(specData).select().single();
                 if (newSpec) {
                     newSpec.subdivisoes = [];
                     // Insert subdivisions for this default specialty
@@ -2881,7 +2867,7 @@ async function initializeApp(isContextSwitch = false) {
                             nome: subName,
                             empresa_id: currentEmpresaId
                         };
-                        const { data: newSub } = await db.from('especialidade_subdivisoes').insert(subData).select().single();
+                        const { data: newSub } = await db.from(getDbTable('especialidade_subdivisoes')).insert(subData).select().single();
                         if (newSub) newSpec.subdivisoes.push(newSub);
                     }
                     specialties.push(newSpec);
@@ -4139,10 +4125,10 @@ async function loadTabData(tab) {
 
     // Especialidades e Subdivisões
     if (['specialties', 'services', 'professionals', 'budgets'].includes(tab)) {
-        updates.push(db.from('especialidades').select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }).then(async res => {
+        updates.push(db.from(getDbTable('especialidades')).select('*').eq('empresa_id', currentEmpresaId).order('seqid', { ascending: true }).then(async res => {
             if(res.data) {
                 const rawSpecialties = res.data;
-                const subRes = await db.from('especialidade_subdivisoes').select('*').eq('empresa_id', currentEmpresaId);
+                const subRes = await db.from(getDbTable('especialidade_subdivisoes')).select('*').eq('empresa_id', currentEmpresaId);
                 const subdivisions = subRes.data || [];
                 const seenIds = new Set();
                 specialties = rawSpecialties.filter(s => {
@@ -4159,7 +4145,7 @@ async function loadTabData(tab) {
 
     // Serviços
     if (['services', 'budgets', 'atendimento'].includes(tab)) {
-        updates.push(db.from('servicos').select('*').eq('empresa_id', currentEmpresaId).order('descricao', { ascending: true }).then(res => { if(res.data) services = res.data; }));
+        updates.push(db.from(getDbTable('servicos')).select('*').eq('empresa_id', currentEmpresaId).order('descricao', { ascending: true }).then(res => { if(res.data) services = res.data; }));
     }
 
     // Orçamentos e Itens
@@ -4805,8 +4791,8 @@ async function saveInventoryRowWithFallback({ id = '', payload = {}, withSelect 
     const rid = String(id || '').trim();
     let p = { ...payload };
     const run = async () => {
-        if (rid) return db.from('inventory').update(p).eq('id', rid);
-        let q = db.from('inventory').insert(p);
+        if (rid) return db.from(getDbTable('inventory')).update(p).eq('id', rid);
+        let q = db.from(getDbTable('inventory')).insert(p);
         if (withSelect) q = q.select('*').maybeSingle();
         return q;
     };
@@ -4908,9 +4894,9 @@ async function ensureBiossegKitExists({ silent = false } = {}) {
     if (!(isSuperAdmin || isAdminRole())) return '';
     const empId = getEstoqueEmpresaScopeId();
     if (!empId) return '';
-    let ins = await db.from('usage_models').insert({ empresa_id: empId, nome_modelo: 'Kit Biossegurança', include_biosseguranca: true });
+    let ins = await db.from(getDbTable('usage_models')).insert({ empresa_id: empId, nome_modelo: 'Kit Biossegurança', include_biosseguranca: true });
     if (ins && ins.error && isIncludeBiossegSchemaError(ins.error)) {
-        ins = await db.from('usage_models').insert({ empresa_id: empId, nome_modelo: 'Kit Biossegurança' });
+        ins = await db.from(getDbTable('usage_models')).insert({ empresa_id: empId, nome_modelo: 'Kit Biossegurança' });
     }
     if (ins && ins.error) {
         if (!silent) showToast(ins.error.message || 'Falha ao criar Kit Biossegurança.', true);
@@ -4934,7 +4920,7 @@ async function purgeBiossegItemsFromModel(modelId) {
     const biossegItems = (usageModelItems || []).filter(mi => String(mi && mi.model_id || '') === biossegId);
     const invIds = Array.from(new Set(biossegItems.map(mi => String(mi && mi.inventory_id || '')).filter(Boolean)));
     if (!invIds.length) return;
-    await db.from('model_items').delete().eq('model_id', mid).in('inventory_id', invIds);
+    await db.from(getDbTable('model_items')).delete().eq('model_id', mid).in('inventory_id', invIds);
 }
 
 function getModelItemsByModelId(modelId) {
@@ -5059,7 +5045,7 @@ async function fetchServiceModelIdFromDb(serviceId) {
     if (!isUuidLike(sid)) {
         const seq = Number(sid);
         if (Number.isFinite(seq)) {
-            let sq = db.from('servicos')
+            let sq = db.from(getDbTable('servicos'))
                 .select('id')
                 .eq('seqid', seq)
                 .maybeSingle();
@@ -5068,7 +5054,7 @@ async function fetchServiceModelIdFromDb(serviceId) {
         }
     }
     if (!isUuidLike(sid)) return '';
-    let q = db.from('service_mapping')
+    let q = db.from(getDbTable('service_mapping'))
         .select('model_id')
         .eq('service_id', sid)
         .maybeSingle();
@@ -5082,14 +5068,14 @@ async function fetchUsageModelFromDb(modelId) {
     const mid = String(modelId || '').trim();
     if (!mid) return null;
     const empId = String(currentEmpresaId || '').trim();
-    let q = db.from('usage_models')
+    let q = db.from(getDbTable('usage_models'))
         .select('id,nome_modelo,include_biosseguranca,empresa_id')
         .eq('id', mid);
     if (empId) q = q.eq('empresa_id', empId);
     q = q.maybeSingle();
     let { data, error } = await withTimeout(q, 15000, 'usage_models:one');
     if (error && isDbMissingColumnError(error, 'empresa_id')) {
-        q = db.from('usage_models')
+        q = db.from(getDbTable('usage_models'))
             .select('id,nome_modelo,include_biosseguranca')
             .eq('id', mid)
             .maybeSingle();
@@ -5101,12 +5087,12 @@ async function fetchUsageModelFromDb(modelId) {
 
 async function fetchBiossegModelIdFromDb() {
     const empId = String(currentEmpresaId || '').trim();
-    let q = db.from('usage_models')
+    let q = db.from(getDbTable('usage_models'))
         .select('id,nome_modelo');
     if (empId) q = q.eq('empresa_id', empId);
     let { data, error } = await withTimeout(q, 15000, 'usage_models:biosseg');
     if (error && isDbMissingColumnError(error, 'empresa_id')) {
-        q = db.from('usage_models')
+        q = db.from(getDbTable('usage_models'))
             .select('id,nome_modelo');
         ({ data, error } = await withTimeout(q, 15000, 'usage_models:biosseg:no_emp'));
     }
@@ -5139,7 +5125,7 @@ async function fetchModelItemsFromDb(modelId) {
         if (local && local.id) mid = String(local.id).trim();
     }
     if (!isUuidLike(mid)) return [];
-    let q = db.from('model_items')
+    let q = db.from(getDbTable('model_items'))
         .select('inventory_id,quantidade_sugerida')
         .eq('model_id', mid);
     let { data, error } = await withTimeout(q, 20000, 'model_items:by_model');
@@ -5154,13 +5140,13 @@ async function fetchInventoryByIdsFromDb(ids = []) {
     if (!list.length) return [];
     const out = [];
     for (const chunk of splitIntoChunks(list, 200)) {
-        let q = db.from('inventory')
+        let q = db.from(getDbTable('inventory'))
             .select('id,nome,unidade,unidade_medida,fator_conversao,preco_custo,estoque_atual,estoque_minimo,tipo_inventario,eh_consumivel,ativo')
             .in('id', chunk)
             .eq('empresa_id', empId);
         let { data, error } = await withTimeout(q, 20000, 'inventory:by_ids');
         if (error && isDbMissingColumnError(error, 'empresa_id')) {
-            q = db.from('inventory')
+            q = db.from(getDbTable('inventory'))
                 .select('id,nome,unidade,unidade_medida,fator_conversao,preco_custo,estoque_atual,estoque_minimo,tipo_inventario,eh_consumivel,ativo')
                 .in('id', chunk);
             ({ data, error } = await withTimeout(q, 20000, 'inventory:by_ids:no_emp'));
@@ -5175,14 +5161,14 @@ async function fetchServicoFromDb(serviceId) {
     const sid = String(serviceId || '').trim();
     if (!sid) return null;
     const empId = String(currentEmpresaId || '').trim();
-    let q = db.from('servicos')
+    let q = db.from(getDbTable('servicos'))
         .select('id,descricao,subdivisao,empresa_id')
         .eq('empresa_id', empId)
         .eq('id', sid)
         .maybeSingle();
     let { data, error } = await withTimeout(q, 15000, 'servicos:one');
     if (error && isDbMissingColumnError(error, 'empresa_id')) {
-        q = db.from('servicos')
+        q = db.from(getDbTable('servicos'))
             .select('id,descricao,subdivisao')
             .eq('id', sid)
             .maybeSingle();
@@ -5239,10 +5225,10 @@ async function fetchBiossegFallbackItemsFromDb() {
     if (!empId) return [];
     const needles = ['luva', 'mascara', 'máscara', 'sugador', 'touca', 'babador'];
     const orParts = needles.map((n) => `nome.ilike.%${String(n).replaceAll(',', '')}%`).join(',');
-    let q = db.from('inventory').select('id,nome').eq('empresa_id', empId).or(orParts).limit(200);
+    let q = db.from(getDbTable('inventory')).select('id,nome').eq('empresa_id', empId).or(orParts).limit(200);
     let { data, error } = await withTimeout(q, 20000, 'inventory:biosseg_fallback');
     if (error && isDbMissingColumnError(error, 'empresa_id')) {
-        q = db.from('inventory').select('id,nome').or(orParts).limit(200);
+        q = db.from(getDbTable('inventory')).select('id,nome').or(orParts).limit(200);
         ({ data, error } = await withTimeout(q, 20000, 'inventory:biosseg_fallback:no_emp'));
     }
     if (error) return [];
@@ -5421,7 +5407,7 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
                 const consumivel = isInventoryConsumable(inv);
                 if (consumivel) {
                     const novo = toDec(inv && inv.estoque_atual, 0) - toDec(row.qtd, 0);
-                    const { error: updErr } = await db.from('inventory').update({ estoque_atual: novo }).eq('id', invId);
+                    const { error: updErr } = await db.from(getDbTable('inventory')).update({ estoque_atual: novo }).eq('id', invId);
                     if (updErr) throw updErr;
                     try {
                         const nextInv = { ...inv, estoque_atual: novo };
@@ -5620,7 +5606,7 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
                     const consumivel = isInventoryConsumable(inv);
                     if (consumivel) {
                         const novo = toDec(inv && inv.estoque_atual, 0) - toDec(row.qtd, 0);
-                        const { error: updErr } = await db.from('inventory').update({ estoque_atual: novo }).eq('id', invId);
+                        const { error: updErr } = await db.from(getDbTable('inventory')).update({ estoque_atual: novo }).eq('id', invId);
                         if (updErr) throw updErr;
                         try {
                             const nextInv = { ...inv, estoque_atual: novo };
@@ -5792,7 +5778,7 @@ async function seedStockMasterData({ silent = false } = {}) {
     for (const def of STOCK_MASTER_MODEL_DEFS) {
         const k = normalizeKey(def.nome);
         if (existingByName.has(k)) continue;
-        const { error } = await db.from('usage_models').insert({ empresa_id: empId, nome_modelo: def.nome });
+        const { error } = await db.from(getDbTable('usage_models')).insert({ empresa_id: empId, nome_modelo: def.nome });
         if (error && !silent) showToast(`Falha ao criar modelo ${def.nome}: ${error.message || 'erro'}`, true);
     }
     await loadEstoqueData(true);
@@ -5819,9 +5805,9 @@ async function seedStockMasterData({ silent = false } = {}) {
         const key = resolveStockMasterKeyFromService(serv, specialtyById);
         const modelId = String(modelByKey.get(key) || modelByKey.get('clinico') || '');
         if (!modelId) continue;
-        const { error: delErr } = await db.from('service_mapping').delete().eq('service_id', sid);
+        const { error: delErr } = await db.from(getDbTable('service_mapping')).delete().eq('service_id', sid);
         if (delErr) continue;
-        await db.from('service_mapping').insert({ service_id: sid, model_id: modelId });
+        await db.from(getDbTable('service_mapping')).insert({ service_id: sid, model_id: modelId });
     }
 
     await loadEstoqueData(true);
@@ -5870,9 +5856,9 @@ async function seedStockMasterData({ silent = false } = {}) {
         const invId = String(inv.id);
         const existing = (usageModelItems || []).find(mi => String(mi && mi.model_id || '') === String(modelId) && String(mi && mi.inventory_id || '') === invId) || null;
         if (existing && existing.id) {
-            await db.from('model_items').update({ quantidade_sugerida: toDec(qtd, 0) }).eq('id', existing.id);
+            await db.from(getDbTable('model_items')).update({ quantidade_sugerida: toDec(qtd, 0) }).eq('id', existing.id);
         } else {
-            await db.from('model_items').insert({ model_id: String(modelId), inventory_id: invId, quantidade_sugerida: toDec(qtd, 0) });
+            await db.from(getDbTable('model_items')).insert({ model_id: String(modelId), inventory_id: invId, quantidade_sugerida: toDec(qtd, 0) });
         }
     };
 
@@ -6029,10 +6015,10 @@ async function injectBiossegItemsIntoModel(modelId) {
         if (!invId) continue;
         const existing = existingRows.find(mi => String(mi && mi.inventory_id || '') === invId) || null;
         if (existing && existing.id) {
-            const { error } = await db.from('model_items').update({ quantidade_sugerida: toDec(rule.qtd, 0) }).eq('id', existing.id);
+            const { error } = await db.from(getDbTable('model_items')).update({ quantidade_sugerida: toDec(rule.qtd, 0) }).eq('id', existing.id);
             if (error) return { ok: false, reason: 'update_failed', error };
         } else {
-            const { error } = await db.from('model_items').insert({ model_id: mid, inventory_id: invId, quantidade_sugerida: toDec(rule.qtd, 0) });
+            const { error } = await db.from(getDbTable('model_items')).insert({ model_id: mid, inventory_id: invId, quantidade_sugerida: toDec(rule.qtd, 0) });
             if (error) return { ok: false, reason: 'insert_failed', error };
         }
     }
@@ -6220,9 +6206,9 @@ async function loadEstoqueData(force = false) {
 
     try {
         const [invRes, modelsRes, mapRes, logsRes] = await Promise.all([
-            db.from('inventory').select('*').eq('empresa_id', empId).order('nome'),
-            db.from('usage_models').select('*').eq('empresa_id', empId).order('nome_modelo'),
-            db.from('service_mapping').select('*'),
+            db.from(getDbTable('inventory')).select('*').eq('empresa_id', empId).order('nome'),
+            db.from(getDbTable('usage_models')).select('*').eq('empresa_id', empId).order('nome_modelo'),
+            db.from(getDbTable('service_mapping')).select('*'),
             db.from('inventory_logs').select('*').eq('empresa_id', empId).order('data_hora', { ascending: false }).limit(300)
         ]);
 
@@ -6246,7 +6232,7 @@ async function loadEstoqueData(force = false) {
             const chunk = 200;
             for (let i = 0; i < modelIdsRaw.length; i += chunk) {
                 const ids = modelIdsRaw.slice(i, i + chunk);
-                const itemsRes = await db.from('model_items').select('*').in('model_id', ids);
+                const itemsRes = await db.from(getDbTable('model_items')).select('*').in('model_id', ids);
                 if (itemsRes && !itemsRes.error && Array.isArray(itemsRes.data)) items.push(...itemsRes.data);
             }
         }
@@ -6453,7 +6439,7 @@ function renderInventoryTable() {
             const id = String(btn.getAttribute('data-id') || '');
             if (!id) return;
             if (!confirm('Deseja excluir este material?')) return;
-            const { error } = await db.from('inventory').delete().eq('id', id);
+            const { error } = await db.from(getDbTable('inventory')).delete().eq('id', id);
             if (error) {
                 showToast(error.message || 'Falha ao excluir material.', true);
                 return;
@@ -6539,7 +6525,7 @@ function renderInventoryTable() {
             const id = String(btn.getAttribute('data-id') || '');
             const current = String(btn.getAttribute('data-active') || '1') === '1';
             if (!id) return;
-            const { error } = await db.from('inventory').update({ ativo: !current }).eq('id', id);
+            const { error } = await db.from(getDbTable('inventory')).update({ ativo: !current }).eq('id', id);
             if (error) {
                 showToast(error.message || 'Falha ao atualizar status ativo.', true);
                 return;
@@ -6589,7 +6575,7 @@ function renderUsageModelsTable() {
             const id = String(btn.getAttribute('data-id') || '');
             if (!id) return;
             if (!confirm('Deseja excluir este modelo?')) return;
-            const { error } = await db.from('usage_models').delete().eq('id', id);
+            const { error } = await db.from(getDbTable('usage_models')).delete().eq('id', id);
             if (error) {
                 showToast(error.message || 'Falha ao excluir modelo.', true);
                 return;
@@ -6693,7 +6679,7 @@ function renderModelItemsEditor() {
                         return;
                     }
                 }
-                let upd = await db.from('usage_models').update({ include_biosseguranca: nextVal }).eq('id', mid);
+                let upd = await db.from(getDbTable('usage_models')).update({ include_biosseguranca: nextVal }).eq('id', mid);
                 if (upd && upd.error && isIncludeBiossegSchemaError(upd.error)) {
                     showToast('Campo include_biosseguranca ainda não disponível no banco. Aplique a migration para habilitar.', true);
                     includeBiossegInput.checked = true;
@@ -6744,7 +6730,7 @@ function renderModelItemsEditor() {
         btn.addEventListener('click', async () => {
             const id = String(btn.getAttribute('data-id') || '');
             if (!id) return;
-            const { error } = await db.from('model_items').delete().eq('id', id);
+            const { error } = await db.from(getDbTable('model_items')).delete().eq('id', id);
             if (error) {
                 showToast(error.message || 'Falha ao remover item do modelo.', true);
                 return;
@@ -6760,16 +6746,16 @@ async function saveServiceModelMapping(serviceId, modelId) {
     const sid = String(serviceId || '').trim();
     if (!sid) return;
     const empId = String(currentEmpresaId || '').trim();
-    let delRes = await db.from('service_mapping').delete().eq('service_id', sid).eq('empresa_id', empId);
+    let delRes = await db.from(getDbTable('service_mapping')).delete().eq('service_id', sid).eq('empresa_id', empId);
     if (delRes && delRes.error && isDbMissingColumnError(delRes.error, 'empresa_id')) {
-        delRes = await db.from('service_mapping').delete().eq('service_id', sid);
+        delRes = await db.from(getDbTable('service_mapping')).delete().eq('service_id', sid);
     }
     if (delRes && delRes.error) throw delRes.error;
     const mid = String(modelId || '').trim();
     if (!mid) return;
-    let insRes = await db.from('service_mapping').insert({ service_id: sid, model_id: mid, empresa_id: empId });
+    let insRes = await db.from(getDbTable('service_mapping')).insert({ service_id: sid, model_id: mid, empresa_id: empId });
     if (insRes && insRes.error && isDbMissingColumnError(insRes.error, 'empresa_id')) {
-        insRes = await db.from('service_mapping').insert({ service_id: sid, model_id: mid });
+        insRes = await db.from(getDbTable('service_mapping')).insert({ service_id: sid, model_id: mid });
     }
     if (insRes && insRes.error) throw insRes.error;
 }
@@ -6949,7 +6935,7 @@ async function estornarMovimentacao(logId) {
     const qtd = Math.abs(toDec(log && log.quantidade, 0));
     const delta = tipo === 'SAIDA' ? qtd : -qtd;
     const novoEstoque = toDec(item && item.estoque_atual, 0) + delta;
-    const { error: updErr } = await db.from('inventory').update({ estoque_atual: novoEstoque }).eq('id', itemId);
+    const { error: updErr } = await db.from(getDbTable('inventory')).update({ estoque_atual: novoEstoque }).eq('id', itemId);
     if (updErr) {
         showToast(updErr.message || 'Falha ao estornar estoque.', true);
         return;
@@ -8134,9 +8120,9 @@ function bindEstoqueModule() {
                 return;
             }
         }
-        let ins = await db.from('usage_models').insert({ empresa_id: getEstoqueEmpresaScopeId(), nome_modelo: nome, include_biosseguranca: includeBiosseg });
+        let ins = await db.from(getDbTable('usage_models')).insert({ empresa_id: getEstoqueEmpresaScopeId(), nome_modelo: nome, include_biosseguranca: includeBiosseg });
         if (ins && ins.error && isIncludeBiossegSchemaError(ins.error)) {
-            ins = await db.from('usage_models').insert({ empresa_id: getEstoqueEmpresaScopeId(), nome_modelo: nome });
+            ins = await db.from(getDbTable('usage_models')).insert({ empresa_id: getEstoqueEmpresaScopeId(), nome_modelo: nome });
         }
         if (ins && ins.error) {
             showToast(ins.error.message || 'Falha ao criar modelo.', true);
@@ -8169,7 +8155,7 @@ function bindEstoqueModule() {
             showToast('Selecione material e quantidade válida.', true);
             return;
         }
-        const { error } = await db.from('model_items').insert({ model_id: modelId, inventory_id: inventoryId, quantidade_sugerida: qtd });
+        const { error } = await db.from(getDbTable('model_items')).insert({ model_id: modelId, inventory_id: inventoryId, quantidade_sugerida: qtd });
         if (error) {
             showToast(error.message || 'Falha ao adicionar item ao modelo.', true);
             return;

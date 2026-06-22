@@ -334,6 +334,9 @@
                 <button id="navEmpresas" class="nav-item" style="display: none;">
                     <i class="ri-building-line"></i> <span>Cadastro de Empresas</span>
                 </button>
+                <button id="navMasterTables" class="nav-item" style="display: none;">
+                    <i class="ri-table-line"></i> <span>Tabelas Padrão</span>
+                </button>
                 <button id="navAssinaturas" class="nav-item" style="display: none;">
                     <i class="ri-vip-crown-line"></i> <span>Gestão de Assinaturas</span>
                 </button>
@@ -1512,11 +1515,18 @@
                                 </label>
                             </div>
 
-                            <div class="form-group span-2">
+                            <div class="form-group span-1">
+                                <label for="servEspecialidade">Especialidade *</label>
+                                <select id="servEspecialidade" class="form-control" required>
+                                    <option value="">Selecione uma especialidade...</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group span-1">
                                 <label for="servSubdivisao">Subdivisão *</label>
                                 <input type="hidden" id="servSubdivisao">
                                 <div style="position: relative;">
-                                    <input type="text" id="servSubdivisaoLabel" class="form-control" required placeholder="Buscar subdivisão..." autocomplete="off">
+                                    <input type="text" id="servSubdivisaoLabel" class="form-control" required placeholder="Buscar subdivisão..." autocomplete="off" disabled title="Selecione uma especialidade primeiro">
                                     <div id="servSubdivisaoPanel" class="hidden" style="position:absolute; z-index: 50; top: calc(100% + 6px); left: 0; right: 0; max-height: 260px; overflow:auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,0.12);"></div>
                                 </div>
                             </div>
@@ -3842,6 +3852,28 @@
                             <p>Nenhum chamado aberto.</p>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            <section id="masterTablesView" class="view-section hidden">
+                <div class="section-header">
+                    <div>
+                        <h2><i class="ri-table-line"></i> Tabelas Padrão</h2>
+                        <p>Gerencie as tabelas auxiliares do sistema.</p>
+                    </div>
+                </div>
+
+                <div class="tabs-container" style="margin-bottom: 20px;">
+                    <div class="tabs" style="display: flex; gap: 10px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px;">
+                        <button id="tabMasterSpecialties" class="btn btn-primary active" style="flex: 1; padding: 10px; font-weight: bold; border-radius: 8px;">Especialidades</button>
+                        <button id="tabMasterServices" class="btn btn-secondary" style="flex: 1; padding: 10px; font-weight: bold; border-radius: 8px;">Procedimentos / Serviços</button>
+                        <button id="tabMasterKits" class="btn btn-secondary" style="flex: 1; padding: 10px; font-weight: bold; border-radius: 8px;">Modelos / Kits</button>
+                        <button id="tabMasterInventory" class="btn btn-secondary" style="flex: 1; padding: 10px; font-weight: bold; border-radius: 8px;">Inventário Padrão</button>
+                    </div>
+                </div>
+
+                <div id="masterTablesContent" style="position: relative;">
+                    <!-- Content will be managed by JS -->
                 </div>
             </section>
 
