@@ -109,7 +109,8 @@
           <div class="lp-nav">
             <a href="#beneficios">Benefícios</a>
             <a href="#planos">Planos</a>
-            <a class="lp-btn lp-btn-secondary" href="/app.html">Acessar Sistema</a>
+            <button id="btnPatientPortal" class="lp-btn lp-btn-secondary" style="background: transparent; border: 1px solid rgba(255,255,255,0.22);">Portal do Paciente</button>
+            <a id="btnOpenLogin" class="lp-btn lp-btn-primary" href="/app.html">Já tenho conta</a>
           </div>
         </div>
       </div>
@@ -426,6 +427,28 @@
           </div>
           <div id="trialError" class="lp-error"></div>
           <div id="trialResult" class="lp-result"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="accessModalBackdrop" class="lp-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="accessModalTitle">
+    <div class="lp-modal">
+      <div class="lp-modal-header">
+        <h3 id="accessModalTitle" class="lp-modal-title">Portal do Paciente</h3>
+      </div>
+      <div class="lp-modal-body">
+        <p style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px;">Digite seu CPF para acessar seus agendamentos, orçamentos e histórico clínico.</p>
+        <form id="accessForm" class="lp-form">
+          <div class="form-group">
+            <label for="patientCpf">CPF *</label>
+            <input id="patientCpf" type="text" required placeholder="000.000.000-00" maxlength="14" />
+          </div>
+          <div class="lp-modal-actions">
+            <button id="btnCloseAccess" type="button" class="lp-btn lp-btn-secondary">Cancelar</button>
+            <button id="btnSubmitAccess" type="submit" class="lp-btn lp-btn-primary">Acessar</button>
+          </div>
+          <div id="accessError" class="lp-error"></div>
         </form>
       </div>
     </div>

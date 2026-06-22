@@ -15,6 +15,14 @@ function maskCell(value) {
   return `(${ddd}) ${part1}-${part2}`;
 }
 
+function maskCpf(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+}
+
 function lazyLoadHeroVideo() {
   const video = document.getElementById('heroVideo');
   if (!video) return;
@@ -352,6 +360,76 @@ function initTrialModal() {
   window.__openTrialModalWithPlan = (plan) => open(String(plan || ''));
 }
 
+function initAccessModal() {
+  const backdrop = document.getElementById('accessModalBackdrop');
+  const btnPortal = document.getElementById('btnPatientPortal');
+  const btnClose = document.getElementById('btnCloseAccess');
+  const form = document.getElementById('accessForm');
+  const inputCpf = document.getElementById('patientCpf');
+  const boxErr = document.getElementById('accessError');
+  const btnSubmit = document.getElementById('btnSubmitAccess');
+
+  if (!backdrop || !btnPortal || !btnClose || !form) return;
+
+  const open = (e) => {
+    if (e) e.preventDefault();
+    backdrop.style.display = 'flex';
+    if (boxErr) boxErr.style.display = 'none';
+    if (inputCpf) {
+      inputCpf.value = '';
+      setTimeout(() => inputCpf.focus(), 100);
+    }
+  };
+
+  const close = () => { backdrop.style.display = 'none'; };
+
+  if (btnPortal) btnPortal.addEventListener('click', open);
+  if (btnClose) btnClose.addEventListener('click', close);
+  
+  const btnLogin = document.getElementById('btnOpenLogin');
+  if (btnLogin) {
+    btnLogin.addEventListener('click', (e) => {
+      // Deixa o href natural atuar ou redireciona via JS
+      if (!btnLogin.getAttribute('href') || btnLogin.getAttribute('href') === '#') {
+        e.preventDefault();
+        window.location.assign('/app.html');
+      }
+    });
+  }
+
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && backdrop.style.display === 'flex') close();
+  });
+
+  if (inputCpf) {
+    inputCpf.addEventListener('input', (e) => {
+      e.target.value = maskCpf(e.target.value);
+    });
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (boxErr) boxErr.style.display = 'none';
+    
+    const cpfValue = String(inputCpf.value || '').trim();
+    const cleanCpf = cpfValue.replace(/\D/g, '');
+    
+    if (cleanCpf.length !== 11) {
+      if (boxErr) { boxErr.textContent = 'Informe um CPF válido (11 dígitos).'; boxErr.style.display = 'block'; }
+      return;
+    }
+
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = 'Acessando...';
+    }
+
+    // Redireciona para o app com o hash de portal
+    window.location.assign('/app.html#portal=' + cleanCpf);
+  });
+}
+
 function splitModulesText(text) {
   const raw = String(text || '').trim();
   if (!raw) return [];
@@ -434,6 +512,7 @@ async function loadPlanosConfig() {
 
 lazyLoadHeroVideo();
 initTrialModal();
+initAccessModal();
 loadPlanosConfig();
 
 function initNavLinks() {
