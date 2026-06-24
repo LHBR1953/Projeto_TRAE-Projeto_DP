@@ -20,7 +20,7 @@ function maskCpf(value) {
   if (digits.length <= 3) return digits;
   if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
   if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
 function lazyLoadHeroVideo() {
@@ -360,76 +360,6 @@ function initTrialModal() {
   window.__openTrialModalWithPlan = (plan) => open(String(plan || ''));
 }
 
-function initAccessModal() {
-  const backdrop = document.getElementById('accessModalBackdrop');
-  const btnPortal = document.getElementById('btnPatientPortal');
-  const btnClose = document.getElementById('btnCloseAccess');
-  const form = document.getElementById('accessForm');
-  const inputCpf = document.getElementById('patientCpf');
-  const boxErr = document.getElementById('accessError');
-  const btnSubmit = document.getElementById('btnSubmitAccess');
-
-  if (!backdrop || !btnPortal || !btnClose || !form) return;
-
-  const open = (e) => {
-    if (e) e.preventDefault();
-    backdrop.style.display = 'flex';
-    if (boxErr) boxErr.style.display = 'none';
-    if (inputCpf) {
-      inputCpf.value = '';
-      setTimeout(() => inputCpf.focus(), 100);
-    }
-  };
-
-  const close = () => { backdrop.style.display = 'none'; };
-
-  if (btnPortal) btnPortal.addEventListener('click', open);
-  if (btnClose) btnClose.addEventListener('click', close);
-  
-  const btnLogin = document.getElementById('btnOpenLogin');
-  if (btnLogin) {
-    btnLogin.addEventListener('click', (e) => {
-      // Deixa o href natural atuar ou redireciona via JS
-      if (!btnLogin.getAttribute('href') || btnLogin.getAttribute('href') === '#') {
-        e.preventDefault();
-        window.location.assign('/app.html');
-      }
-    });
-  }
-
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && backdrop.style.display === 'flex') close();
-  });
-
-  if (inputCpf) {
-    inputCpf.addEventListener('input', (e) => {
-      e.target.value = maskCpf(e.target.value);
-    });
-  }
-
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (boxErr) boxErr.style.display = 'none';
-    
-    const cpfValue = String(inputCpf.value || '').trim();
-    const cleanCpf = cpfValue.replace(/\D/g, '');
-    
-    if (cleanCpf.length !== 11) {
-      if (boxErr) { boxErr.textContent = 'Informe um CPF válido (11 dígitos).'; boxErr.style.display = 'block'; }
-      return;
-    }
-
-    if (btnSubmit) {
-      btnSubmit.disabled = true;
-      btnSubmit.textContent = 'Acessando...';
-    }
-
-    // Redireciona para o app com o hash de portal
-    window.location.assign('/app.html#portal=' + cleanCpf);
-  });
-}
-
 function splitModulesText(text) {
   const raw = String(text || '').trim();
   if (!raw) return [];
@@ -507,6 +437,100 @@ async function loadPlanosConfig() {
     renderPlanosCards(cachedPlanos);
   } catch {
     renderPlanosCards([]);
+  }
+}
+
+function initAccessModal() {
+  const backdrop = document.getElementById('accessModalBackdrop');
+  const btnOpen = document.getElementById('btnPatientPortal');
+  const btnClose = document.getElementById('btnCloseAccess');
+  const btnBack = document.getElementById('btnBackAccess');
+  const btnVerify = document.getElementById('btnVerifyAccess');
+  const form = document.getElementById('accessForm');
+  const inputCpf = document.getElementById('accessCpf');
+  const inputPhone = document.getElementById('accessPhone');
+  const inputToken = document.getElementById('accessToken');
+  
+  const step1 = document.getElementById('step1Access');
+  const step2 = document.getElementById('step2Access');
+
+  let generatedToken = '';
+
+  if (!backdrop || !btnOpen || !btnClose || !form || !inputCpf) return;
+
+  const open = () => {
+    backdrop.style.display = 'flex';
+    inputCpf.value = '';
+    if (inputPhone) inputPhone.value = '';
+    if (inputToken) inputToken.value = '';
+    if (step1) step1.style.display = 'block';
+    if (step2) step2.style.display = 'none';
+    setTimeout(() => inputCpf.focus(), 50);
+  };
+  const close = () => { backdrop.style.display = 'none'; };
+
+  btnOpen.addEventListener('click', open);
+  btnClose.addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && backdrop.style.display === 'flex') close();
+  });
+
+  inputCpf.addEventListener('input', (e) => {
+    e.target.value = maskCpf(e.target.value);
+  });
+  
+  if (inputPhone) {
+    inputPhone.addEventListener('input', (e) => {
+      let v = e.target.value.replace(/\D/g, '');
+      if (v.length > 11) v = v.slice(0, 11);
+      if (v.length > 2) v = `(${v.slice(0, 2)}) ${v.slice(2)}`;
+      if (v.length > 10) v = `${v.slice(0, 10)}-${v.slice(10)}`;
+      e.target.value = v;
+    });
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const cleanCpf = inputCpf.value.replace(/\D/g, '');
+    const cleanPhone = inputPhone ? inputPhone.value.replace(/\D/g, '') : '';
+    
+    if (cleanCpf.length !== 11) {
+      alert('Por favor, informe um CPF válido.');
+      return;
+    }
+    if (cleanPhone.length < 10) {
+      alert('Por favor, informe um telefone válido.');
+      return;
+    }
+    
+    // Simulate Token Generation and WhatsApp sending
+    generatedToken = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log("Token de Acesso Gerado:", generatedToken);
+    alert(`[Simulação] Um token de acesso foi enviado para o WhatsApp ${inputPhone.value}.\n\nToken para teste: ${generatedToken}`);
+    
+    step1.style.display = 'none';
+    step2.style.display = 'block';
+    setTimeout(() => inputToken.focus(), 50);
+  });
+
+  if (btnBack) {
+    btnBack.addEventListener('click', () => {
+      step2.style.display = 'none';
+      step1.style.display = 'block';
+    });
+  }
+
+  if (btnVerify) {
+    btnVerify.addEventListener('click', () => {
+      const token = inputToken.value.trim();
+      if (token !== generatedToken) {
+        alert('Token inválido. Tente novamente.');
+        return;
+      }
+      const cleanCpf = inputCpf.value.replace(/\D/g, '');
+      window.location.href = `/app.html?mode=patient&id=${cleanCpf}&token=${token}`;
+    });
   }
 }
 

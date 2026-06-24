@@ -329,6 +329,9 @@
                 <button id="navSuporteTickets" class="nav-item">
                     <i class="ri-customer-service-2-line"></i> <span>Tickets</span>
                 </button>
+                <button id="navPortalChat" class="nav-item">
+                    <i class="ri-wechat-line"></i> <span>Chat do Portal</span>
+                </button>
 
                 <div class="nav-section mt-4" id="navConfigSection" style="display: none;">Configurações</div>
                 <button id="navEmpresas" class="nav-item" style="display: none;">
@@ -3222,6 +3225,8 @@
                         <button id="btnMarketingTabFidelidade" class="btn btn-secondary">Fidelidade</button>
                         <button id="btnMarketingTabCampanhas" class="btn btn-secondary">Campanhas</button>
                         <button id="btnMarketingTabSmtp" class="btn btn-secondary">SMTP</button>
+                        <button id="btnMarketingTabWhatsappWeb" class="btn btn-secondary">WhatsApp Web</button>
+                        <button id="btnMarketingTabWhatsappApi" class="btn btn-secondary">WhatsApp API</button>
                     </div>
                 </div>
 
@@ -3387,7 +3392,7 @@
                         <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
                             <button id="btnMkSaveCampaign" class="btn btn-primary"><i class="ri-save-line"></i> Salvar</button>
                             <button id="btnMkDryRun" class="btn btn-secondary"><i class="ri-search-line"></i> Simular</button>
-                            <button id="btnMkSend" class="btn btn-danger"><i class="ri-send-plane-2-line"></i> Enviar</button>
+                            <button id="btnMkSendCampanha" class="btn btn-danger"><i class="ri-send-plane-2-line"></i> Enviar</button>
                         </div>
                         <pre id="mkCampaignResult" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 12px 0 0;"></pre>
                     </div>
@@ -3442,6 +3447,107 @@
                             <button id="btnMkReloadSmtp" class="btn btn-secondary"><i class="ri-refresh-line"></i> Recarregar</button>
                         </div>
                         <pre id="mkSmtpResult" class="hidden" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 12px 0 0;"></pre>
+                    </div>
+                </div>
+
+                <div id="marketingTabWhatsappWeb" class="hidden">
+                    <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+                        <div style="display:flex; gap: 0.5rem; flex-wrap: wrap; justify-content: space-between; align-items:center;">
+                            <div style="font-weight: 800;">WhatsApp Web (Assistente Manual)</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="padding: 1rem; margin-bottom: 1rem;">
+                        <h3 style="margin-top: 0;">Criar Fila de Envios</h3>
+                        <div style="display:flex; gap: 1rem; flex-wrap: wrap;">
+                            <div class="form-group" style="min-width: 220px;">
+                                <label for="mkStatusAlvoWhatsappWeb">Status alvo (Público Filtrado)</label>
+                                <select id="mkStatusAlvoWhatsappWeb" class="form-control">
+                                    <option value="ATIVOS">Ativos</option>
+                                    <option value="ATENCAO">Atenção</option>
+                                    <option value="REATIVACAO">Reativação</option>
+                                    <option value="ALTO_RISCO">Alto Risco</option>
+                                    <option value="PERDIDOS">Perdidos</option>
+                                    <option value="TODOS">Todos</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="mkCorpoWhatsappWeb">Mensagem Base</label>
+                            <textarea id="mkCorpoWhatsappWeb" class="form-control" rows="5" placeholder="Olá {nome}, tudo bem? ..."></textarea>
+                        </div>
+                        <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button type="button" id="btnMkSendWhatsappWeb" class="btn btn-success"><i class="ri-play-list-add-line"></i> Gerar Fila</button>
+                        </div>
+                        <pre id="mkCampaignResultWhatsappWeb" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 12px 0 0;"></pre>
+                    </div>
+
+                    <div id="waWebAssistantPanel" class="card hidden" style="padding: 1rem; border-left: 4px solid var(--success-color);">
+                        <h3 style="margin-top: 0; color: var(--success-color);"><i class="ri-whatsapp-line"></i> Assistente de Envio</h3>
+                        <p id="waWebAssistantStatus" style="font-weight: 600; margin-bottom: 1rem;">Fila carregada: 0 pacientes.</p>
+                        
+                        <div style="display:flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                            <a id="btnWaWebNext" href="#" target="OCC_Whatsapp_Assistant" class="btn btn-success" style="text-decoration: none;"><i class="ri-whatsapp-line"></i> Abrir WhatsApp (Paciente 1 de X)</a>
+                            <button type="button" id="btnWaWebStop" class="btn btn-danger"><i class="ri-stop-fill"></i> Encerrar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="marketingTabWhatsappApi" class="hidden">
+                    <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+                        <div style="display:flex; gap: 0.5rem; flex-wrap: wrap; justify-content: space-between; align-items:center;">
+                            <div style="font-weight: 800;">WhatsApp API (Disparo Automático)</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="padding: 1rem; margin-bottom: 1rem;">
+                        <h3 style="margin-top: 0;">Configurações do Gateway (API)</h3>
+                        <div style="display:flex; gap: 1rem; flex-wrap: wrap;">
+                            <div class="form-group" style="min-width: 200px;">
+                                <label style="display:flex; align-items:center; gap: 8px;">
+                                    <input id="mkWaApiEnabled" type="checkbox">
+                                    <span style="font-weight: 800;">Habilitar Disparo Automático</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap: 1rem; flex-wrap: wrap;">
+                            <div class="form-group" style="flex: 2; min-width: 260px;">
+                                <label for="mkWaApiInstanceUrl">Instance URL</label>
+                                <input id="mkWaApiInstanceUrl" class="form-control" placeholder="https://api.gateway.com/instance123">
+                            </div>
+                            <div class="form-group" style="flex: 1; min-width: 260px;">
+                                <label for="mkWaApiToken">API Token / Key</label>
+                                <input id="mkWaApiToken" type="password" class="form-control" placeholder="(vazio = manter)">
+                            </div>
+                        </div>
+                        <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button id="btnMkSaveWaApi" class="btn btn-primary"><i class="ri-save-line"></i> Salvar Gateway</button>
+                        </div>
+                    </div>
+
+                    <div class="card" style="padding: 1rem;">
+                        <h3 style="margin-top: 0;">Nova Campanha Automática</h3>
+                        <div style="display:flex; gap: 1rem; flex-wrap: wrap;">
+                            <div class="form-group" style="min-width: 220px;">
+                                <label for="mkStatusAlvoWhatsappApi">Status alvo (Público Filtrado)</label>
+                                <select id="mkStatusAlvoWhatsappApi" class="form-control">
+                                    <option value="ATIVOS">Ativos</option>
+                                    <option value="ATENCAO">Atenção</option>
+                                    <option value="REATIVACAO">Reativação</option>
+                                    <option value="ALTO_RISCO">Alto Risco</option>
+                                    <option value="PERDIDOS">Perdidos</option>
+                                    <option value="TODOS">Todos</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="mkCorpoWhatsappApi">Mensagem do WhatsApp</label>
+                            <textarea id="mkCorpoWhatsappApi" class="form-control" rows="7" placeholder="Olá {nome}, tudo bem? ..."></textarea>
+                        </div>
+                        <div style="display:flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button id="btnMkSendWhatsappApi" class="btn btn-success"><i class="ri-rocket-line"></i> Disparar WhatsApp (Background)</button>
+                        </div>
+                        <pre id="mkCampaignResultWhatsappApi" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 12px 0 0;"></pre>
                     </div>
                 </div>
             </section>
@@ -4765,6 +4871,66 @@
                     </div>
                 </div>
             </div>
+
+        <!-- VIEW REATIVADA DO CHAT DO PORTAL DO PACIENTE --> 
+        <div id="view-portalchat" class="view-section hidden" style="display: none; height: calc(100vh - 140px); padding: 20px;"> 
+            <div class="flex h-full bg-white rounded-lg shadow border border-gray-200 overflow-hidden" style="min-height: 500px; display: flex; flex: 1;"> 
+                
+                <!-- LADO ESQUERDO: LISTA DE PACIENTES --> 
+                <div class="w-1/3 border-r border-gray-200 flex flex-col bg-gray-50" style="width: 320px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: #f8fafc;"> 
+                    <div class="p-4 border-b border-gray-200 bg-white" style="padding: 1rem; border-bottom: 1px solid var(--border-color); background: #fff;"> 
+                        <h3 class="text-md font-bold text-gray-700" style="margin: 0;">Conversas do Portal</h3> 
+                        <p class="text-xs text-gray-400" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">Pacientes conectados via PWA OCC</p> 
+                        <input type="text" id="portalChatSearch" class="form-control" placeholder="Buscar paciente..." style="width: 100%;">
+                    </div> 
+                    <!-- Lista injetada via JS --> 
+                    <div id="portalChatPatientsList" class="flex-1 overflow-y-auto p-2 space-y-1" style="flex: 1; overflow-y: auto; padding: 0;"> 
+                        <p class="text-sm text-gray-400 text-center py-8" style="padding: 2rem; text-align: center; color: var(--text-muted);">Carregando pacientes...</p> 
+                    </div> 
+                </div> 
+
+                <!-- LADO DIREITO: CORPO DO CHAT --> 
+                <div id="portalChatWindow" class="w-2/3 flex flex-col bg-gray-100 justify-between" style="flex: 1; display: flex; flex-direction: column; background: #ffffff;"> 
+                    
+                    <!-- Estado Inicial Sem Chat Selecionado --> 
+                    <div id="portalChatEmptyState" class="flex-1 flex flex-col items-center justify-center text-gray-400 p-8" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted);"> 
+                        <i class="ri-chat-3-line" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                        <p class="text-sm font-medium">Selecione uma conversa na lista para interagir e visualizar os PDFs.</p> 
+                    </div> 
+
+                    <!-- Área Ativa do Chat (Inicia Oculta) --> 
+                    <div id="portalChatActiveArea" class="hidden flex-1 flex flex-col h-full overflow-hidden" style="display: none; flex: 1; flex-direction: column;"> 
+                        <!-- Cabeçalho --> 
+                        <div class="p-4 bg-white border-b border-gray-200 shadow-sm" style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: #f8fafc;"> 
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--primary-color); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem;" id="portalChatAvatar">P</div>
+                                <div>
+                                    <h4 id="portalChatHeaderPatientName" class="font-bold text-gray-800" style="margin: 0; font-size: 1.1rem;">Nome do Paciente</h4> 
+                                    <span id="portalChatPatientPhone" style="font-size: 0.85rem; color: var(--text-muted);"></span>
+                                </div>
+                            </div>
+                            <div class="actions" style="display: flex; gap: 0.5rem;">
+                                <button class="btn btn-secondary btn-sm" id="btnViewPatientRecordChat"><i class="ri-user-line"></i> Ver Prontuário</button>
+                                <button id="btnRefreshPortalChat" class="btn btn-secondary btn-sm"><i class="ri-refresh-line"></i> Atualizar</button>
+                            </div>
+                        </div> 
+                        
+                        <!-- Balões de Mensagem --> 
+                        <div id="portalChatMessagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50" style="flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; background: #f0f2f5;"> 
+                            <!-- Injetado dinamicamente pelo app_v22.js --> 
+                        </div> 
+
+                        <!-- Formulário de Envio --> 
+                        <form id="formPortalChatSend" class="p-3 bg-white border-t border-gray-200 flex items-center gap-2" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); background: #fff; display: flex; gap: 0.5rem; align-items: flex-end;"> 
+                            <input type="text" id="inputPortalChatMessage" placeholder="Digite sua resposta..." class="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" required style="flex: 1; border-radius: 12px; height: 44px;"> 
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2 text-sm font-semibold transition-colors btn btn-primary" style="border-radius: 12px; height: 44px; padding: 0 1.5rem;"><i class="ri-send-plane-fill"></i> Enviar</button> 
+                        </form> 
+                    </div> 
+
+                </div> 
+
+            </div> 
+        </div> 
 
         </main>
     </div>

@@ -234,6 +234,10 @@ let appUrlLocked = false;
 let lastValidSession = null;
 let bootStartedAt = 0;
 let bootPreferredTab = null;
+const urlParamsForBoot = new URLSearchParams(window.location.search);
+if (urlParamsForBoot.get('mode') === 'patient') {
+    bootPreferredTab = 'patientPortal';
+}
 let bootRenderCompleted = false;
 let inventoryItems = [];
 let usageModels = [];
@@ -2925,6 +2929,7 @@ const navAtendimento = document.getElementById('navAtendimento');
 const navAgenda = document.getElementById('navAgenda');
 const navProtese = document.getElementById('navProtese');
 const navSuporteTickets = document.getElementById('navSuporteTickets');
+const navPortalChat = document.getElementById('navPortalChat');
 const navEmpresas = document.getElementById('navEmpresas');
 const navAssinaturas = document.getElementById('navAssinaturas');
 const navMyCompany = document.getElementById('navMyCompany');
@@ -2958,6 +2963,7 @@ const commissionsView = document.getElementById('commissionsView');
 const marketingView = document.getElementById('marketingView');
 const dashboardView = document.getElementById('dashboardView');
 const patientPortalView = document.getElementById('patientPortalView');
+const viewPortalChat = document.getElementById('view-portalchat');
 const atendimentoView = document.getElementById('atendimentoView');
 const consultaAvaliacaoView = document.getElementById('consultaAvaliacaoView');
 const consultaProfessionalGroup = document.getElementById('consultaProfessionalGroup');
@@ -3713,7 +3719,7 @@ function setActiveTab(tab) {
     // 1. Prepare Navigation Elements safely
     const navElements = [
         navPatients, navProfessionals, navSpecialties, navServices,
-        navBudgets, navFinanceiro, navCommissions, navMarketing, navAtendimentoToggle, navAtendimento, navConsultaAvaliacao, navAgenda, navProtese, navSuporteTickets, navDashboard, navUsersAdminBtn, navEmpresas, navAssinaturas, navMyCompany, navFinancialParams, document.getElementById('navCancelledBudgets'),
+        navBudgets, navFinanceiro, navCommissions, navMarketing, navAtendimentoToggle, navAtendimento, navConsultaAvaliacao, navAgenda, navProtese, navSuporteTickets, navPortalChat, navDashboard, navUsersAdminBtn, navEmpresas, navAssinaturas, navMyCompany, navFinancialParams, document.getElementById('navCancelledBudgets'),
         navEstoqueToggle, navInventory, navUsageModels, navServiceMapping, navInventoryLogs, navInventoryReports
     ];
 
@@ -3721,6 +3727,7 @@ function setActiveTab(tab) {
     const viewMapping = {
         'dashboard': [dashboardView],
         'patientPortal': [patientPortalView],
+        'portalChat': [viewPortalChat],
         'patients': [patientListView, patientFormView],
         'professionals': [professionalListView, professionalFormView],
         'specialties': [specialtiesListView, specialtyFormView],
@@ -3781,6 +3788,10 @@ function setActiveTab(tab) {
         showList('dashboard');
     } else if (tab === 'patientPortal') {
         showList('patientPortal');
+    } else if (tab === 'portalChat') {
+        if (navPortalChat) navPortalChat.classList.add('active');
+        showList('portalChat');
+        loadPortalChatPatients(); // Start loading patients when tab opens
     } else if (tab === 'professionals') {
         if (navProfessionals) navProfessionals.classList.add('active');
         showList('professionals');
@@ -3930,6 +3941,7 @@ function setupNavigationListeners() {
         'navAgenda': 'agenda',
         'navProtese': 'protese',
         'navSuporteTickets': 'suporteTickets',
+        'navPortalChat': 'portalChat',
         'navInventory': 'stockInventory',
         'navUsageModels': 'stockModels',
         'navServiceMapping': 'stockMapping',
@@ -11528,16 +11540,36 @@ function initServSubdivisaoDbLookup(empresaId) {
 let patientPortalLoading = false;
 
 function getPatientPortalPaciente() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mode') === 'patient' && urlParams.get('id')) {
+        const id = urlParams.get('id');
+        // Check local patients cache first
+        const p = (patients || []).find(x => x.cpf_cnpj && x.cpf_cnpj.replace(/\D/g, '') === id);
+        if (p) return p;
+        // Se não encontrou no cache, retornamos um objeto mínimo com o cpf
+        // A busca real seria feita no backend, mas mantendo a lógica local:
+        return { cpf_cnpj: id };
+    }
+
     const email = String(currentUser && currentUser.email || '').trim().toLowerCase();
     if (!email) return null;
     return (patients || []).find(p => String(p && p.email || '').trim().toLowerCase() === email) || null;
 }
 
-async function fetchPatientPortalAppointments(pacienteSeqId) {
+async function fetchPatientPortalAppointments(pacienteSeqIdOrCpf) {
     const empId = String(currentEmpresaId || '').trim();
-    const pid = Number(pacienteSeqId);
-    if (!empId || !pid) return [];
+    if (!empId || !pacienteSeqIdOrCpf) return [];
     const nowIso = new Date().toISOString();
+    
+    let pid = Number(pacienteSeqIdOrCpf);
+    if (isNaN(pid) || typeof pacienteSeqIdOrCpf === 'object') {
+        // Find seqId by CPF in the DB if needed, but since patients are fetched during boot,
+        // we can just use the local patients array if it was found.
+        const p = (patients || []).find(x => x.cpf_cnpj && x.cpf_cnpj.replace(/\D/g, '') === pacienteSeqIdOrCpf.cpf_cnpj);
+        if (p) pid = p.seqid;
+        else return []; // No patient found
+    }
+    
     const q = db.from('agenda_agendamentos')
         .select('*')
         .eq('empresa_id', empId)
@@ -11853,7 +11885,7 @@ function showList(type = 'patients', isMasterMode = false) {
         showToast("Você não possui permissão para visualizar este módulo.", true);
         return;
     }
-    if (type !== 'patientPortal' && !isStockTab && type !== 'usersAdmin' && type !== 'masterTables' && !can(getModuleKey(type), 'select')) {
+    if (type !== 'patientPortal' && type !== 'portalChat' && !isStockTab && type !== 'usersAdmin' && type !== 'masterTables' && !can(getModuleKey(type), 'select')) {
         showToast("Você não possui permissão para visualizar este módulo.", true);
         return;
     }
@@ -11866,6 +11898,12 @@ function showList(type = 'patients', isMasterMode = false) {
     } else if (type === 'patientPortal') {
         if (patientPortalView) patientPortalView.classList.remove('hidden');
         loadPatientPortalView();
+    } else if (type === 'portalChat') {
+        const viewPortalChat = document.getElementById('view-portalchat');
+        if (viewPortalChat) {
+            viewPortalChat.classList.remove('hidden');
+            viewPortalChat.style.display = 'block';
+        }
     } else if (type === 'patients') {
         patientFormView.classList.add('hidden');
         patientListView.classList.remove('hidden');
@@ -12162,9 +12200,46 @@ function initMarketingModule() {
     const btnFid = document.getElementById('btnMarketingTabFidelidade');
     const btnCamp = document.getElementById('btnMarketingTabCampanhas');
     const btnSmtp = document.getElementById('btnMarketingTabSmtp');
+    const btnWpWeb = document.getElementById('btnMarketingTabWhatsappWeb');
+    const btnWpApi = document.getElementById('btnMarketingTabWhatsappApi');
     const tabFid = document.getElementById('marketingTabFidelidade');
     const tabCamp = document.getElementById('marketingTabCampanhas');
     const tabSmtp = document.getElementById('marketingTabSmtp');
+    const tabWpWeb = document.getElementById('marketingTabWhatsappWeb');
+    const tabWpApi = document.getElementById('marketingTabWhatsappApi');
+
+    const switchMkTab = (t) => {
+        [btnFid, btnCamp, btnSmtp, btnWpWeb, btnWpApi].forEach(b => {
+            if (b) { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); }
+        });
+        [tabFid, tabCamp, tabSmtp, tabWpWeb, tabWpApi].forEach(p => {
+            if (p) p.classList.add('hidden');
+        });
+        if (t === 'fidelidade' && btnFid && tabFid) {
+            btnFid.classList.replace('btn-secondary', 'btn-primary');
+            tabFid.classList.remove('hidden');
+        } else if (t === 'campanhas' && btnCamp && tabCamp) {
+            btnCamp.classList.replace('btn-secondary', 'btn-primary');
+            tabCamp.classList.remove('hidden');
+            loadCampaigns();
+        } else if (t === 'smtp' && btnSmtp && tabSmtp) {
+            btnSmtp.classList.replace('btn-secondary', 'btn-primary');
+            tabSmtp.classList.remove('hidden');
+            loadSmtpConfig();
+        } else if (t === 'whatsappweb' && btnWpWeb && tabWpWeb) {
+            btnWpWeb.classList.replace('btn-secondary', 'btn-primary');
+            tabWpWeb.classList.remove('hidden');
+        } else if (t === 'whatsappapi' && btnWpApi && tabWpApi) {
+            btnWpApi.classList.replace('btn-secondary', 'btn-primary');
+            tabWpApi.classList.remove('hidden');
+        }
+    };
+
+    if (btnFid) btnFid.addEventListener('click', () => switchMkTab('fidelidade'));
+    if (btnCamp) btnCamp.addEventListener('click', () => switchMkTab('campanhas'));
+    if (btnSmtp) btnSmtp.addEventListener('click', () => switchMkTab('smtp'));
+    if (btnWpWeb) btnWpWeb.addEventListener('click', () => switchMkTab('whatsappweb'));
+    if (btnWpApi) btnWpApi.addEventListener('click', () => switchMkTab('whatsappapi'));
 
     const marketingBucket = document.getElementById('marketingBucket');
     const btnMarketingRefresh = document.getElementById('btnMarketingRefresh');
@@ -12212,11 +12287,19 @@ function initMarketingModule() {
     const mkRodape = document.getElementById('mkRodape');
     const btnMkSaveCampaign = document.getElementById('btnMkSaveCampaign');
     const btnMkDryRun = document.getElementById('btnMkDryRun');
-    const btnMkSend = document.getElementById('btnMkSend');
+    const btnMkSendCampanha = document.getElementById('btnMkSendCampanha');
     const mkCampaignResult = document.getElementById('mkCampaignResult');
     const btnMkNewCampaign = document.getElementById('btnMkNewCampaign');
     const mkCampaignsBody = document.getElementById('mkCampaignsBody');
 
+    const btnMkSendWhatsappWeb = document.getElementById('btnMkSendWhatsappWeb');
+    const waWebAssistantPanel = document.getElementById('waWebAssistantPanel');
+    const waWebAssistantStatus = document.getElementById('waWebAssistantStatus');
+    const btnWaWebStart = document.getElementById('btnWaWebStart');
+    const btnWaWebNext = document.getElementById('btnWaWebNext');
+    const btnWaWebStop = document.getElementById('btnWaWebStop');
+    const btnMkSendWhatsappApi = document.getElementById('btnMkSendWhatsappApi');
+    
     let activeCampaignRow = null;
     let lastFidelidadeRows = [];
     let lastCampaignRows = [];
@@ -12691,12 +12774,419 @@ function initMarketingModule() {
         if (btnMkSend) btnMkSend.disabled = false;
     };
 
+    // Brevo / SMTP Email Sender
+    const EnviarEmailPaciente = async (assunto, corpoHTML, pacienteEmail, pacienteNome, brevoApiKey, fromEmail) => {
+        if (!brevoApiKey || !fromEmail) {
+            throw new Error('API Key do Brevo ou E-mail remetente não configurados.');
+        }
+        
+        const payload = {
+            sender: { email: fromEmail, name: "Clínica Odontológica" },
+            to: [{ email: pacienteEmail, name: pacienteNome }],
+            subject: assunto,
+            htmlContent: corpoHTML
+        };
+
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json; charset=utf-8',
+                'api-key': brevoApiKey
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.message || `Erro do Brevo: ${response.status}`);
+        }
+
+        return await response.json();
+    };
+
+    const dispararCampanhaBrevo = async () => {
+        if (!canUpdate) {
+            showToast('Apenas admin pode disparar e-mails.', true);
+            return;
+        }
+        if (!currentEmpresaId) {
+            showToast('Empresa não definida.', true);
+            return;
+        }
+
+        const assunto = document.getElementById('brevoAssunto')?.value || '';
+        const corpo = document.getElementById('brevoCorpo')?.value || '';
+        const statusAlvo = document.getElementById('brevoStatusAlvo')?.value || 'TODOS';
+        const brevoResult = document.getElementById('brevoResult');
+
+        if (!assunto.trim() || !corpo.trim()) {
+            showToast('Assunto e corpo do e-mail são obrigatórios.', true);
+            return;
+        }
+
+        if (brevoResult) brevoResult.textContent = 'Buscando configurações do Brevo...';
+
+        try {
+            // Obter API Key e From Email
+            const { data: cfgData, error: cfgErr } = await db.rpc('rpc_marketing_get_smtp_config', { p_empresa_id: currentEmpresaId });
+            if (cfgErr) throw cfgErr;
+            
+            const cfg = Array.isArray(cfgData) ? cfgData[0] : cfgData;
+            const brevoApiKey = cfg?.brevo_api_key;
+            const fromEmail = cfg?.from_email;
+
+            if (!brevoApiKey || !fromEmail) {
+                if (brevoResult) brevoResult.textContent = 'Erro: API Key do Brevo ou E-mail remetente não configurados na aba "Configurações SMTP".';
+                showToast('Configure o Brevo antes de disparar.', true);
+                return;
+            }
+
+            if (brevoResult) brevoResult.textContent = 'Buscando pacientes alvo...';
+            
+            // Buscar pacientes filtrados (simplificado para exemplo, usar rpc real se necessário)
+            // statusAlvo pode ser ATIVOS, REATIVACAO, TODOS
+            // Aqui buscamos todos os pacientes da empresa e filtramos no JS, ou idealmente via RPC.
+            // Para garantir funcionamento, buscaremos os pacientes com e-mail válido.
+            const { data: pacientes, error: pacErr } = await db.from('pacientes')
+                .select('id, seqid, nome, email')
+                .eq('empresa_id', currentEmpresaId)
+                .not('email', 'is', null)
+                .neq('email', '');
+
+            if (pacErr) throw pacErr;
+
+            if (!pacientes || pacientes.length === 0) {
+                if (brevoResult) brevoResult.textContent = 'Nenhum paciente com e-mail encontrado para o filtro.';
+                return;
+            }
+
+            if (!confirm(`Disparar e-mail "${assunto}" para ${pacientes.length} paciente(s)?`)) {
+                if (brevoResult) brevoResult.textContent = 'Disparo cancelado.';
+                return;
+            }
+
+            if (brevoResult) brevoResult.textContent = `Iniciando disparo para ${pacientes.length} paciente(s)...`;
+            const btnBrevoSend = document.getElementById('btnBrevoSend');
+            if (btnBrevoSend) btnBrevoSend.disabled = true;
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const pac of pacientes) {
+                try {
+                    const corpoPersonalizado = corpo.replace(/\{nome\}/gi, pac.nome || 'Paciente');
+                    await EnviarEmailPaciente(assunto, corpoPersonalizado, pac.email, pac.nome || 'Paciente', brevoApiKey, fromEmail);
+                    
+                    // Logar o envio no banco
+                    await db.from('marketing_envios').insert({
+                        empresa_id: currentEmpresaId,
+                        paciente_id: pac.seqid || null,
+                        paciente_nome: pac.nome,
+                        paciente_email: pac.email,
+                        status: 'ENVIADO',
+                        enviado_em: new Date().toISOString()
+                    });
+
+                    successCount++;
+                } catch (err) {
+                    failCount++;
+                    console.error(`Erro ao enviar para ${pac.email}:`, err);
+                    await db.from('marketing_envios').insert({
+                        empresa_id: currentEmpresaId,
+                        paciente_id: pac.seqid || null,
+                        paciente_nome: pac.nome,
+                        paciente_email: pac.email,
+                        status: 'FALHA',
+                        erro: String(err.message || 'Erro desconhecido')
+                    });
+                }
+            }
+
+            if (brevoResult) brevoResult.textContent = `Disparo concluído!\nSucessos: ${successCount}\nFalhas: ${failCount}`;
+            if (btnBrevoSend) btnBrevoSend.disabled = false;
+
+        } catch (error) {
+            console.error('Erro no disparo Brevo:', error);
+            if (brevoResult) brevoResult.textContent = `Erro geral: ${error.message}`;
+            const btnBrevoSend = document.getElementById('btnBrevoSend');
+            if (btnBrevoSend) btnBrevoSend.disabled = false;
+        }
+    };
+
+    const dispararCampanhaWhatsAppQueue = async () => {
+        if (!canUpdate) {
+            showToast('Apenas admin pode disparar WhatsApp.', true);
+            return;
+        }
+        if (!currentEmpresaId) {
+            showToast('Empresa não definida.', true);
+            return;
+        }
+
+        const corpo = document.getElementById('mkCorpoWhatsappApi')?.value || '';
+        const statusAlvo = document.getElementById('mkStatusAlvoWhatsappApi')?.value || 'ATIVOS';
+        const mkCampaignResult = document.getElementById('mkCampaignResultWhatsappApi');
+
+        if (!corpo.trim()) {
+            showToast('A mensagem do WhatsApp é obrigatória.', true);
+            return;
+        }
+
+        if (mkCampaignResult) mkCampaignResult.textContent = 'Buscando pacientes alvo para fila (API)...';
+
+        try {
+            // Buscar pacientes com celular
+            const { data: pacientes, error: pacErr } = await db.from('pacientes')
+                .select('id, seqid, nome, celular')
+                .eq('empresa_id', currentEmpresaId)
+                .not('celular', 'is', null)
+                .neq('celular', '');
+
+            if (pacErr) throw pacErr;
+
+            if (!pacientes || pacientes.length === 0) {
+                if (mkCampaignResult) mkCampaignResult.textContent = 'Nenhum paciente com celular encontrado.';
+                return;
+            }
+
+            if (!confirm(`Inserir ${pacientes.length} paciente(s) na fila do WhatsApp API? O envio ocorrerá automaticamente em background.`)) {
+                if (mkCampaignResult) mkCampaignResult.textContent = 'Operação cancelada.';
+                return;
+            }
+
+            if (btnMkSendWhatsappApi) btnMkSendWhatsappApi.disabled = true;
+            if (mkCampaignResult) mkCampaignResult.textContent = 'Inserindo na fila (queue API)...';
+
+            let count = 0;
+            const envios = pacientes.map(pac => ({
+                empresa_id: currentEmpresaId,
+                paciente_id: pac.seqid || null,
+                paciente_nome: pac.nome,
+                paciente_email: pac.celular, // Guardando o celular temporariamente no campo de email para a fila
+                status: 'FILA_WHATSAPP_API',
+                erro: corpo.replace(/\{nome\}/gi, pac.nome || 'Paciente') // Armazenando a mensagem em erro/obs provisoriamente
+            }));
+
+            // Inserir em lotes de 100
+            for (let i = 0; i < envios.length; i += 100) {
+                const lote = envios.slice(i, i + 100);
+                const { error: insErr } = await db.from('marketing_envios').insert(lote);
+                if (insErr) {
+                    console.error('Erro ao inserir lote WhatsApp API:', insErr);
+                    throw insErr;
+                }
+                count += lote.length;
+            }
+
+            if (mkCampaignResult) mkCampaignResult.textContent = `${count} pacientes inseridos na fila do WhatsApp API com sucesso.\nO processamento ocorrerá em background via Gateway.`;
+            showToast('Campanha adicionada à fila API.');
+            if (btnMkSendWhatsappApi) btnMkSendWhatsappApi.disabled = false;
+
+        } catch (error) {
+            console.error('Erro na fila WhatsApp API:', error);
+            if (mkCampaignResult) mkCampaignResult.textContent = `Erro geral: ${error.message}`;
+            if (btnMkSendWhatsappApi) btnMkSendWhatsappApi.disabled = false;
+        }
+    };
+
+    let filaWaWebMemoria = [];
+    let currentWaWebIndex = 0;
+
+    const gerarFilaWhatsappWeb = async () => {
+        if (!currentEmpresaId) return;
+
+        const corpo = document.getElementById('mkCorpoWhatsappWeb')?.value || '';
+        const statusAlvo = document.getElementById('mkStatusAlvoWhatsappWeb')?.value || 'ATIVOS';
+        const mkCampaignResult = document.getElementById('mkCampaignResultWhatsappWeb');
+
+        if (!corpo.trim()) {
+            showToast('A mensagem base é obrigatória.', true);
+            return;
+        }
+
+        if (mkCampaignResult) mkCampaignResult.textContent = 'Buscando pacientes para Assistente...';
+
+        try {
+            // Aqui poderíamos filtrar por statusAlvo (ATIVOS, REATIVACAO etc)
+            // Simplificando: buscando todos com celular válido da empresa
+            const { data: pacientes, error: pacErr } = await db.from('pacientes')
+                .select('id, seqid, nome, celular')
+                .eq('empresa_id', currentEmpresaId)
+                .not('celular', 'is', null)
+                .neq('celular', '');
+
+            if (pacErr) throw pacErr;
+
+            if (!pacientes || pacientes.length === 0) {
+                if (mkCampaignResult) mkCampaignResult.textContent = 'Nenhum paciente com celular encontrado no filtro.';
+                return;
+            }
+
+            // Gerar fila em memória
+            filaWaWebMemoria = pacientes.map(pac => ({
+                nome: pac.nome || 'Paciente',
+                celular: String(pac.celular || '').replace(/\D/g, ''),
+                mensagem: corpo.replace(/\{nome\}/gi, pac.nome || 'Paciente')
+            })).filter(p => p.celular.length >= 10);
+
+            if (filaWaWebMemoria.length === 0) {
+                if (mkCampaignResult) mkCampaignResult.textContent = 'Nenhum paciente com celular válido (10+ dígitos).';
+                return;
+            }
+
+            currentWaWebIndex = 0;
+            
+            if (mkCampaignResult) mkCampaignResult.textContent = `Fila gerada com ${filaWaWebMemoria.length} pacientes.`;
+            
+            // Exibir Painel do Assistente
+            if (waWebAssistantPanel) waWebAssistantPanel.classList.remove('hidden');
+            atualizarStatusAssistenteWaWeb();
+            
+            // Resetar botões do painel
+            const btnNext = document.getElementById('btnWaWebNext');
+            const btnStop = document.getElementById('btnWaWebStop');
+            
+            if (btnNext) {
+                btnNext.classList.replace('btn-primary', 'btn-success');
+                btnNext.classList.remove('disabled');
+                btnNext.style.pointerEvents = 'auto';
+            }
+            if (btnStop) btnStop.classList.remove('hidden');
+            
+            atualizarBotaoUnico();
+
+        } catch (error) {
+            console.error('Erro ao gerar fila WaWeb:', error);
+            if (mkCampaignResult) mkCampaignResult.textContent = `Erro: ${error.message}`;
+        }
+    };
+
+    const atualizarStatusAssistenteWaWeb = () => {
+        if (!waWebAssistantStatus) return;
+        const total = filaWaWebMemoria.length;
+        if (total === 0) {
+            waWebAssistantStatus.textContent = 'Fila vazia ou concluída.';
+            return;
+        }
+        if (currentWaWebIndex >= total) {
+            waWebAssistantStatus.textContent = `Todos os ${total} envios foram realizados!`;
+            return;
+        }
+        waWebAssistantStatus.textContent = `Paciente ${currentWaWebIndex + 1} de ${total} (${filaWaWebMemoria[currentWaWebIndex].nome})`;
+    };
+
+    const atualizarBotaoUnico = () => {
+        const paciente = filaWaWebMemoria[currentWaWebIndex];
+        const btnNext = document.getElementById('btnWaWebNext');
+        if (!btnNext) return;
+        
+        if (!paciente) {
+            btnNext.href = '#';
+            btnNext.target = "_self"; // Se acabou a fila, não precisa abrir aba
+            return;
+        }
+        
+        const text = encodeURIComponent(paciente.mensagem);
+        const waUrl = `https://web.whatsapp.com/send?phone=55${paciente.celular}&text=${text}`;
+        
+        btnNext.href = waUrl;
+        btnNext.target = "OCC_Whatsapp_Assistant"; // <<< FORÇA O NAVEGADOR A USAR A MESMA ABA!
+        btnNext.innerHTML = `<i class="ri-whatsapp-line"></i> Enviar para: ${paciente.nome} (${currentWaWebIndex + 1} de ${filaWaWebMemoria.length})`;
+        btnNext.classList.remove('disabled');
+        btnNext.style.pointerEvents = 'auto';
+    };
+
+    const encerrarAssistenteWaWeb = () => {
+        filaWaWebMemoria = [];
+        currentWaWebIndex = 0;
+        if (waWebAssistantPanel) waWebAssistantPanel.classList.add('hidden');
+        const mkCampaignResult = document.getElementById('mkCampaignResultWhatsappWeb');
+        if (mkCampaignResult) mkCampaignResult.textContent = '';
+        
+        const btnNext = document.getElementById('btnWaWebNext');
+        if (btnNext) {
+            btnNext.innerHTML = '<i class="ri-whatsapp-line"></i> Abrir WhatsApp (Paciente 1 de X)';
+            btnNext.href = '#';
+            btnNext.target = '_self';
+            btnNext.classList.remove('disabled');
+            btnNext.style.pointerEvents = 'auto';
+        }
+    };
+
+    let workerWhatsAppRodando = false;
+    const iniciarWorkerWhatsApp = async () => {
+        if (workerWhatsAppRodando) return;
+        workerWhatsAppRodando = true;
+        console.log('Worker de WhatsApp iniciado em background.');
+
+        const mkCampaignResult = document.getElementById('mkCampaignResultWhatsapp');
+
+        while (workerWhatsAppRodando) {
+            try {
+                if (!currentEmpresaId) {
+                    await new Promise(r => setTimeout(r, 10000));
+                    continue;
+                }
+
+                // Buscar 1 registro da fila
+                const { data: fila, error } = await db.from('marketing_envios')
+                    .select('id, paciente_id, paciente_nome, paciente_email, erro')
+                    .eq('empresa_id', currentEmpresaId)
+                    .eq('status', 'FILA_WHATSAPP')
+                    .order('created_at', { ascending: true })
+                    .limit(1);
+
+                if (error) throw error;
+
+                if (!fila || fila.length === 0) {
+                    // Sem mensagens na fila, dorme um pouco mais
+                    if (mkCampaignResult && mkCampaignResult.textContent.includes('Processando envio')) {
+                        mkCampaignResult.textContent = 'Fila do WhatsApp vazia. Processamento concluído.';
+                    }
+                    await new Promise(r => setTimeout(r, 15000));
+                    continue;
+                }
+
+                const msg = fila[0];
+                const text = encodeURIComponent(msg.erro || 'Olá!');
+                const celular = String(msg.paciente_email || '').replace(/\D/g, ''); // celular está salvo em paciente_email
+                
+                if (mkCampaignResult) {
+                    mkCampaignResult.textContent = `Processando envio de WhatsApp para ${msg.paciente_nome}... Abrindo janela do Web WhatsApp.`;
+                }
+
+                if (celular) {
+                    const waUrl = `https://web.whatsapp.com/send?phone=55${celular}&text=${text}`;
+                    // Tenta abrir a aba (pode ser bloqueado pelo popup blocker do navegador, é necessário permitir popups)
+                    window.open(waUrl, '_blank');
+                } else {
+                    console.warn(`Paciente ${msg.paciente_nome} não possui celular válido.`);
+                }
+
+                // Simula o tempo que o usuário leva para confirmar e fechar a aba
+                await new Promise(r => setTimeout(r, 8000));
+
+                // Marcar como processado
+                await db.from('marketing_envios')
+                    .update({ status: 'ENVIADO', enviado_em: new Date().toISOString(), erro: null })
+                    .eq('id', msg.id);
+
+                console.log(`WhatsApp disparado via Web para ${msg.paciente_nome}`);
+
+            } catch (err) {
+                console.error('Erro no worker de WhatsApp:', err);
+                await new Promise(r => setTimeout(r, 10000));
+            }
+        }
+    };
+
     const loadSmtpConfig = async () => {
         if (!currentEmpresaId) {
             showToast('Empresa não definida.', true);
             return;
         }
-        if (mkSmtpResult) mkSmtpResult.textContent = 'Carregando...';
+        if (mkSmtpResult) mkSmtpResult.textContent = 'Carregando SMTP...';
         try {
             const { data, error } = await withTimeout(db.rpc('rpc_marketing_get_smtp_config', { p_empresa_id: currentEmpresaId }), 15000, 'marketing:smtp:get');
             if (error) throw error;
@@ -12709,10 +13199,68 @@ function initMarketingModule() {
             if (mkSmtpPass) mkSmtpPass.value = '';
             if (mkBrevoApiKey) mkBrevoApiKey.value = '';
             if (mkSmtpResult) mkSmtpResult.textContent = JSON.stringify(cfg || {}, null, 2);
+            
+            // Carregar config API Gateway do WhatsApp (usando JSON da mesma tabela)
+            const waEnabled = document.getElementById('mkWaApiEnabled');
+            const waUrl = document.getElementById('mkWaApiInstanceUrl');
+            const waToken = document.getElementById('mkWaApiToken');
+            
+            if (waEnabled && cfg && cfg.wa_api_enabled !== undefined) waEnabled.checked = Boolean(cfg.wa_api_enabled);
+            if (waUrl && cfg && cfg.wa_api_url) waUrl.value = cfg.wa_api_url;
+            if (waToken) waToken.value = ''; // não expor o token
+            
         } catch (err) {
             const msg = err && err.message ? String(err.message) : 'Erro desconhecido';
             if (mkSmtpResult) mkSmtpResult.textContent = msg;
-            showToast('Falha ao recarregar SMTP.', true);
+            showToast('Falha ao recarregar SMTP/API.', true);
+        }
+    };
+
+    const saveWaApiConfig = async () => {
+        if (!canUpdate) {
+            showToast('Apenas admin pode configurar a API.', true);
+            return;
+        }
+        if (!currentEmpresaId) return;
+
+        const enabled = document.getElementById('mkWaApiEnabled')?.checked || false;
+        const url = document.getElementById('mkWaApiInstanceUrl')?.value?.trim() || '';
+        const token = document.getElementById('mkWaApiToken')?.value?.trim() || '';
+
+        try {
+            // Reutiliza a RPC de SMTP injetando os dados na coluna json de metadados extra (wa_api)
+            // Se a RPC rpc_marketing_set_smtp_config não suportar novos campos nativamente,
+            // faremos um update direto na tabela de configurações.
+            
+            let query = db.from('marketing_smtp_config')
+                          .update({ 
+                              wa_api_enabled: enabled,
+                              wa_api_url: url 
+                          })
+                          .eq('empresa_id', currentEmpresaId);
+            
+            if (token) {
+                // Atualiza o token apenas se preenchido
+                query = db.from('marketing_smtp_config')
+                          .update({ 
+                              wa_api_enabled: enabled,
+                              wa_api_url: url,
+                              wa_api_token: token
+                          })
+                          .eq('empresa_id', currentEmpresaId);
+            }
+
+            const { error } = await query;
+            
+            if (error) {
+                // Se der erro por coluna inexistente, salva como jsonb em 'extra_config' ou avisa
+                console.error("Erro ao salvar Gateway", error);
+                throw new Error("As colunas de WhatsApp API ainda não existem na tabela marketing_smtp_config. Peça ao DBA para criá-las.");
+            }
+            
+            showToast('Gateway API salvo com sucesso!');
+        } catch (err) {
+            showToast(err.message || 'Falha ao salvar Gateway.', true);
         }
     };
 
@@ -12771,6 +13319,8 @@ function initMarketingModule() {
         if (tabFid) tabFid.classList.toggle('hidden', t !== 'fidelidade');
         if (tabCamp) tabCamp.classList.toggle('hidden', t !== 'campanhas');
         if (tabSmtp) tabSmtp.classList.toggle('hidden', t !== 'smtp');
+        if (tabWpWeb) tabWpWeb.classList.toggle('hidden', t !== 'whatsappweb');
+        if (tabWpApi) tabWpApi.classList.toggle('hidden', t !== 'whatsappapi');
 
         const setBtnActive = (btn, active) => {
             if (!btn) return;
@@ -12781,6 +13331,8 @@ function initMarketingModule() {
         setBtnActive(btnFid, t === 'fidelidade');
         setBtnActive(btnCamp, t === 'campanhas');
         setBtnActive(btnSmtp, t === 'smtp');
+        setBtnActive(btnWpWeb, t === 'whatsappweb');
+        setBtnActive(btnWpApi, t === 'whatsappapi');
 
         if (t === 'fidelidade') {
             loadActiveCampaign(bucketToStatusKey(marketingBucket ? marketingBucket.value : '0-6'));
@@ -12798,14 +13350,52 @@ function initMarketingModule() {
     if (btnFid) btnFid.addEventListener('click', () => setTab('fidelidade'));
     if (btnCamp) btnCamp.addEventListener('click', () => setTab('campanhas'));
     if (btnSmtp) btnSmtp.addEventListener('click', () => setTab('smtp'));
+    if (btnWpWeb) btnWpWeb.addEventListener('click', () => setTab('whatsappweb'));
+    if (btnWpApi) btnWpApi.addEventListener('click', () => setTab('whatsappapi'));
     if (btnMarketingRefresh) btnMarketingRefresh.addEventListener('click', () => { loadFidelidadeKpis(); loadFidelidade(); });
     if (marketingBucket) marketingBucket.addEventListener('change', () => { loadActiveCampaign(bucketToStatusKey(marketingBucket.value)); loadFidelidade(); });
     if (btnMarketingSend) btnMarketingSend.addEventListener('click', () => dispararAgoraDoFiltro());
     if (btnMkReloadSmtp) btnMkReloadSmtp.addEventListener('click', () => loadSmtpConfig());
     if (btnMkSaveSmtp) btnMkSaveSmtp.addEventListener('click', () => saveSmtpConfig());
+    if (document.getElementById('btnMkSaveWaApi')) document.getElementById('btnMkSaveWaApi').addEventListener('click', () => saveWaApiConfig());
     if (btnMkDryRun) btnMkDryRun.addEventListener('click', () => simulateCampaign());
     if (btnMkSaveCampaign) btnMkSaveCampaign.addEventListener('click', () => saveCampaign());
-    if (btnMkSend) btnMkSend.addEventListener('click', () => enviarAgoraDaCampanha());
+    if (btnMkSendCampanha) btnMkSendCampanha.addEventListener('click', () => runCampaignNow());
+    if (btnMkSendWhatsappWeb) btnMkSendWhatsappWeb.addEventListener('click', (e) => gerarFilaWhatsappWeb(e));
+    
+    // Listeners do WhatsApp Web
+    const mkBtnWaWebStop = document.getElementById('btnWaWebStop');
+    const mkBtnWaWebNext = document.getElementById('btnWaWebNext');
+    
+    if (mkBtnWaWebStop) mkBtnWaWebStop.addEventListener('click', () => encerrarAssistenteWaWeb());
+    if (mkBtnWaWebNext) {
+        mkBtnWaWebNext.addEventListener('click', () => {
+            // Aguarda 100ms para permitir que o navegador acione o href ATUAL
+            setTimeout(() => {
+                currentWaWebIndex++;
+                if (currentWaWebIndex >= filaWaWebMemoria.length) {
+                    atualizarStatusAssistenteWaWeb();
+                    showToast('Fila concluída com sucesso!');
+                    
+                    const btn = document.getElementById('btnWaWebNext');
+                    if (btn) {
+                        btn.href = '#';
+                        btn.innerHTML = '<i class="ri-check-double-line"></i> Fila Concluída';
+                        btn.classList.add('disabled');
+                        btn.style.pointerEvents = 'none';
+                    }
+                    return;
+                }
+                
+                atualizarStatusAssistenteWaWeb();
+                atualizarBotaoUnico(); // Reconstrói o botão para o PRÓXIMO paciente!
+            }, 100);
+        });
+    }
+
+    if (btnMkSendWhatsappApi) btnMkSendWhatsappApi.addEventListener('click', () => dispararCampanhaWhatsAppQueue());
+    const btnBrevoSend = document.getElementById('btnBrevoSend');
+    if (btnBrevoSend) btnBrevoSend.addEventListener('click', () => dispararCampanhaBrevo());
 
     if (btnMkNewCampaign) btnMkNewCampaign.addEventListener('click', () => fillCampaignForm(null));
     if (mkCampaignsBody && !mkCampaignsBody.dataset.bound) {
@@ -32357,6 +32947,468 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Tenta carregar inicialmente quando a DOM estiver pronta
     setTimeout(loadConciliacaoReport, 1000);
+
+    // =============================================
+    //  PORTAL DO PACIENTE - CHAT (REATIVADO)
+    // =============================================
+    let portalChatCurrentPatientId = null;
+    let portalChatRealtimeSubscription = null;
+
+    async function loadPortalChatPatients() {
+        const listContainer = document.getElementById('portalChatPatientsList');
+        if (!listContainer) return;
+
+        listContainer.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Carregando pacientes...</div>';
+
+        try {
+            // Busque a empresa do mesmo lugar seguro que o resto do app usa
+            const empresaId = currentEmpresaId || localStorage.getItem('lastEmpresaId');
+            if (!empresaId) {
+                console.error("Empresa realmente não encontrada no estado global.");
+                listContainer.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--error-color);">Erro: Empresa não identificada.</div>';
+                return;
+            }
+
+            // Fetch messages grouped by patient
+            const { data: messages, error } = await db
+                .from('portal_mensagens')
+                .select('id, paciente_id, remetente, conteudo, lida, created_at, tipo_mensagem')
+                .eq('empresa_id', empresaId)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            // Fetch patients to get names
+            const { data: patients, error: patErr } = await db
+                .from('pacientes')
+                .select('seqid, id, nome, celular')
+                .eq('empresa_id', empresaId);
+
+            if (patErr) throw patErr;
+
+            // Group messages by patient
+            const patientsMap = {};
+            messages.forEach(msg => {
+                const pid = msg.paciente_id;
+                if (!patientsMap[pid]) {
+                    patientsMap[pid] = {
+                        paciente_id: pid,
+                        messages: [],
+                        unreadCount: 0,
+                        latestMessage: null
+                    };
+                }
+                patientsMap[pid].messages.push(msg);
+                if (msg.remetente === 'paciente' && !msg.lida) {
+                    patientsMap[pid].unreadCount++;
+                }
+                if (!patientsMap[pid].latestMessage || new Date(msg.created_at) > new Date(patientsMap[pid].latestMessage.created_at)) {
+                    patientsMap[pid].latestMessage = msg;
+                }
+            });
+
+            // Merge with patient info
+            const chatPatients = Object.values(patientsMap).map(pMap => {
+                // Find patient either by seqid (integer) or id (uuid/string)
+                const patient = patients.find(p => p.seqid == pMap.paciente_id || p.id == pMap.paciente_id);
+                return {
+                    ...pMap,
+                    nome: patient ? patient.nome : 'Paciente Desconhecido',
+                    celular: patient ? patient.celular : ''
+                };
+            });
+
+            // Sort by latest message
+            chatPatients.sort((a, b) => new Date(b.latestMessage.created_at) - new Date(a.latestMessage.created_at));
+
+            renderPortalChatPatientsList(chatPatients);
+
+        } catch (err) {
+            console.error("Erro ao carregar lista de chat:", err);
+            listContainer.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--error-color);">Erro ao carregar mensagens.</div>';
+        }
+    }
+
+    function renderPortalChatPatientsList(chatPatients) {
+        const listContainer = document.getElementById('portalChatPatientsList');
+        if (!listContainer) return;
+
+        if (chatPatients.length === 0) {
+            listContainer.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Nenhuma mensagem encontrada.</div>';
+            return;
+        }
+
+        listContainer.innerHTML = '';
+        
+        chatPatients.forEach(cp => {
+            const div = document.createElement('div');
+            div.style.padding = '1rem';
+            div.style.borderBottom = '1px solid var(--border-color)';
+            div.style.cursor = 'pointer';
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.gap = '1rem';
+            div.style.transition = 'background 0.2s';
+            
+            // Active state styling
+            if (portalChatCurrentPatientId == cp.paciente_id) {
+                div.style.background = '#e6f0ff';
+            }
+
+            div.onmouseover = () => { if (portalChatCurrentPatientId != cp.paciente_id) div.style.background = '#f1f5f9'; };
+            div.onmouseout = () => { if (portalChatCurrentPatientId != cp.paciente_id) div.style.background = 'transparent'; };
+
+            div.onclick = () => {
+                portalChatCurrentPatientId = cp.paciente_id;
+                // Update active styling
+                Array.from(listContainer.children).forEach(child => child.style.background = 'transparent');
+                div.style.background = '#e6f0ff';
+                loadPortalChatMessages(cp.paciente_id, cp.nome, cp.celular);
+            };
+
+            const avatar = document.createElement('div');
+            avatar.style.width = '40px';
+            avatar.style.height = '40px';
+            avatar.style.borderRadius = '50%';
+            avatar.style.background = 'var(--primary-color)';
+            avatar.style.color = '#fff';
+            avatar.style.display = 'flex';
+            avatar.style.alignItems = 'center';
+            avatar.style.justifyContent = 'center';
+            avatar.style.fontWeight = 'bold';
+            avatar.innerText = cp.nome.charAt(0).toUpperCase();
+
+            const info = document.createElement('div');
+            info.style.flex = '1';
+            info.style.overflow = 'hidden';
+
+            const nameRow = document.createElement('div');
+            nameRow.style.display = 'flex';
+            nameRow.style.justifyContent = 'space-between';
+            nameRow.style.alignItems = 'center';
+
+            const name = document.createElement('strong');
+            name.style.whiteSpace = 'nowrap';
+            name.style.overflow = 'hidden';
+            name.style.textOverflow = 'ellipsis';
+            name.innerText = cp.nome;
+
+            const time = document.createElement('span');
+            time.style.fontSize = '0.75rem';
+            time.style.color = 'var(--text-muted)';
+            
+            if (cp.latestMessage) {
+                const date = new Date(cp.latestMessage.created_at);
+                time.innerText = date.toLocaleDateString() === new Date().toLocaleDateString() ? 
+                    date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 
+                    date.toLocaleDateString();
+            }
+
+            nameRow.appendChild(name);
+            nameRow.appendChild(time);
+
+            const msgRow = document.createElement('div');
+            msgRow.style.display = 'flex';
+            msgRow.style.justifyContent = 'space-between';
+            msgRow.style.alignItems = 'center';
+            msgRow.style.marginTop = '0.25rem';
+
+            const msgPreview = document.createElement('span');
+            msgPreview.style.fontSize = '0.85rem';
+            msgPreview.style.color = 'var(--text-muted)';
+            msgPreview.style.whiteSpace = 'nowrap';
+            msgPreview.style.overflow = 'hidden';
+            msgPreview.style.textOverflow = 'ellipsis';
+            
+            if (cp.latestMessage) {
+                let prefix = cp.latestMessage.remetente === 'dentista' ? 'Você: ' : '';
+                msgPreview.innerText = prefix + (cp.latestMessage.tipo_mensagem === 'pdf' ? '[Arquivo PDF]' : cp.latestMessage.conteudo);
+            }
+
+            msgRow.appendChild(msgPreview);
+
+            if (cp.unreadCount > 0) {
+                name.style.color = 'var(--primary-color)';
+                const badge = document.createElement('span');
+                badge.style.background = 'var(--danger-color)';
+                badge.style.color = '#fff';
+                badge.style.fontSize = '0.7rem';
+                badge.style.padding = '0.1rem 0.4rem';
+                badge.style.borderRadius = '10px';
+                badge.style.fontWeight = 'bold';
+                badge.innerText = cp.unreadCount;
+                msgRow.appendChild(badge);
+            }
+
+            info.appendChild(nameRow);
+            info.appendChild(msgRow);
+
+            div.appendChild(avatar);
+            div.appendChild(info);
+
+            listContainer.appendChild(div);
+        });
+    }
+
+    async function loadPortalChatMessages(pacienteId, pacienteNome, pacienteCelular) {
+        const empresaId = currentEmpresaId || localStorage.getItem('lastEmpresaId');
+        
+        // Update Header UI
+        document.getElementById('portalChatEmptyState').style.display = 'none';
+        document.getElementById('portalChatActiveArea').style.display = 'flex';
+        document.getElementById('portalChatActiveArea').classList.remove('hidden');
+
+        document.getElementById('portalChatHeaderPatientName').innerText = pacienteNome;
+        if(document.getElementById('portalChatPatientPhone')) document.getElementById('portalChatPatientPhone').innerText = pacienteCelular || '';
+        if(document.getElementById('portalChatAvatar')) document.getElementById('portalChatAvatar').innerText = pacienteNome.charAt(0).toUpperCase();
+
+        // Set "Ver Prontuário" action
+        const btnViewRecord = document.getElementById('btnViewPatientRecordChat');
+        if (btnViewRecord) {
+            btnViewRecord.onclick = () => {
+                const searchInput = document.getElementById('patientSearch');
+                if (searchInput) {
+                    searchInput.value = pacienteNome;
+                    searchInput.dispatchEvent(new Event('input'));
+                }
+                setActiveTab('patients');
+            };
+        }
+
+        const messagesContainer = document.getElementById('portalChatMessagesContainer');
+        messagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); width: 100%; padding: 2rem;">Carregando mensagens...</div>';
+
+        try {
+            // Mark as read
+            await db.from('portal_mensagens')
+                .update({ lida: true })
+                .eq('empresa_id', empresaId)
+                .eq('paciente_id', pacienteId)
+                .eq('remetente', 'paciente')
+                .eq('lida', false);
+
+            // Fetch messages
+            const { data: messages, error } = await db
+                .from('portal_mensagens')
+                .select('*')
+                .eq('empresa_id', empresaId)
+                .eq('paciente_id', pacienteId)
+                .order('created_at', { ascending: true });
+
+            if (error) throw error;
+
+            renderPortalChatMessages(messages);
+            
+            // Refresh the list to remove the unread badge
+            loadPortalChatPatients();
+
+            // Subscribe to real-time updates for this patient
+            if (portalChatRealtimeSubscription) {
+                db.removeChannel(portalChatRealtimeSubscription);
+            }
+            
+            portalChatRealtimeSubscription = db.channel('custom-portal-mensagens')
+                .on(
+                    'postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'portal_mensagens', filter: `empresa_id=eq.${empresaId}` },
+                    (payload) => {
+                        const newMsg = payload.new;
+                        if (newMsg.paciente_id == portalChatCurrentPatientId) {
+                            // Mark as read if from patient
+                            if (newMsg.remetente === 'paciente') {
+                                db.from('portal_mensagens').update({ lida: true }).eq('id', newMsg.id).then();
+                            }
+                            
+                            // Append and scroll
+                            const msgs = document.getElementById('portalChatMessagesContainer');
+                            const isAtBottom = msgs.scrollHeight - msgs.scrollTop <= msgs.clientHeight + 50;
+                            msgs.appendChild(createMessageElement(newMsg));
+                            if (isAtBottom) msgs.scrollTop = msgs.scrollHeight;
+                        }
+                        // Refresh patient list to show latest message
+                        loadPortalChatPatients();
+                    }
+                )
+                .subscribe();
+
+        } catch (err) {
+            console.error("Erro ao carregar mensagens:", err);
+            messagesContainer.innerHTML = '<div style="text-align: center; color: var(--error-color); width: 100%;">Erro ao carregar histórico.</div>';
+        }
+    }
+
+    function createMessageElement(msg) {
+        const isDentist = msg.remetente === 'dentista';
+        
+        const wrap = document.createElement('div');
+        wrap.style.display = 'flex';
+        wrap.style.flexDirection = 'column';
+        wrap.style.alignItems = isDentist ? 'flex-end' : 'flex-start';
+        wrap.style.width = '100%';
+
+        const bubble = document.createElement('div');
+        bubble.style.maxWidth = '70%';
+        bubble.style.padding = '0.75rem 1rem';
+        bubble.style.borderRadius = '12px';
+        bubble.style.position = 'relative';
+        bubble.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
+        
+        if (isDentist) {
+            bubble.style.background = '#dcf8c6'; // WhatsApp light green
+            bubble.style.color = '#000';
+            bubble.style.borderTopRightRadius = '2px';
+        } else {
+            bubble.style.background = '#fff';
+            bubble.style.color = '#000';
+            bubble.style.borderTopLeftRadius = '2px';
+        }
+
+        // Content
+        if (msg.tipo_mensagem === 'pdf') {
+            const link = document.createElement('a');
+            link.href = msg.conteudo; // assuming content is URL
+            link.target = '_blank';
+            link.style.display = 'flex';
+            link.style.alignItems = 'center';
+            link.style.gap = '0.5rem';
+            link.style.color = 'var(--primary-color)';
+            link.style.textDecoration = 'none';
+            link.style.fontWeight = 'bold';
+            link.innerHTML = '<i class="ri-file-pdf-line" style="font-size: 1.5rem;"></i> Visualizar Documento';
+            bubble.appendChild(link);
+        } else {
+            const text = document.createElement('div');
+            text.style.whiteSpace = 'pre-wrap';
+            text.style.wordBreak = 'break-word';
+            text.innerText = msg.conteudo;
+            bubble.appendChild(text);
+        }
+
+        // Time
+        const time = document.createElement('div');
+        time.style.fontSize = '0.7rem';
+        time.style.color = 'var(--text-muted)';
+        time.style.marginTop = '0.25rem';
+        time.style.textAlign = isDentist ? 'right' : 'left';
+        time.innerText = new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        bubble.appendChild(time);
+
+        wrap.appendChild(bubble);
+        return wrap;
+    }
+
+    function renderPortalChatMessages(messages) {
+        const container = document.getElementById('portalChatMessagesContainer');
+        container.innerHTML = '';
+        
+        if (messages.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: var(--text-muted); width: 100%; padding: 2rem;">Nenhuma mensagem neste histórico.</div>';
+            return;
+        }
+
+        messages.forEach(msg => {
+            container.appendChild(createMessageElement(msg));
+        });
+
+        // Scroll to bottom
+        container.scrollTop = container.scrollHeight;
+    }
+
+    const btnRefresh = document.getElementById('btnRefreshPortalChat');
+    if (btnRefresh) {
+        btnRefresh.addEventListener('click', () => {
+            loadPortalChatPatients();
+            if (portalChatCurrentPatientId) {
+                const patientName = document.getElementById('portalChatHeaderPatientName').innerText;
+                const phoneEl = document.getElementById('portalChatPatientPhone');
+                const patientPhone = phoneEl ? phoneEl.innerText : '';
+                loadPortalChatMessages(portalChatCurrentPatientId, patientName, patientPhone);
+            }
+        });
+    }
+
+    const form = document.getElementById('formPortalChatSend');
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('inputPortalChatMessage');
+            const conteudo = input.value.trim();
+            
+            if (!conteudo || !portalChatCurrentPatientId) return;
+            
+            const empresaId = currentEmpresaId || localStorage.getItem('lastEmpresaId');
+            if (!empresaId) return alert('Empresa não identificada para o envio.');
+
+            input.value = '';
+            
+            try {
+                // Optimistic UI update
+                const tempMsg = {
+                    id: 'temp-' + Date.now(),
+                    empresa_id: empresaId,
+                    paciente_id: portalChatCurrentPatientId,
+                    remetente: 'dentista',
+                    conteudo: conteudo,
+                    tipo_mensagem: 'texto',
+                    created_at: new Date().toISOString()
+                };
+                
+                const msgsContainer = document.getElementById('portalChatMessagesContainer');
+                msgsContainer.appendChild(createMessageElement(tempMsg));
+                msgsContainer.scrollTop = msgsContainer.scrollHeight;
+
+                const { error } = await db.from('portal_mensagens').insert([{
+                    empresa_id: empresaId,
+                    paciente_id: portalChatCurrentPatientId,
+                    remetente: 'dentista',
+                    conteudo: conteudo,
+                    lida: false,
+                    tipo_mensagem: 'texto'
+                }]);
+
+                if (error) throw error;
+                
+                loadPortalChatPatients();
+                
+            } catch (err) {
+                console.error('Erro ao enviar mensagem:', err);
+                alert('Erro ao enviar mensagem. Tente novamente.');
+                input.value = conteudo; // restore text
+            }
+        });
+
+        // Submit on Enter (without Shift)
+        const input = document.getElementById('inputPortalChatMessage');
+        if (input) {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    form.dispatchEvent(new Event('submit'));
+                }
+            });
+        }
+    }
+    
+    // Setup Search Filter
+    const searchInput = document.getElementById('portalChatSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const listContainer = document.getElementById('portalChatList');
+            if (!listContainer) return;
+            
+            Array.from(listContainer.children).forEach(child => {
+                if (child.innerText.toLowerCase().includes(term)) {
+                    child.style.display = 'flex';
+                } else {
+                    child.style.display = 'none';
+                }
+            });
+        });
+    }
+
+    // Make functions globally available if needed
+    window.loadPortalChatPatients = loadPortalChatPatients;
 
     // =============================================
     //  BLOCK RETROACTIVE DATES (UI & MANIPULATION)
