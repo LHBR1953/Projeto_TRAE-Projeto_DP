@@ -130,7 +130,7 @@
       <div class="lp-glow"></div>
       <div class="lp-glow-2"></div>
 
-      <div class="lp-hero-inner">
+      <div class="lp-hero-inner" style="position: relative; z-index: 20;">
         <div>
           <p class="lp-hero-kicker">Premium SaaS • Leve • Seguro</p>
           <h1 class="lp-hero-title">Odonto Connect Cloud (OCC): Inteligência e Simplicidade a serviço do seu sorriso.</h1>
@@ -466,7 +466,6 @@
     </div>
   </div>
 
-  <script src="landing.js?v=20260331-0001"></script>
   <script>
     // --- Lógica do Auto-Scroll (Vitrine) ---
     let autoScrollAnimation = null;
@@ -583,13 +582,14 @@
         }
     }, { passive: true });
   </script>
-  <div style="position: fixed; bottom: 30px; left: 30px; z-index: 1000; display: flex; flex-direction: column; gap: 12px; align-items: flex-start;">
-    <a id="btnOpenLogin" class="lp-btn lp-btn-primary" href="/app.html" style="box-shadow: 0 8px 24px rgba(79, 70, 229, 0.4); text-align: center;">Já tenho conta</a>
-    <button id="btnPatientPortal" class="lp-btn lp-btn-secondary" style="background: rgba(10,15,25,0.8); border: 1px solid rgba(255,255,255,0.22); backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0,0,0,0.4);">Portal do Paciente</button>
+  <div style="position: fixed; bottom: 30px; left: 30px; z-index: 50; display: flex; flex-direction: column; gap: 12px; align-items: flex-start;">
+    <a id="btnOpenLogin" class="lp-btn lp-btn-primary" href="app.html" style="box-shadow: 0 8px 24px rgba(79, 70, 229, 0.4); text-align: center;">Já tenho conta</a>
+    <button id="btnPatientPortal" style="display: none;"></button>
+    <a class="lp-btn lp-btn-secondary" href="app.html?mode=patient" style="background: rgba(10,15,25,0.8); border: 1px solid rgba(255,255,255,0.22); backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); text-align: center; text-decoration: none;">Portal do Paciente</a>
   </div>
 
   <!-- WIDGET WHATSAPP -->
-  <div id="waWidgetBtn" style="position: fixed; bottom: 30px; right: 30px; z-index: 1000; width: 60px; height: 60px; background: #25D366; border-radius: 50%; box-shadow: 0 8px 24px rgba(37,211,102,0.4); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s;">
+  <div id="waWidgetBtn" style="position: fixed; bottom: 30px; right: 30px; z-index: 50; width: 60px; height: 60px; background: #25D366; border-radius: 50%; box-shadow: 0 8px 24px rgba(37,211,102,0.4); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s;">
     <svg width="34" height="34" viewBox="0 0 24 24" fill="white"><path d="M12.031 0C5.383 0 0 5.383 0 12.031c0 2.124.553 4.195 1.604 6.01L.065 23.51l5.63-1.541a11.968 11.968 0 006.336 1.802h.005c6.646 0 12.03-5.383 12.03-12.03S18.678 0 12.03 0zM12.03 21.758c-1.796 0-3.555-.483-5.097-1.396l-.365-.216-3.784 1.035 1.055-3.69-.237-.377a9.962 9.962 0 01-1.523-5.326c0-5.503 4.478-9.982 9.985-9.982 5.506 0 9.983 4.479 9.983 9.982s-4.477 9.982-9.983 9.982zm5.474-7.48c-.3-.15-1.776-.88-2.052-.98-.276-.1-.476-.15-.676.15-.2.3-.776.98-.952 1.18-.176.2-.352.226-.652.076-1.503-.75-2.585-1.428-3.554-3.11-.176-.3-.018-.463.132-.613.134-.135.3-.3.45-.45.15-.15.2-.25.3-.413.1-.167.05-.317-.025-.467-.076-.15-.676-1.626-.926-2.226-.243-.585-.49-.505-.676-.515-.176-.01-.376-.01-.576-.01-.2 0-.526.076-.802.376-.276.3-1.052 1.026-1.052 2.502 0 1.476 1.077 2.903 1.227 3.103.15.2 2.115 3.228 5.12 4.453 2.053.837 2.85.918 3.863.774.774-.11 1.776-.726 2.027-1.428.25-.7.25-1.3.176-1.428-.076-.125-.276-.2-.576-.35z"/></svg>
   </div>
 
@@ -659,12 +659,15 @@
       btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg> Iniciar Chat';
       btn.disabled = false;
       
+      const numeroLimpo = phone.replace(/\D/g, '');
+      const numeroFinal = numeroLimpo.startsWith('55') ? numeroLimpo : `55${numeroLimpo}`;
+      
       const text = encodeURIComponent(`Olá, me chamo ${name}. ${msg}`);
-      // Substituir pelo número real da clínica/OCC
-      window.open(`https://wa.me/5511999999999?text=${text}`, '_blank');
+      window.open(`https://web.whatsapp.com/send?phone=${numeroFinal}&text=${text}`, '_blank');
+      
       document.getElementById('waWidgetWindow').style.display = 'none';
     });
   </script>
-
+  <script src="landing.js?v=20260331-0001"></script>
 </body>
 </html>
