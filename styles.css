@@ -830,6 +830,13 @@ h2 {
     .dash-mini-grid {
         grid-template-columns: 1fr;
     }
+
+    .tabela-container-portal {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        display: block;
+        width: 100%;
+    }
 }
 
 /* Sections */

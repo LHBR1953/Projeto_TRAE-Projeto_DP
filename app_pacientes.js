@@ -105,8 +105,8 @@ function renderPatientPortal(rows, paciente) {
         const st = String(r && (r.status || r.status_agendamento) || 'MARCADO');
         return `
             <tr>
-                <td>${escapeHtml(dateStr)}</td>
-                <td>${escapeHtml(timeStr)}</td>
+                <td style="white-space: nowrap;">${escapeHtml(dateStr)}</td>
+                <td style="white-space: nowrap;">${escapeHtml(timeStr)}</td>
                 <td>${escapeHtml(prof || '—')}</td>
                 <td>${escapeHtml(st)}</td>
                 <td style="text-align:center;">
@@ -842,8 +842,8 @@ async function printPatientDetailReport(saveAsPdf = false) {
         financialItems = finData || [];
     } catch (_) { /* continue without finance */ }
 
-    // ---- Budgets table ----
-    const budgetsHtml = patientBudgets.length === 0
+    // --- JANELA 3: Orçamentos ---
+    const budgetHtml = patientBudgets.length === 0
         ? '<p style="color:#9ca3af; padding:10px 0;">Nenhum orçamento vinculado.</p>'
         : patientBudgets.map(b => {
             const rawProfId = b.profissional_id ?? b.profissionalid ?? b.profissionalId;
@@ -885,43 +885,45 @@ async function printPatientDetailReport(saveAsPdf = false) {
             </div>`;
         }).join('');
 
-    // ---- Financial table ----
+    // --- JANELA 4: Meu Financeiro ---
     const financeHtml = financialItems.length === 0
         ? '<p style="color:#9ca3af; padding:10px 0;">Nenhum lançamento financeiro registrado.</p>'
         : `
-        <table style="width:100%; border-collapse:collapse; font-size:11px;">
-            <thead>
-                <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
-                    <th style="padding:8px; text-align:left; color:#6b7280;">Data</th>
-                    <th style="padding:8px; text-align:left; color:#6b7280;">Categoria</th>
-                    <th style="padding:8px; text-align:left; color:#6b7280;">Forma</th>
-                    <th style="padding:8px; text-align:right; color:#6b7280;">Valor</th>
-                    <th style="padding:8px; text-align:center; color:#6b7280;">Tipo</th>
-                    <th style="padding:8px; text-align:left; color:#6b7280; width:35%;">Observação</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${financialItems.map(t => {
-            const isCredito = t.tipo === 'CREDITO';
-            const color = isCredito ? '#16a34a' : '#dc2626';
-            return `
-                    <tr>
-                        <td style="padding:8px; border-bottom:1px solid #e5e7eb;">${formatDateTime(t.data_transacao)}</td>
-                        <td style="padding:8px; border-bottom:1px solid #e5e7eb;">${t.categoria}</td>
-                        <td style="padding:8px; border-bottom:1px solid #e5e7eb;">${t.forma_pagamento || '—'}</td>
-                        <td style="padding:8px; border-bottom:1px solid #e5e7eb; text-align:right; font-weight:700; color:${color};">
-                            R$ ${Number(t.valor).toFixed(2)}
-                        </td>
-                        <td style="padding:8px; border-bottom:1px solid #e5e7eb; text-align:center;">
-                            <span style="background:${isCredito ? '#ecfdf5' : '#fef2f2'}; color:${color}; padding:2px 8px; border-radius:4px; font-weight:700; font-size:9px;">
-                                ${t.tipo}
-                            </span>
-                        </td>
-                        <td style="padding:8px; border-bottom:1px solid #e5e7eb; color:#4b5563; font-style:italic;">${t.observacoes || ''}</td>
-                    </tr>`;
-        }).join('')}
-            </tbody>
-        </table>`;
+        <div class="tabela-container-portal">
+            <table style="width:100%; border-collapse:collapse; font-size:11px; min-width: 600px;">
+                <thead>
+                    <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
+                        <th style="padding:8px; text-align:left; color:#6b7280; white-space: nowrap;">Data</th>
+                        <th style="padding:8px; text-align:left; color:#6b7280;">Categoria</th>
+                        <th style="padding:8px; text-align:left; color:#6b7280;">Forma</th>
+                        <th style="padding:8px; text-align:right; color:#6b7280;">Valor</th>
+                        <th style="padding:8px; text-align:center; color:#6b7280;">Tipo</th>
+                        <th style="padding:8px; text-align:left; color:#6b7280; width:35%;">Observação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${financialItems.map(t => {
+                const isCredito = t.tipo === 'CREDITO';
+                const color = isCredito ? '#16a34a' : '#dc2626';
+                return `
+                        <tr>
+                            <td style="padding:8px; border-bottom:1px solid #e5e7eb; white-space: nowrap;">${formatDateTime(t.data_transacao)}</td>
+                            <td style="padding:8px; border-bottom:1px solid #e5e7eb;">${t.categoria}</td>
+                            <td style="padding:8px; border-bottom:1px solid #e5e7eb;">${t.forma_pagamento || '—'}</td>
+                            <td style="padding:8px; border-bottom:1px solid #e5e7eb; text-align:right; font-weight:700; color:${color}; white-space: nowrap;">
+                                R$ ${Number(t.valor).toFixed(2)}
+                            </td>
+                            <td style="padding:8px; border-bottom:1px solid #e5e7eb; text-align:center;">
+                                <span style="background:${isCredito ? '#ecfdf5' : '#fef2f2'}; color:${color}; padding:2px 8px; border-radius:4px; font-weight:700; font-size:9px;">
+                                    ${t.tipo}
+                                </span>
+                            </td>
+                            <td style="padding:8px; border-bottom:1px solid #e5e7eb; color:#4b5563; font-style:italic;">${t.observacoes || ''}</td>
+                        </tr>`;
+            }).join('')}
+                </tbody>
+            </table>
+        </div>`;
 
     // ---- Full HTML report ----
     const enderecoFull = [patient.endereco, patient.numero, patient.bairro, patient.cidade, patient.uf]

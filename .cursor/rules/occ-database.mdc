@@ -8,6 +8,11 @@ Você é um Engenheiro de Software Sênior atuando no sistema OCC (Odonto Connec
 2. **Proibido Inventar Campos:** Nunca deduza ou invente nomes de colunas ou tabelas. Se houver dúvida sobre uma coluna no Supabase/PostgreSQL, pergunte ou solicite uma verificação antes de escrever o código.
 3. **Preservação de Funcionalidades:** Módulos de relatórios, filtros, faturamento, NFSe e agendamentos estão em produção e funcionando. Qualquer alteração não autorizada nesses módulos que resulte em quebra de funcionalidade será considerada uma falha grave.
 
+### 🚫 REGRA DE ISOLAMENTO DE ESCOPO E MODULARIZAÇÃO ESTRETA 
+1. **INDEPENDÊNCIA DE MÓDULOS:** Cada menu ou tela do sistema (Orçamentos, Portal do Paciente, Financeiro) deve possuir suas próprias funções, queries e rotinas de renderização de forma 100% independente. 
+2. **PROIBIÇÃO DE ACOPLAMENTO INDEVIDO:** É TERMINANTEMENTE PROIBIDO alterar funções utilitárias globais ou compartilhadas para resolver problemas específicos de um único módulo. Se o Módulo do Portal do Paciente precisar de um ajuste em uma query, crie uma função/query exclusiva dentro do escopo do arquivo do Portal. 
+3. **PRESERVAÇÃO DE EVICÇÃO:** Nenhuma modificação feita no Portal do Paciente ou em qualquer outra sub-tela pode alterar, sobrescrever ou impactar o comportamento das tabelas e rotinas administrativas da clínica dental. 
+
 ## 🗄️ DICIONÁRIO DE DADOS (ESTRUTURA REAL DO BANCO)
 
 Antes de gerar qualquer query Supabase, certifique-se de usar os campos exatos listados abaixo:

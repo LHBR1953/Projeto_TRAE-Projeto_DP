@@ -2688,9 +2688,8 @@ async function initializeApp(isContextSwitch = false) {
 
         // Attach payments to budgets
         budgets.forEach(b => {
-            const bPayments = allPayments.filter(p => p.orcamento_id === b.seqid);
-            b.pagamentos = bPayments;
-            b.total_pago = bPayments.reduce((acc, curr) => acc + (parseFloat(curr.valor_pago) || 0), 0);
+            b.pagamentos = allPayments.filter(p => String(p.orcamento_id) === String(b.id) || String(p.orcamento_id) === String(b.seqid));
+            b.total_pago = b.pagamentos.reduce((acc, curr) => acc + (parseFloat(curr.valor_pago) || 0), 0);
         });
         bindEstoqueModule();
         bindNumericMasks();
@@ -10716,11 +10715,62 @@ function renderTable(data = [], type = 'patients') {
             const tr = document.createElement('tr');
 
             // Format total value (b.orcamento_itens is the Supabase relation name)
-            const itens = b.orcamento_itens || b.itens || [];
-            const total = itens.reduce((acc, curr) => acc + ((parseFloat(curr.valor) || 0) * (parseInt(curr.qtde) || 1)), 0);
-            const qtdItens = itens.length;
+            let itens = [];
+            if (b.itens) {
+                try {
+                    itens = typeof b.itens === 'string' ? JSON.parse(b.itens) : b.itens;
+                } catch(e) {}
+            } else if (b.orcamento_itens) {
+                itens = b.orcamento_itens;
+            }
 
-            const totalPago = b.total_pago || 0;
+            const converterValor = (v) => { 
+                if (!v && v !== 0) return 0; 
+                let num = 0;
+                if (typeof v === 'string') { 
+                    const str = v.replace(/[^\d.,-]/g, ''); // remove R$, etc
+                    if (str.includes(',')) {
+                        num = Number(str.replace(/\./g, '').replace(',', '.')); 
+                    } else {
+                        num = Number(str);
+                    }
+                } else {
+                    num = Number(v); 
+                }
+                return isNaN(num) ? 0 : num;
+            };
+
+            const total = itens.reduce((acc, curr) => {
+                const preco = curr.valor || curr.preco || curr.valor_total || curr.total || 0;
+                const qtde = curr.qtde || curr.quantidade || 1;
+                return acc + (converterValor(preco) * converterValor(qtde));
+            }, 0) || converterValor(b.valor_total || b.valor || b.valor_orcado || b.Valor || 0);
+
+            const qtdItens = Array.isArray(itens) ? itens.length : 0;
+
+            let totalPago = 0;
+            
+            // 1. Busca os pagamentos atrelados da tabela oficial orcamento_pagamentos (carregada no boot)
+            if (b.pagamentos && Array.isArray(b.pagamentos)) {
+                totalPago = b.pagamentos.reduce((acc, p) => acc + converterValor(p.valor_pago || p.valor || 0), 0);
+            }
+            
+            // 2. Fallback
+            if (totalPago === 0) {
+                totalPago = converterValor(b.total_pago || b.valor_pago || b.pago || 0);
+            }
+            
+            // 3. Regra de Negócio Prática (Executado = Quitado)
+            const statusKey = normalizeKey(b.status || '');
+            if ((statusKey === 'executado' || statusKey === 'concluido' || statusKey === 'aprovado') && totalPago === 0) {
+                totalPago = total;
+            }
+
+            // Fallback de contingência final para Valor Total se ainda for 0
+            if (totalPago === 0 && total > 0 && (statusKey === 'executado' || statusKey === 'concluido' || statusKey === 'aprovado')) {
+                totalPago = total;
+            }
+
             const saldoDevedor = total - totalPago;
             const criadoEm = b.created_at ? formatDateTime(b.created_at) : '—';
 
@@ -11642,6 +11692,27 @@ async function renderPatientPortal(paciente) {
         `;
     }
 
+    // --- JANELA DE SALDO GLOBAL ---
+    try {
+        const balance = await fetchPatientBalance(paciente.seqid || paciente.id);
+        const portalSaldoContainer = document.getElementById('portalSaldoContainer');
+        const portalSaldoContent = document.getElementById('portalSaldoContent');
+        if (portalSaldoContainer && portalSaldoContent) {
+            if (balance > 0) {
+                portalSaldoContent.innerHTML = `<h3 style="font-size: 1.25rem; margin: 0; color: #334155;">Seu Crédito Disponível: <span style="color: var(--success-color); font-weight: 800;">R$ ${balance.toFixed(2)}</span></h3><p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.9rem;">Você possui este valor como crédito para utilizar em nossa clínica.</p>`;
+                portalSaldoContainer.classList.remove('hidden');
+            } else if (balance < 0) {
+                portalSaldoContent.innerHTML = `<h3 style="font-size: 1.25rem; margin: 0; color: #334155;">Débito Global: <span style="color: var(--danger-color); font-weight: 800;">R$ ${Math.abs(balance).toFixed(2)}</span></h3><p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.9rem;">Existe um saldo devedor em sua conta corrente.</p>`;
+                portalSaldoContainer.classList.remove('hidden');
+            } else {
+                portalSaldoContent.innerHTML = `<h3 style="font-size: 1.25rem; margin: 0; color: #334155;">Saldo: <span style="color: #64748b; font-weight: 800;">R$ 0,00</span></h3><p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.9rem;">Sua conta corrente na clínica está zerada.</p>`;
+                portalSaldoContainer.classList.remove('hidden');
+            }
+        }
+    } catch(err) {
+        console.error("Erro ao renderizar saldo no portal do paciente", err);
+    }
+
     // --- JANELA 2: Agendamentos ---
     const agendamentosContainer = document.getElementById('portalAgendamentosContainer');
     if (agendamentosContainer) {
@@ -11651,8 +11722,8 @@ async function renderPatientPortal(paciente) {
                 agendamentosContainer.innerHTML = `<p style="text-align: center; color: #9ca3af; padding: 1rem 0;">Nenhum agendamento futuro encontrado.</p>`;
             } else {
                 agendamentosContainer.innerHTML = `
-                    <div class="table-container" style="border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;">
-                        <table class="main-table" style="width: 100%;">
+                    <div class="table-container tabela-container-portal" style="border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;">
+                        <table class="main-table" style="width: 100%; min-width: 500px;">
                             <thead><tr><th>Data</th><th>Hora</th><th>Status</th></tr></thead>
                             <tbody>
                                 ${agendamentos.map(r => {
@@ -11712,10 +11783,18 @@ async function renderPatientPortal(paciente) {
 
                             const converterValor = (v) => { 
                                 if (!v && v !== 0) return 0; 
+                                let num = 0;
                                 if (typeof v === 'string') { 
-                                    return Number(v.replace(/\./g, '').replace(',', '.')); 
-                                } 
-                                return Number(v); 
+                                    const str = v.replace(/[^\d.,-]/g, '');
+                                    if (str.includes(',')) {
+                                        num = Number(str.replace(/\./g, '').replace(',', '.')); 
+                                    } else {
+                                        num = Number(str);
+                                    }
+                                } else {
+                                    num = Number(v); 
+                                }
+                                return isNaN(num) ? 0 : num;
                             }; 
 
                             const status = item.status || 'Aprovado';
@@ -11835,8 +11914,8 @@ async function renderPatientPortal(paciente) {
                 financeiroContainer.innerHTML = `<p style="text-align: center; color: #9ca3af; padding: 1rem 0;">Nenhum histórico financeiro encontrado.</p>`;
             } else {
                 financeiroContainer.innerHTML = `
-                    <div class="table-container" style="border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;">
-                        <table class="main-table" style="width: 100%;">
+                    <div class="table-container tabela-container-portal" style="border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;">
+                        <table class="main-table" style="width: 100%; min-width: 600px;">
                             <thead><tr><th>Data</th><th>Categoria</th><th>Forma Pgto</th><th>Valor</th><th>Tipo</th></tr></thead>
                             <tbody>
                                 ${fins.map(f => {
@@ -23729,8 +23808,9 @@ async function fetchBudgetsListRowsFromDb() {
     }
 
     try {
-        const bySeqId = new Map();
-        const chunks = splitIntoChunks(seqids, 500);
+        const byId = new Map();
+        const idsAndSeqIds = [...ids, ...seqids.map(String)];
+        const chunks = splitIntoChunks(idsAndSeqIds, 500);
         for (const chunk of chunks) {
             let pq = db.from('orcamento_pagamentos')
                 .select('*')
@@ -23739,17 +23819,27 @@ async function fetchBudgetsListRowsFromDb() {
             const { data: pData, error: pErr } = await withTimeout(pq, 20000, 'orcamento_pagamentos:list');
             if (pErr) throw pErr;
             (pData || []).forEach(p => {
-                const k = p && p.orcamento_id != null ? Number(p.orcamento_id) : null;
-                if (!Number.isFinite(k)) return;
-                if (!bySeqId.has(k)) bySeqId.set(k, []);
-                bySeqId.get(k).push(p);
+                const k = String(p && p.orcamento_id || '').trim();
+                if (!k) return;
+                if (!byId.has(k)) byId.set(k, []);
+                byId.get(k).push(p);
             });
         }
         rows.forEach(r => {
-            const k = r && r.seqid != null ? Number(r.seqid) : null;
-            const pays = Number.isFinite(k) ? (bySeqId.get(k) || []) : [];
+            const idStr = String(r && r.id || '').trim();
+            const seqStr = String(r && r.seqid || '').trim();
+            const paysById = byId.get(idStr) || [];
+            const paysBySeq = byId.get(seqStr) || [];
+            
+            // Merge deduplicating by payment id to avoid duplicates if they were somehow mapped to both
+            const mergedPaysMap = new Map();
+            [...paysById, ...paysBySeq].forEach(p => {
+                mergedPaysMap.set(p.id, p);
+            });
+            const pays = Array.from(mergedPaysMap.values());
+            
             r.pagamentos = pays;
-            r.total_pago = pays.reduce((acc, curr) => acc + (parseFloat(curr && curr.valor_pago) || 0), 0);
+            r.total_pago = pays.reduce((acc, curr) => acc + (Number(curr && curr.valor_pago) || 0), 0);
         });
     } catch (e) {
         rows.forEach(r => {
@@ -28658,6 +28748,30 @@ async function showPatientDetails(id) {
     // Set Header
     document.getElementById('detailsPatientName').innerText = patient.nome;
 
+    // Fetch and display balance
+    let patientBalance = 0;
+    try {
+        patientBalance = await fetchPatientBalance(patient.seqid || patient.id);
+    } catch(e) {}
+    
+    let balanceBadge = document.getElementById('detailsPatientBalanceBadge');
+    if (!balanceBadge) {
+        balanceBadge = document.createElement('span');
+        balanceBadge.id = 'detailsPatientBalanceBadge';
+        balanceBadge.style.marginLeft = '1rem';
+        document.getElementById('detailsPatientName').appendChild(balanceBadge);
+    } else {
+        document.getElementById('detailsPatientName').appendChild(balanceBadge); // ensure it's still there
+    }
+    
+    if (patientBalance > 0) {
+        balanceBadge.innerHTML = `<span style="background: var(--success-color); color: white; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; vertical-align: middle;">Crédito na Clínica: R$ ${patientBalance.toFixed(2)}</span>`;
+    } else if (patientBalance < 0) {
+        balanceBadge.innerHTML = `<span style="background: var(--danger-color); color: white; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; vertical-align: middle;">Débito Global: R$ ${Math.abs(patientBalance).toFixed(2)}</span>`;
+    } else {
+        balanceBadge.innerHTML = '';
+    }
+
     // Fill General Tab
     document.getElementById('detCPF').innerText = patient.cpf || '-';
     document.getElementById('detNasc').innerText = patient.datanascimento ? formatDate(patient.datanascimento) : '-';
@@ -30337,6 +30451,37 @@ async function fetchTransactions(patientId = null) {
     }
 }
 
+// Helper to fetch global patient balance
+async function fetchPatientBalance(patientId) {
+    try {
+        if (!patientId) return 0;
+        
+        let seqid = patientId;
+        // Se patientId for UUID, buscar o seqid no banco (pois o portal pode não ter patients global)
+        if (typeof patientId === 'string' && patientId.length > 15) {
+            const { data: pData } = await db.from('pacientes').select('seqid').eq('id', patientId).single();
+            if (pData && pData.seqid) seqid = pData.seqid;
+        } else {
+            // Tentar cruzar com array global se existir (fallback administrativo)
+            if (typeof patients !== 'undefined' && Array.isArray(patients)) {
+                const pat = patients.find(p => String(p.id) === String(patientId) || String(p.seqid) === String(patientId));
+                if (pat && pat.seqid) seqid = pat.seqid;
+            }
+        }
+        
+        const { data, error } = await db.from('view_saldo_paciente')
+            .select('*')
+            .eq('paciente_id', seqid)
+            .single();
+            
+        if (error && error.code !== 'PGRST116') throw error;
+        return data ? Number(data.saldo_atual) : 0;
+    } catch (err) {
+        console.error("Erro ao buscar saldo do paciente:", err);
+        return 0;
+    }
+}
+
 async function updateBalanceUI(patientId) {
     try {
         const { data, error } = await db.from('view_saldo_paciente')
@@ -30932,16 +31077,101 @@ window.viewBudgetPayments = async function (budgetId) {
     const budgetDetailModal = document.getElementById('budgetDetailModal');
     if (budgetDetailModal) budgetDetailModal.classList.remove('hidden');
 
-    const itens = budget.orcamento_itens || budget.itens || [];
-    const totalOrcado = itens.reduce((acc, curr) => acc + ((parseFloat(curr.valor) || 0) * (parseInt(curr.qtde) || 1)), 0);
-    const totalPago = budget.total_pago || 0;
+    let itens = [];
+    if (budget.itens) {
+        try {
+            itens = typeof budget.itens === 'string' ? JSON.parse(budget.itens) : budget.itens;
+        } catch(e) {}
+    }
+    
+    // Se o array estiver vazio ou nulo, tenta buscar a relação orcamento_itens
+    if (!itens || (Array.isArray(itens) && itens.length === 0)) {
+        if (budget.orcamento_itens && budget.orcamento_itens.length > 0) {
+            itens = budget.orcamento_itens;
+        }
+    }
+    
+    if (!Array.isArray(itens)) {
+        itens = [];
+    }
+
+    const converterValor = (v) => { 
+        if (!v && v !== 0) return 0; 
+        let num = 0;
+        if (typeof v === 'string') { 
+            const str = v.replace(/[^\d.,-]/g, '');
+            if (str.includes(',')) {
+                num = Number(str.replace(/\./g, '').replace(',', '.')); 
+            } else {
+                num = Number(str);
+            }
+        } else {
+            num = Number(v); 
+        }
+        return isNaN(num) ? 0 : num;
+    };
+
+    const totalOrcado = itens.reduce((acc, curr) => {
+        const preco = curr.valor || curr.preco || curr.valor_total || curr.total || 0;
+        const qtde = curr.qtde || curr.quantidade || 1;
+        return acc + (converterValor(preco) * converterValor(qtde));
+    }, 0) || converterValor(budget.valor_total || budget.valor || budget.valor_orcado || budget.Valor || 0);
+
+    let budgetPayments = budget.pagamentos || [];
+    let totalPago = 0;
+
+    // Busca de transações em tempo real no banco
+    console.log("Buscando transações para o orçamento ID:", budget.id, "e SEQID:", budget.seqid);
+    
+    try {
+        const { data: txsData, error: txsErr } = await db.from('orcamento_pagamentos')
+            .select('*')
+            .eq('orcamento_id', budget.id);
+            
+        if (!txsErr && txsData && txsData.length > 0) {
+            budgetPayments = txsData.map(t => ({
+                id: t.id,
+                data_pagamento: t.data_pagamento || t.criado_em,
+                valor_pago: converterValor(t.valor_pago || 0),
+                forma_pagamento: t.forma_pagamento || 'Não informada',
+                tipo: 'CREDITO'
+            }));
+            
+            totalPago = budgetPayments.reduce((acc, p) => acc + p.valor_pago, 0);
+        }
+    } catch (e) {
+        console.error("Erro ao buscar transações financeiras no modal:", e);
+    }
+
+    if (totalPago === 0 && (!budgetPayments || budgetPayments.length === 0)) {
+        totalPago = converterValor(budget.total_pago || budget.valor_pago || budget.pago || 0);
+    }
+
+    const statusKey = normalizeKey(budget.status || '');
+    if (statusKey === 'executado' || statusKey === 'concluido' || statusKey === 'aprovado') {
+        totalPago = totalOrcado;
+    }
+
     const saldo = totalOrcado - totalPago;
+
+    let saldoPaciente = 0;
+    try {
+        saldoPaciente = await fetchPatientBalance(budget.pacienteid || budget.paciente_id || budget.pacienteseqid);
+    } catch (e) {
+        console.error("Erro ao carregar saldo global do paciente no modal", e);
+    }
+    
+    const saldoBadgeHtml = saldoPaciente > 0 
+        ? `<span style="background: var(--success-color); color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">Crédito na Clínica: R$ ${saldoPaciente.toFixed(2)}</span>`
+        : saldoPaciente < 0 
+            ? `<span style="background: var(--danger-color); color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">Débito Global: R$ ${Math.abs(saldoPaciente).toFixed(2)}</span>`
+            : `<span style="background: var(--bg-color); color: var(--text-muted); padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">Sem Saldo Consolidado</span>`;
 
     const body = document.getElementById('budgetDetailBody');
     if (!body) return;
 
     let paymentsHtml = '';
-    if (budget.pagamentos && budget.pagamentos.length > 0) {
+    if (budgetPayments && budgetPayments.length > 0) {
         paymentsHtml = `
             <table class="simple-table" style="margin-top: 0.5rem; width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                 <thead style="background: var(--bg-hover);">
@@ -30953,7 +31183,7 @@ window.viewBudgetPayments = async function (budgetId) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${budget.pagamentos.map(p => `
+                    ${budgetPayments.map(p => `
                         <tr>
                             <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">${formatDateTime(p.data_pagamento || p.data)}</td>
                             <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">R$ ${Number(p.valor_pago).toFixed(2)}</td>
@@ -30988,15 +31218,17 @@ window.viewBudgetPayments = async function (budgetId) {
         const isReleased = ['Liberado', 'Em Execução', 'Finalizado'].includes(it.status);
 
         // Robust lookup for service
-        const servId = String(it.servico_id).toLowerCase();
+        const servId = String(it.servico_id || '').toLowerCase();
         const serv = services.find(s => String(s.id).toLowerCase() === servId);
-        const desc = serv ? serv.descricao : 'Serviço não encontrado';
+        const desc = it.procedimento || it.descricao || it.nome || (serv ? serv.descricao : 'Serviço não informado');
 
-        // Robust lookup for professional (seqid can be string or number)
-        const profId = it.profissional_id;
-        const prof = professionals.find(p => String(p.seqid) === String(profId));
-        const profNome = prof ? prof.nome : '—';
-        const dentes = formatOrcamentoItemElementos(it);
+        // Robust lookup for professional
+        const profId = it.profissional_id || it.profissionalid || '';
+        const prof = professionals.find(p => String(p.seqid) === String(profId) || String(p.id) === String(profId));
+        const profNome = it.profissional || it.profissional_nome || (prof ? prof.nome : '—');
+        
+        const dentes = formatOrcamentoItemElementos(it) || it.dente || it.dentes || '-';
+        const preco = converterValor(it.valor || it.preco || it.valor_total || it.total || 0);
 
         return `
                     <tr>
@@ -31004,8 +31236,8 @@ window.viewBudgetPayments = async function (budgetId) {
                             <strong>${desc}</strong><br>
                             <small style="color: var(--text-muted)">Prof: ${profNome}</small>
                         </td>
-                        <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">${dentes || '-'}</td>
-                        <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">R$ ${Number(it.valor).toFixed(2)}</td>
+                        <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">${dentes}</td>
+                        <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">R$ ${preco.toFixed(2)}</td>
                         <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">
                             <span style="font-size: 0.75rem; background: ${isReleased ? 'rgba(40,167,69,0.1)' : '#eee'}; color: ${isReleased ? 'var(--success-color)' : '#666'}; padding: 2px 6px; border-radius: 4px;">
                                 ${it.status || 'Pendente'}
@@ -31029,6 +31261,9 @@ window.viewBudgetPayments = async function (budgetId) {
     `;
 
     body.innerHTML = `
+        <div style="margin-bottom: 1rem; text-align: center;">
+            ${saldoBadgeHtml}
+        </div>
         <div style="background: var(--bg-hover); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div>
                 <p><strong>Paciente:</strong> ${budget.pacientenome || '—'}</p>
@@ -31036,7 +31271,7 @@ window.viewBudgetPayments = async function (budgetId) {
             </div>
             <div>
                 <p><strong>Total Pago:</strong> <span style="color: var(--success-color)">R$ ${totalPago.toFixed(2)}</span></p>
-                <p><strong>Saldo Devedor:</strong> <span style="color: ${saldo > 0 ? '#dc3545' : 'var(--success-color)'}">R$ ${saldo.toFixed(2)}</span></p>
+                <p><strong>Saldo Devedor do Orçamento:</strong> <span style="color: ${saldo > 0 ? '#dc3545' : 'var(--success-color)'}">R$ ${saldo.toFixed(2)}</span></p>
             </div>
         </div>
         
