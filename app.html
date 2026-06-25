@@ -709,50 +709,86 @@
                         <button id="btnPatientPortalLogout" class="btn btn-secondary btn-sm"><i class="ri-logout-box-r-line"></i> Sair</button>
                     </div>
 
-                    <!-- JANELA 1: Informações Gerais -->
-                    <div class="card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
-                        <div style="padding: 1rem 1.5rem; border-bottom: 2px solid #e2e8f0; background: #f8fafc;">
-                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #334155; margin: 0;"><i class="ri-profile-line" style="color: var(--primary-color);"></i> Informações Cadastrais</h3>
+                    <!-- TABS PORTAL -->
+                    <div style="display: flex; gap: 10px; border-bottom: 2px solid #e5e7eb; margin-bottom: 1rem;">
+                        <button id="tabPortalInfo" style="padding: 10px 20px; font-weight: 600; border: none; background: transparent; border-bottom: 3px solid var(--primary-color); color: var(--primary-color); cursor: pointer; transition: all 0.2s;">
+                            <i class="ri-profile-line"></i> Informações
+                        </button>
+                        <button id="tabPortalChat" style="padding: 10px 20px; font-weight: 600; border: none; background: transparent; border-bottom: 3px solid transparent; color: #6b7280; cursor: pointer; transition: all 0.2s;">
+                            <i class="ri-chat-3-line"></i> Chat com a Clínica
+                        </button>
+                    </div>
+
+                    <!-- CONTEUDO ABA INFORMACOES -->
+                    <div id="contentPortalInfo">
+                        <!-- JANELA 1: Informações Gerais -->
+                        <div class="card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                            <div style="padding: 1rem 1.5rem; border-bottom: 2px solid #e2e8f0; background: #f8fafc;">
+                                <h3 style="font-size: 1.15rem; font-weight: 800; color: #334155; margin: 0;"><i class="ri-profile-line" style="color: var(--primary-color);"></i> Informações Cadastrais</h3>
+                            </div>
+                            <div style="padding: 1.5rem;" id="portalInfoContainer">
+                                <p style="text-align: center; color: #9ca3af;">Carregando...</p>
+                            </div>
                         </div>
-                        <div style="padding: 1.5rem;" id="portalInfoContainer">
-                            <p style="text-align: center; color: #9ca3af;">Carregando...</p>
+
+                        <!-- JANELA DE SALDO GLOBAL -->
+                        <div id="portalSaldoContainer" class="hidden card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                            <div style="padding: 1.5rem; text-align: center;" id="portalSaldoContent">
+                                <!-- JS injects balance here -->
+                            </div>
+                        </div>
+
+                        <!-- JANELA 2: Agendamentos -->
+                        <div class="card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                            <div style="padding: 1rem 1.5rem; border-bottom: 2px solid #e2e8f0; background: #f8fafc;">
+                                <h3 style="font-size: 1.15rem; font-weight: 800; color: #334155; margin: 0;"><i class="ri-calendar-event-line" style="color: var(--primary-color);"></i> Meus Agendamentos</h3>
+                            </div>
+                            <div style="padding: 1.5rem; max-height: 400px; overflow-y: auto;" id="portalAgendamentosContainer">
+                                <p style="text-align: center; color: #9ca3af;">Carregando...</p>
+                            </div>
+                        </div>
+
+                        <!-- JANELA 3: Orçamentos Ativos -->
+                        <div class="card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                            <div style="padding: 1rem 1.5rem; border-bottom: 2px solid #e2e8f0; background: #f8fafc;">
+                                <h3 style="font-size: 1.15rem; font-weight: 800; color: #334155; margin: 0;"><i class="ri-file-list-3-line" style="color: var(--primary-color);"></i> Orçamentos e Tratamentos</h3>
+                            </div>
+                            <div style="padding: 1.5rem; max-height: 400px; overflow-y: auto;" id="portalOrcamentosContainer">
+                                <p style="text-align: center; color: #9ca3af;">Carregando...</p>
+                            </div>
+                        </div>
+
+                        <!-- JANELA 4: Painel Financeiro -->
+                        <div class="card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                            <div style="padding: 1rem 1.5rem; border-bottom: 2px solid #e2e8f0; background: #f8fafc;">
+                                <h3 style="font-size: 1.15rem; font-weight: 800; color: #334155; margin: 0;"><i class="ri-wallet-3-line" style="color: var(--primary-color);"></i> Meu Financeiro</h3>
+                            </div>
+                            <div style="padding: 1.5rem; max-height: 400px; overflow-y: auto;" id="portalFinanceiroContainer">
+                                <p style="text-align: center; color: #9ca3af;">Carregando...</p>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- JANELA DE SALDO GLOBAL -->
-                    <div id="portalSaldoContainer" class="hidden card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
-                        <div style="padding: 1.5rem; text-align: center;" id="portalSaldoContent">
-                            <!-- JS injects balance here -->
+                    <!-- CONTEUDO ABA CHAT -->
+                    <div id="contentPortalChat" style="display: none; flex-direction: column; height: 70vh; background: #ffffff; border-radius: 12px; border: 2px solid #cbd5e1; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); overflow: hidden;">
+                        <div id="patientChatMessagesContainer" style="flex: 1; overflow-y: auto; overflow-x: hidden; padding: 15px; background: #f3f4f6; display: flex; flex-direction: column; gap: 12px;">
+                            <div style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9ca3af;"> 
+                                <i class="ri-chat-3-line" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                                <p style="font-size: 0.875rem;">Carregando mensagens...</p> 
+                            </div>
                         </div>
-                    </div>
-
-                    <!-- JANELA 2: Agendamentos -->
-                    <div class="card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
-                        <div style="padding: 1rem 1.5rem; border-bottom: 2px solid #e2e8f0; background: #f8fafc;">
-                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #334155; margin: 0;"><i class="ri-calendar-event-line" style="color: var(--primary-color);"></i> Meus Agendamentos</h3>
-                        </div>
-                        <div style="padding: 1.5rem; max-height: 400px; overflow-y: auto;" id="portalAgendamentosContainer">
-                            <p style="text-align: center; color: #9ca3af;">Carregando...</p>
-                        </div>
-                    </div>
-
-                    <!-- JANELA 3: Orçamentos Ativos -->
-                    <div class="card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
-                        <div style="padding: 1rem 1.5rem; border-bottom: 2px solid #e2e8f0; background: #f8fafc;">
-                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #334155; margin: 0;"><i class="ri-file-list-3-line" style="color: var(--primary-color);"></i> Orçamentos e Tratamentos</h3>
-                        </div>
-                        <div style="padding: 1.5rem; max-height: 400px; overflow-y: auto;" id="portalOrcamentosContainer">
-                            <p style="text-align: center; color: #9ca3af;">Carregando...</p>
-                        </div>
-                    </div>
-
-                    <!-- JANELA 4: Painel Financeiro -->
-                    <div class="card border border-gray-300 shadow-sm rounded-lg overflow-hidden mb-4 bg-white" style="border: 2px solid #cbd5e1; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
-                        <div style="padding: 1rem 1.5rem; border-bottom: 2px solid #e2e8f0; background: #f8fafc;">
-                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #334155; margin: 0;"><i class="ri-wallet-3-line" style="color: var(--primary-color);"></i> Meu Financeiro</h3>
-                        </div>
-                        <div style="padding: 1.5rem; max-height: 400px; overflow-y: auto;" id="portalFinanceiroContainer">
-                            <p style="text-align: center; color: #9ca3af;">Carregando...</p>
+                        
+                        <div style="height: 70px; min-height: 70px; border-top: 1px solid #e5e7eb; padding: 12px; display: flex; align-items: center; background: #ffffff; box-sizing: border-box;"> 
+                            <form id="formPatientChatSend" style="display: flex; align-items: center; gap: 0.5rem; width: 100%; height: 100%;"> 
+                                <label for="inputPatientChatPdf" style="cursor: pointer; padding: 0 10px; color: #6b7280; transition: color 0.2s;" title="Anexar PDF">
+                                    <i class="ri-attachment-2" style="font-size: 1.5rem;"></i>
+                                </label>
+                                <input type="file" id="inputPatientChatPdf" accept="application/pdf" style="display: none;">
+                                <input type="text" id="inputPatientChatMessage" placeholder="Digite sua mensagem..." style="flex: 1; height: 100%; border: 1px solid #d1d5db; border-radius: 4px; padding: 0 15px; font-size: 14px; outline: none;" autocomplete="off" required> 
+                                <button type="submit" style="background: var(--primary-color); color: #ffffff; padding: 0 20px; border: none; border-radius: 4px; font-weight: 600; height: 100%; cursor: pointer; transition: background 0.2s;">
+                                    <i class="ri-send-plane-fill"></i>
+                                </button> 
+                            </form> 
                         </div>
                     </div>
 
@@ -4950,7 +4986,7 @@
                 </div> 
         
                 <!-- LADO DIREITO: PAINEL DE CONVERSA -->
-                <div id="portalChatWindow" style="width: calc(100% - 320px); max-width: calc(100% - 320px); display: flex; flex-direction: column; position: relative; background: #ffffff;"> 
+                <div id="portalChatWindow" style="flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; background: #ffffff;"> 
                     
                     <div style="height: 60px; min-height: 60px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: #f9fafb;"> 
                         <div style="display: flex; align-items: center; gap: 1rem;">
@@ -4966,14 +5002,14 @@
                         </div>
                     </div> 
         
-                    <div id="portalChatMessagesContainer" style="flex: 1; overflow-y: scroll; padding: 20px; background: #f3f4f6; display: flex; flex-direction: column; gap: 12px; border: 1px solid #d1d5db; margin: 10px; border-radius: 6px;"> 
+                    <div id="portalChatMessagesContainer" style="flex: 1; overflow-y: auto; overflow-x: hidden; padding: 20px; background: #f3f4f6; display: flex; flex-direction: column; gap: 12px; border: 1px solid #d1d5db; margin: 10px; border-radius: 6px;"> 
                         <div id="portalChatEmptyState" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9ca3af;"> 
                             <i class="ri-chat-3-line" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.5;"></i>
                             <p style="font-size: 0.875rem;">Selecione uma conversa na lista para interagir.</p> 
                         </div> 
                     </div> 
         
-                    <div id="portalChatInputArea" style="height: 70px; min-height: 70px; border-top: 1px solid #e5e7eb; padding: 12px; display: none; align-items: center; background: #ffffff; box-sizing: border-box;"> 
+                    <div id="portalChatInputArea" style="height: 70px; min-height: 70px; border-top: 1px solid #e5e7eb; padding: 12px; display: flex; align-items: center; background: #ffffff; box-sizing: border-box;"> 
                         <form id="formPortalChatSend" style="display: flex; align-items: center; gap: 0.5rem; width: 100%; height: 100%;"> 
                             <input type="text" id="inputPortalChatMessage" placeholder="Digite sua resposta..." style="flex: 1; height: 100%; border: 1px solid #d1d5db; border-radius: 4px; padding: 0 15px; font-size: 14px; outline: none;" autocomplete="off" required> 
                             <button type="submit" style="background: #1d4ed8; color: #ffffff; padding: 0 24px; border: none; border-radius: 4px; font-weight: 600; height: 100%; cursor: pointer; transition: background 0.2s;">Enviar</button> 

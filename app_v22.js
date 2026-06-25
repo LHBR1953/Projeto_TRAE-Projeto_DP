@@ -33810,25 +33810,23 @@ document.addEventListener('DOMContentLoaded', () => {
                             const msgs = document.getElementById('portalChatMessagesContainer');
                             
                             const esPaciente = (newMsg.remetente === 'paciente');
-                            const alignment = esPaciente ? 'justify-start' : 'justify-end';
-                            const bgClass = esPaciente ? 'bg-white text-gray-800 rounded-bl-none border border-gray-200' : 'bg-green-600 text-white rounded-br-none';
                             
                             let contentHtml = '';
                             if (newMsg.tipo_mensagem === 'pdf') {
-                                contentHtml = `<a href="${newMsg.conteudo}" target="_blank" class="flex items-center gap-2 font-bold ${!esPaciente ? 'text-white' : 'text-blue-600'} hover:underline">
-                                    <i class="ri-file-pdf-line text-xl"></i> Visualizar Documento
+                                contentHtml = `<a href="${newMsg.conteudo}" target="_blank" style="display: flex; align-items: center; gap: 0.5rem; font-weight: bold; color: inherit; text-decoration: none;">
+                                    <i class="ri-file-pdf-line" style="font-size: 1.25rem;"></i> Visualizar Documento
                                 </a>`;
                             } else {
-                                contentHtml = `<p class="text-sm break-words whitespace-pre-wrap">${newMsg.conteudo}</p>`;
+                                contentHtml = `<div style="font-size: 0.875rem; line-height: 1.4; word-wrap: break-word; white-space: pre-wrap; margin: 0;">${newMsg.conteudo}</div>`;
                             }
                             
                             const templateBalao = `
-                                <div id="msg-${newMsg.id}" class="flex w-full ${alignment} mb-2" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-start' : 'flex-end'}; margin-bottom: 0.5rem;">
-                                    <div class="max-w-[70%] rounded-xl p-3 shadow-sm ${bgClass}" style="max-width: 70%; padding: 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: #fff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;' : 'background: #16a34a; color: #fff; border-bottom-right-radius: 0;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+                                <div id="msg-${newMsg.id}" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-start' : 'flex-end'}; margin-bottom: 0.75rem; align-items: flex-end;">
+                                    <div style="max-width: 75%; display: inline-block; padding: 0.5rem 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: #ffffff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;' : 'background: #16a34a; color: #ffffff; border-bottom-right-radius: 0;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); text-align: left;">
                                         ${contentHtml}
-                                        <span class="text-[10px] block text-right opacity-60 mt-1" style="font-size: 10px; display: block; text-align: right; opacity: 0.6; margin-top: 0.25rem;">
+                                        <div style="font-size: 0.65rem; text-align: right; opacity: 0.7; margin-top: 0.25rem; line-height: 1;">
                                             ${new Date(newMsg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                        </span>
+                                        </div>
                                     </div>
                                 </div>
                             `;
@@ -33895,25 +33893,23 @@ document.addEventListener('DOMContentLoaded', () => {
             } 
 
             const esPaciente = (msg.remetente === 'paciente');
-            const alignment = esPaciente ? 'justify-start' : 'justify-end';
-            const bgClass = esPaciente ? 'bg-white text-gray-800 rounded-bl-none border border-gray-200' : 'bg-green-600 text-white rounded-br-none';
             
             let contentHtml = '';
             if (msg.tipo_mensagem === 'pdf') {
-                contentHtml = `<a href="${msg.conteudo}" target="_blank" class="flex items-center gap-2 font-bold ${!esPaciente ? 'text-white' : 'text-blue-600'} hover:underline">
-                    <i class="ri-file-pdf-line text-xl"></i> Visualizar Documento
+                contentHtml = `<a href="${msg.conteudo}" target="_blank" style="display: flex; align-items: center; gap: 0.5rem; font-weight: bold; color: inherit; text-decoration: none;">
+                    <i class="ri-file-pdf-line" style="font-size: 1.25rem;"></i> Visualizar Documento
                 </a>`;
             } else {
-                contentHtml = `<p class="text-sm break-words whitespace-pre-wrap">${msg.conteudo}</p>`;
+                contentHtml = `<div style="font-size: 0.875rem; line-height: 1.4; word-wrap: break-word; white-space: pre-wrap; margin: 0;">${msg.conteudo}</div>`;
             }
             
             const templateBalao = `
-                <div id="msg-${msg.id}" class="flex w-full ${alignment} mb-2" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-start' : 'flex-end'}; margin-bottom: 0.5rem;">
-                    <div class="max-w-[70%] rounded-xl p-3 shadow-sm ${bgClass}" style="max-width: 70%; padding: 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: #fff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;' : 'background: #16a34a; color: #fff; border-bottom-right-radius: 0;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+                <div id="msg-${msg.id}" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-start' : 'flex-end'}; margin-bottom: 0.75rem; align-items: flex-end;">
+                    <div style="max-width: 75%; display: inline-block; padding: 0.5rem 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: #ffffff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;' : 'background: #16a34a; color: #ffffff; border-bottom-right-radius: 0;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); text-align: left;">
                         ${contentHtml}
-                        <span class="text-[10px] block text-right opacity-60 mt-1" style="font-size: 10px; display: block; text-align: right; opacity: 0.6; margin-top: 0.25rem;">
+                        <div style="font-size: 0.65rem; text-align: right; opacity: 0.7; margin-top: 0.25rem; line-height: 1;">
                             ${dataMensagemObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </span>
+                        </div>
                     </div>
                 </div>
             `;
@@ -34045,6 +34041,237 @@ document.addEventListener('DOMContentLoaded', () => {
         const observer = new MutationObserver(() => enforceMinDate());
         observer.observe(document.body, { childList: true, subtree: true });
     })();
+
+    // ==========================================
+    // PATIENT PORTAL TABS & CHAT LOGIC
+    // ==========================================
+    
+    const tabPortalInfo = document.getElementById('tabPortalInfo');
+    const tabPortalChat = document.getElementById('tabPortalChat');
+    const contentPortalInfo = document.getElementById('contentPortalInfo');
+    const contentPortalChat = document.getElementById('contentPortalChat');
+    
+    const formPatientChatSend = document.getElementById('formPatientChatSend');
+    const inputPatientChatMessage = document.getElementById('inputPatientChatMessage');
+    const inputPatientChatPdf = document.getElementById('inputPatientChatPdf');
+    const patientChatMessagesContainer = document.getElementById('patientChatMessagesContainer');
+
+    let patientChatSubscription = null;
+
+    if (tabPortalInfo && tabPortalChat && contentPortalInfo && contentPortalChat) {
+        tabPortalInfo.addEventListener('click', () => {
+            tabPortalInfo.style.borderBottomColor = 'var(--primary-color)';
+            tabPortalInfo.style.color = 'var(--primary-color)';
+            tabPortalChat.style.borderBottomColor = 'transparent';
+            tabPortalChat.style.color = '#6b7280';
+            
+            contentPortalInfo.style.display = 'block';
+            contentPortalChat.style.display = 'none';
+        });
+
+        tabPortalChat.addEventListener('click', () => {
+            tabPortalChat.style.borderBottomColor = 'var(--primary-color)';
+            tabPortalChat.style.color = 'var(--primary-color)';
+            tabPortalInfo.style.borderBottomColor = 'transparent';
+            tabPortalInfo.style.color = '#6b7280';
+            
+            contentPortalInfo.style.display = 'none';
+            contentPortalChat.style.display = 'flex';
+            
+            loadPatientPortalChatMessages();
+            initPatientChatRealtime();
+        });
+    }
+
+    async function loadPatientPortalChatMessages() {
+        if (!patientChatMessagesContainer) return;
+        
+        const paciente = window.patientPortalCurrentPatient || getPatientPortalPaciente();
+        if (!paciente || !paciente.id) {
+            patientChatMessagesContainer.innerHTML = '<p style="text-align: center; color: #9ca3af;">Erro: Paciente não identificado.</p>';
+            return;
+        }
+
+        patientChatMessagesContainer.innerHTML = '<p style="text-align: center; color: #9ca3af;">Carregando mensagens...</p>';
+
+        try {
+            const { data, error } = await db.from('portal_mensagens')
+                .select('*')
+                .eq('paciente_id', paciente.id)
+                .order('created_at', { ascending: true });
+
+            if (error) throw error;
+
+            patientChatMessagesContainer.innerHTML = '';
+            
+            if (!data || data.length === 0) {
+                patientChatMessagesContainer.innerHTML = `
+                    <div style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9ca3af;"> 
+                        <i class="ri-chat-3-line" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                        <p style="font-size: 0.875rem;">Nenhuma mensagem ainda. Envie a primeira!</p> 
+                    </div>`;
+                return;
+            }
+
+            data.forEach(msg => {
+                appendPatientChatMessage(msg);
+            });
+            
+            patientChatMessagesContainer.scrollTop = patientChatMessagesContainer.scrollHeight;
+
+        } catch (err) {
+            console.error('Erro ao carregar mensagens do paciente:', err);
+            patientChatMessagesContainer.innerHTML = '<p style="text-align: center; color: #ef4444;">Erro ao carregar histórico.</p>';
+        }
+    }
+
+    function appendPatientChatMessage(msg) {
+        if (!patientChatMessagesContainer) return;
+        
+        // Se houver empty state, remova
+        const emptyState = patientChatMessagesContainer.querySelector('.ri-chat-3-line');
+        if (emptyState) {
+            patientChatMessagesContainer.innerHTML = '';
+        }
+
+        const esPaciente = (msg.remetente === 'paciente');
+        const dataMensagemObj = new Date(msg.created_at);
+        
+        let contentHtml = '';
+        if (msg.tipo_mensagem === 'pdf') {
+            contentHtml = `<a href="${msg.conteudo}" target="_blank" style="display: flex; align-items: center; gap: 0.5rem; font-weight: bold; color: inherit; text-decoration: none;">
+                <i class="ri-file-pdf-line" style="font-size: 1.25rem;"></i> Visualizar Documento
+            </a>`;
+        } else {
+            contentHtml = `<div style="font-size: 0.875rem; line-height: 1.4; word-wrap: break-word; white-space: pre-wrap; margin: 0;">${msg.conteudo}</div>`;
+        }
+        
+        const templateBalao = `
+            <div id="pat-msg-${msg.id}" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-end' : 'flex-start'}; margin-bottom: 0.75rem; align-items: flex-end;">
+                <div style="max-width: 75%; display: inline-block; padding: 0.5rem 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: var(--primary-color); color: #ffffff; border-bottom-right-radius: 0;' : 'background: #ffffff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); text-align: left;">
+                    ${contentHtml}
+                    <div style="font-size: 0.65rem; text-align: right; opacity: 0.7; margin-top: 0.25rem; line-height: 1;">
+                        ${dataMensagemObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        patientChatMessagesContainer.insertAdjacentHTML('beforeend', templateBalao);
+        patientChatMessagesContainer.scrollTop = patientChatMessagesContainer.scrollHeight;
+    }
+
+    if (inputPatientChatPdf) {
+        inputPatientChatPdf.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.type !== 'application/pdf') {
+                alert('Por favor, selecione um arquivo PDF válido.');
+                inputPatientChatPdf.value = '';
+                return;
+            }
+
+            const paciente = window.patientPortalCurrentPatient || getPatientPortalPaciente();
+            if (!paciente || !paciente.id) return alert('Paciente não identificado.');
+
+            const empresaId = paciente.empresa_id || localStorage.getItem('lastEmpresaId') || 'emp_165f9d072a';
+
+            try {
+                // Notificar usuário que está enviando...
+                inputPatientChatMessage.placeholder = 'Enviando PDF...';
+                inputPatientChatMessage.disabled = true;
+
+                const fileName = `${paciente.id}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+                const { data: uploadData, error: uploadError } = await db.storage
+                    .from('occ_documentos')
+                    .upload(`chat/${fileName}`, file, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
+
+                if (uploadError) throw uploadError;
+
+                const { data: { publicUrl } } = db.storage
+                    .from('occ_documentos')
+                    .getPublicUrl(`chat/${fileName}`);
+
+                const { error: insertError } = await db.from('portal_mensagens').insert([{
+                    empresa_id: empresaId,
+                    paciente_id: paciente.id,
+                    remetente: 'paciente',
+                    conteudo: publicUrl,
+                    lida: false,
+                    tipo_mensagem: 'pdf'
+                }]);
+
+                if (insertError) throw insertError;
+
+            } catch (err) {
+                console.error('Erro ao enviar PDF:', err);
+                alert('Erro ao enviar o PDF. Tente novamente.');
+            } finally {
+                inputPatientChatMessage.placeholder = 'Digite sua mensagem...';
+                inputPatientChatMessage.disabled = false;
+                inputPatientChatPdf.value = '';
+            }
+        });
+    }
+
+    if (formPatientChatSend) {
+        formPatientChatSend.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const conteudo = inputPatientChatMessage.value.trim();
+            if (!conteudo) return;
+
+            const paciente = window.patientPortalCurrentPatient || getPatientPortalPaciente();
+            if (!paciente || !paciente.id) return alert('Paciente não identificado.');
+
+            const empresaId = paciente.empresa_id || localStorage.getItem('lastEmpresaId') || 'emp_165f9d072a';
+            
+            inputPatientChatMessage.value = '';
+
+            try {
+                const { error } = await db.from('portal_mensagens').insert([{
+                    empresa_id: empresaId,
+                    paciente_id: paciente.id,
+                    remetente: 'paciente',
+                    conteudo: conteudo,
+                    lida: false,
+                    tipo_mensagem: 'texto'
+                }]);
+
+                if (error) throw error;
+            } catch (err) {
+                console.error('Erro ao enviar mensagem:', err);
+                alert('Erro ao enviar mensagem. Tente novamente.');
+                inputPatientChatMessage.value = conteudo; // restore
+            }
+        });
+    }
+
+    function initPatientChatRealtime() {
+        const paciente = window.patientPortalCurrentPatient || getPatientPortalPaciente();
+        if (!paciente || !paciente.id) return;
+
+        if (patientChatSubscription) {
+            db.removeChannel(patientChatSubscription);
+        }
+
+        patientChatSubscription = db.channel(`public:portal_mensagens:patient_${paciente.id}`)
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'portal_mensagens', filter: `paciente_id=eq.${paciente.id}` },
+                (payload) => {
+                    const newMsg = payload.new;
+                    appendPatientChatMessage(newMsg);
+                }
+            )
+            .subscribe();
+    }
+    // ==========================================
+    // FIM DA LÓGICA DO CHAT DO PACIENTE
+    // ==========================================
 
 });
 
