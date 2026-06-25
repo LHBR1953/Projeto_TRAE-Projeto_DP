@@ -33638,6 +33638,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Update active styling
                 Array.from(listContainer.children).forEach(child => child.style.background = 'transparent');
                 div.style.background = '#e6f0ff';
+                const container = document.getElementById('portalChatMessagesContainer');
+                if (container) container.innerHTML = '';
                 loadPortalChatMessages(cp.paciente_id, cp.nome, cp.celular);
             };
 
@@ -33729,7 +33731,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const empresaId = currentEmpresaId || localStorage.getItem('lastEmpresaId');
         
         // Update Header UI
-        document.getElementById('portalChatEmptyState').style.display = 'none';
+        const emptyState = document.getElementById('portalChatEmptyState');
+        if (emptyState) emptyState.style.display = 'none';
         
         const avatar = document.getElementById('portalChatAvatar');
         const phone = document.getElementById('portalChatPatientPhone');
@@ -33895,10 +33898,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const esPaciente = (msg.remetente === 'paciente');
             
             let contentHtml = '';
-            if (msg.tipo_mensagem === 'pdf') {
-                contentHtml = `<a href="${msg.conteudo}" target="_blank" style="display: flex; align-items: center; gap: 0.5rem; font-weight: bold; color: inherit; text-decoration: none;">
-                    <i class="ri-file-pdf-line" style="font-size: 1.25rem;"></i> Visualizar Documento
-                </a>`;
+            if (msg.tipo_mensagem === 'ARQUIVO' || msg.tipo_mensagem === 'pdf' || (msg.conteudo && msg.conteudo.toLowerCase().includes('.pdf'))) {
+                contentHtml = `
+                    <a href="${msg.conteudo}" target="_blank" style="
+                        display: flex; 
+                        align-items: center; 
+                        gap: 8px; 
+                        background: rgba(255,255,255,0.2); 
+                        padding: 8px 12px; 
+                        border-radius: 6px; 
+                        text-decoration: none; 
+                        color: inherit; 
+                        border: 1px solid rgba(0,0,0,0.1); 
+                        font-weight: 500;
+                        transition: background 0.2s;
+                    ">
+                        <i class="ri-file-pdf-line" style="font-size: 20px; color: ${esPaciente ? '#dc2626' : '#ffffff'};"></i>
+                        <span>📄 Visualizar PDF Anexo</span>
+                    </a>`;
             } else {
                 contentHtml = `<div style="font-size: 0.875rem; line-height: 1.4; word-wrap: break-word; white-space: pre-wrap; margin: 0;">${msg.conteudo}</div>`;
             }
@@ -34138,9 +34155,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const dataMensagemObj = new Date(msg.created_at);
         
         let contentHtml = '';
-        if (msg.tipo_mensagem === 'pdf') {
+        if (msg.tipo_mensagem === 'pdf' || msg.tipo_mensagem === 'ARQUIVO') {
             contentHtml = `<a href="${msg.conteudo}" target="_blank" style="display: flex; align-items: center; gap: 0.5rem; font-weight: bold; color: inherit; text-decoration: none;">
-                <i class="ri-file-pdf-line" style="font-size: 1.25rem;"></i> Visualizar Documento
+                <i class="ri-file-pdf-line" style="font-size: 1.25rem;"></i> Visualizar Anexo
             </a>`;
         } else {
             contentHtml = `<div style="font-size: 0.875rem; line-height: 1.4; word-wrap: break-word; white-space: pre-wrap; margin: 0;">${msg.conteudo}</div>`;
@@ -34182,19 +34199,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 inputPatientChatMessage.placeholder = 'Enviando PDF...';
                 inputPatientChatMessage.disabled = true;
 
-                const fileName = `${paciente.id}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+                const filePath = `${empresaId}/${paciente.id}/${fileName}`;
+                
                 const { data: uploadData, error: uploadError } = await db.storage
-                    .from('occ_documentos')
-                    .upload(`chat/${fileName}`, file, {
+                    .from('portal_anexos')
+                    .upload(filePath, file, {
                         cacheControl: '3600',
-                        upsert: false
+                        upsert: true,
+                        contentType: 'application/pdf'
                     });
 
-                if (uploadError) throw uploadError;
+                if (uploadError) {
+                    console.error('Erro detalhado do Storage:', uploadError);
+                    throw uploadError;
+                }
 
-                const { data: { publicUrl } } = db.storage
-                    .from('occ_documentos')
-                    .getPublicUrl(`chat/${fileName}`);
+                const { data: publicUrlData } = db.storage
+                    .from('portal_anexos')
+                    .getPublicUrl(filePath);
+                const publicUrl = publicUrlData.publicUrl;
 
                 const { error: insertError } = await db.from('portal_mensagens').insert([{
                     empresa_id: empresaId,
@@ -34202,7 +34227,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     remetente: 'paciente',
                     conteudo: publicUrl,
                     lida: false,
-                    tipo_mensagem: 'pdf'
+                    tipo_mensagem: 'ARQUIVO'
                 }]);
 
                 if (insertError) throw insertError;

@@ -1318,7 +1318,11 @@ function renderChatPacientesList(contacts) {
         item.onmouseenter = () => { if(!isActive) item.style.background = '#f1f5f9'; };
         item.onmouseleave = () => { if(!isActive) item.style.background = 'transparent'; };
 
-        item.onclick = () => openChatPaciente(contact.paciente_id, contact.nome);
+        item.onclick = () => {
+            const container = document.getElementById('chatActiveMessages');
+            if (container) container.innerHTML = '';
+            openChatPaciente(contact.paciente_id, contact.nome);
+        };
 
         // Avatar
         const avatar = document.createElement('div');
@@ -1385,6 +1389,7 @@ async function openChatPaciente(pacienteId, pacienteNome) {
     
     const messagesContainer = document.getElementById('chatActiveMessages');
     messagesContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 20px;">Carregando mensagens...</p>';
+    window.lastRenderedDateAdmin = null;
 
     // Recarregar lista para marcar como ativo
     loadChatPacientesList();
@@ -1450,3 +1455,982 @@ async function openChatPaciente(pacienteId, pacienteNome) {
     };
     newInput.focus();
 }
+function appendChatMessageAdmin(msg) {
+    const container = document.getElementById('chatActiveMessages');
+    if (!container) return;
+
+    // Se a mensagem inicial de carregamento estiver lá, remover
+    if (container.querySelector('p')) {
+        const p = container.querySelector('p');
+        if (p.innerText.includes('Carregando') || p.innerText.includes('Nenhuma') || p.innerText.includes('Selecione')) {
+            p.remove();
+        }
+    }
+    // Remove default placeholder text div
+    const placeholder = container.querySelector('div[style*="color: var(--text-muted)"]');
+    if (placeholder && placeholder.innerText.includes('Selecione um paciente')) {
+        placeholder.remove();
+    }
+
+    const msgDate = new Date(msg.created_at || new Date());
+    const dateString = msgDate.getFullYear() + '-' + msgDate.getMonth() + '-' + msgDate.getDate();
+    
+    if (window.lastRenderedDateAdmin !== dateString) {
+        window.lastRenderedDateAdmin = dateString;
+        const dateSep = document.createElement('div');
+        dateSep.style.background = '#e2e8f0';
+        dateSep.style.padding = '4px 12px';
+        dateSep.style.borderRadius = '10px';
+        dateSep.style.fontSize = '12px';
+        dateSep.style.fontWeight = '600';
+        dateSep.style.color = '#475569';
+        dateSep.style.margin = '10px auto';
+        dateSep.style.width = 'fit-content';
+        dateSep.style.textAlign = 'center';
+        dateSep.textContent = formatChatDateSeparatorAdmin(msgDate);
+        container.appendChild(dateSep);
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.marginBottom = '6px';
+
+    const bubble = document.createElement('div');
+    bubble.style.padding = '6px 12px';
+    bubble.style.display = 'flex';
+    bubble.style.flexDirection = 'column';
+    bubble.style.borderRadius = '15px';
+    bubble.style.maxWidth = '70%';
+    bubble.style.fontSize = '14px';
+    bubble.style.lineHeight = '1.4';
+        if (msg.tipo_mensagem === 'ARQUIVO' || msg.tipo_mensagem === 'pdf' || (msg.conteudo && msg.conteudo.toLowerCase().includes('.pdf'))) {
+        const msgDate = new Date(msg.created_at || new Date());
+        const now = new Date();
+        const diffTime = Math.abs(now - msgDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays > 10) {
+            bubble.innerHTML = `<div style="background: #fef2f2; color: #dc2626; padding: 8px; border-radius: 6px; font-size: 12px; border: 1px solid #fca5a5; margin-bottom: 4px;">⚠️ Este arquivo expirou (Prazo de 10 dias). Baixe os anexos imediatamente para o prontuário.</div><span style="color: inherit; display: flex; align-items: center; gap: 4px; font-style: italic;">❌ Arquivo expirado. Solicite o reenvio ao paciente.</span>`;
+        } else {
+            const url = msg.conteudo;
+            const ext = url.split('.').pop().toLowerCase();
+            if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {        
+                bubble.innerHTML = `<div style="background: #fef2f2; color: #dc2626; padding: 6px; border-radius: 4px; font-size: 11px; border: 1px solid #fca5a5; margin-bottom: 6px;">⚠️ Expira em 10 dias. Salve no prontuário!</div><a href="${url}" target="_blank"><img src="${url}" style="max-width: 100%; max-height: 200px; border-radius: 6px; display: block;" alt="Anexo"></a>`;
+            } else {
+                bubble.innerHTML = `
+                    <div style="background: #fef2f2; color: #dc2626; padding: 6px; border-radius: 4px; font-size: 11px; border: 1px solid #fca5a5; margin-bottom: 6px;">
+                        ⚠️ Expira em 10 dias. Salve no prontuário!
+                    </div>
+                    <a href="${url}" target="_blank" style="
+                        display: flex; 
+                        align-items: center; 
+                        gap: 8px; 
+                        background: rgba(255,255,255,0.2); 
+                        padding: 8px 12px; 
+                        border-radius: 6px; 
+                        text-decoration: none; 
+                        color: inherit; 
+                        border: 1px solid rgba(0,0,0,0.1); 
+                        font-weight: 500;
+                        transition: background 0.2s;
+                    ">
+                        <i class="ri-file-pdf-line" style="font-size: 20px; color: #dc2626;"></i>
+                        <span>📄 Visualizar PDF Anexo</span>
+                    </a>`;
+            }
+        }
+    } else {
+        bubble.innerText = msg.conteudo || '';
+    }
+
+    const timeDiv = document.createElement('div');
+    timeDiv.style.fontSize = '11px';
+    timeDiv.style.fontWeight = '500';
+    timeDiv.style.alignSelf = 'flex-end';
+    timeDiv.style.marginTop = '2px';
+    const date = new Date(msg.created_at);
+    timeDiv.innerText = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    if (msg.remetente && msg.remetente.toUpperCase() === 'CLINICA') {
+        wrapper.style.justifyContent = 'flex-end';
+        bubble.style.background = 'var(--primary-color)';
+        bubble.style.color = '#fff';
+        bubble.style.borderBottomRightRadius = '4px';
+        timeDiv.style.textAlign = 'right';
+        timeDiv.style.color = '#e0e7ff'; // Mais visível no balão azul
+        bubble.appendChild(timeDiv);
+    } else {
+        wrapper.style.justifyContent = 'flex-start';
+        bubble.style.background = '#f1f5f9';
+        bubble.style.color = 'var(--text-color)';
+        bubble.style.borderBottomLeftRadius = '4px';
+        timeDiv.style.textAlign = 'right';
+        timeDiv.style.color = '#64748b'; // Cinza mais escuro para balão branco
+        bubble.appendChild(timeDiv);
+    }
+
+    wrapper.appendChild(bubble);
+    container.appendChild(wrapper);
+}
+
+function scrollToBottomAdmin() {
+    const container = document.getElementById('chatActiveMessages');
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+async function sendChatMensagemAdmin(pacienteId) {
+    const input = document.getElementById('chatAdminInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = '';
+    
+    // Mostrar na UI imediatamente para melhor UX
+    const tempMsg = {
+        id: 'temp_' + Date.now(),
+        conteudo: text,
+        remetente: 'CLINICA',
+        tipo_mensagem: 'TEXTO',
+        created_at: new Date().toISOString()
+    };
+    appendChatMessageAdmin(tempMsg);
+    scrollToBottomAdmin();
+
+    try {
+        const { error } = await db.from('portal_mensagens').insert([{
+            empresa_id: currentEmpresaId,
+            paciente_id: pacienteId,
+            conteudo: text,
+            remetente: 'CLINICA',
+            lida: true,
+            tipo_mensagem: 'TEXTO'
+        }]);
+
+        if (error) throw error;
+        
+        loadChatPacientesList(); // Atualiza a lista lateral com a última mensagem
+    } catch (err) {
+        console.error('Erro ao enviar mensagem:', err);
+        showToast('Erro ao enviar mensagem. Tente novamente.', true);
+    }
+}
+
+function initChatAdminRealtime() {
+    if (!currentEmpresaId && !isSuperAdmin) return;
+    if (chatSubscriptionAdmin) return;
+
+    
+    const filterParams = isSuperAdmin ? {} : { filter: `empresa_id=eq.${currentEmpresaId}` };
+    chatSubscriptionAdmin = db.channel('chat_admin_channel')
+        .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'portal_mensagens', 
+            ...filterParams
+        }, 
+        (payload) => {
+            const newMsg = payload.new;
+            updateGlobalChatBadge();
+            
+            // Atualizar lista lateral para mostrar notificação
+            loadChatPacientesList();
+
+            // Se o chat atual estiver aberto, mostrar a mensagem
+            if (currentChatPacienteId === newMsg.paciente_id) {
+                // Não adicionar se for da CLINICA, pois já adicionamos o tempMsg
+                if (newMsg.remetente && newMsg.remetente.toUpperCase() === 'PACIENTE') {
+                    appendChatMessageAdmin(newMsg);
+                    scrollToBottomAdmin();
+                    
+                    // Marcar como lida automaticamente
+                    db.from('portal_mensagens').update({ lida: true }).eq('id', newMsg.id).then(() => {
+                        loadChatPacientesList();
+                    });
+                }
+            }
+        }).subscribe();
+}
+
+async function uploadArquivoAdminChat(input) {
+    const file = input.files[0];
+    if (!file || !currentChatPacienteId || !currentEmpresaId) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        showToast('Por favor, selecione apenas arquivos em formato PDF.', true);
+        input.value = '';
+        return;
+    }
+
+    input.value = ''; // Reset input
+    
+    const btnAnexo = document.getElementById('btnAdminAnexo');
+    const originalText = btnAnexo.innerHTML;
+    btnAnexo.disabled = true;
+    btnAnexo.innerHTML = '⏳';
+    
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `${currentEmpresaId}/${currentChatPacienteId}/${fileName}`;
+        
+        const { data, error: uploadError } = await db.storage
+            .from("portal_anexos")
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: true,
+                contentType: 'application/pdf'
+            });
+            
+        if (uploadError) {
+            console.error('Erro detalhado do Storage:', uploadError);
+            throw uploadError;
+        }
+        
+        const { data: publicUrlData } = db.storage
+            .from("portal_anexos")
+            .getPublicUrl(filePath);
+            
+        const publicUrl = publicUrlData.publicUrl;
+        
+        const tempMsg = {
+            paciente_id: currentChatPacienteId,
+            empresa_id: currentEmpresaId,
+            conteudo: publicUrl,
+            remetente: 'CLINICA',
+            lida: true,
+            tipo_mensagem: 'ARQUIVO',
+            created_at: new Date().toISOString()
+        };
+        
+        const { error: insertError } = await db.from('portal_mensagens').insert([tempMsg]);
+        
+        if (insertError) throw insertError;
+        
+        appendChatMessageAdmin(tempMsg);
+        scrollToBottomAdmin();
+        loadChatPacientesList(); // update last message text
+        
+    } catch (e) {
+        console.error("Erro ao enviar arquivo admin:", e);
+        alert("Erro ao enviar arquivo. Tente novamente.");
+    } finally {
+        btnAnexo.disabled = false;
+        btnAnexo.innerHTML = originalText;
+    }
+}
+
+async function updateGlobalChatBadge() {
+    if (typeof isSuperAdmin !== 'undefined' && !isSuperAdmin && typeof hasPermission === 'function' && !hasPermission('chat_pacientes')) {
+        const btn = document.getElementById('btnGlobalChat');
+        if (btn) btn.style.display = 'none';
+        return;
+    }
+    
+    const btn = document.getElementById('btnGlobalChat');
+    if (btn) btn.style.display = 'flex';
+    
+    try {
+        let query = db.from('portal_mensagens').select('*')
+                      .eq('lida', false)
+                      .ilike('remetente', 'paciente')
+                      .order('created_at', { ascending: false });
+                      
+        if (typeof isSuperAdmin !== 'undefined' && !isSuperAdmin && typeof currentEmpresaId !== 'undefined' && currentEmpresaId) {
+            query = query.eq('empresa_id', currentEmpresaId);
+        }
+        
+        const { data, error } = await query;
+        if (!error && data) {
+            const count = data.length;
+            const badge = document.getElementById('global-chat-badge');
+            if (badge) {
+                if (count > 0) {
+                    badge.innerText = count > 99 ? '99+' : count;
+                    badge.style.display = 'block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+            
+            // Atualizar lista do popover
+            const popoverList = document.getElementById('globalChatPopoverList');
+            if (popoverList) {
+                popoverList.innerHTML = '';
+                if (count === 0) {
+                    popoverList.innerHTML = '<div style="font-size: 12px; color: #64748b; text-align: center; padding: 10px;">Nenhuma mensagem pendente.</div>';
+                } else {
+                    // Agrupar por paciente (mostrar 1 de cada no máximo)
+                    const pacMap = new Map();
+                    data.forEach(msg => {
+                        if(!pacMap.has(msg.paciente_id)) {
+                            pacMap.set(msg.paciente_id, msg);
+                        }
+                    });
+                    
+                    const pList = Array.from(pacMap.values());
+                    pList.forEach(msg => {
+                        const pid = msg.paciente_id;
+                        const pac = (typeof patients !== 'undefined' ? patients : []).find(p => String(p.id) === String(pid) || String(p.seqid) === String(pid)); 
+                        const pNome = pac && pac.nome ? pac.nome : (pid || 'Paciente Sem ID');
+                        const pCpf = pac && pac.cpf ? pac.cpf : '';
+                        
+                        let preview = msg.tipo_mensagem === 'ARQUIVO' ? '📎 Anexo recebido' : (msg.conteudo || '');
+                        if (preview.length > 35) preview = preview.substring(0, 35) + '...';
+                        
+                        const item = document.createElement('div');
+                        item.style.padding = '8px';
+                        item.style.borderBottom = '1px solid #f1f5f9';
+                        item.style.cursor = 'pointer';
+                        item.style.borderRadius = '4px';
+                        item.onmouseenter = () => item.style.background = '#f8fafc';
+                        item.onmouseleave = () => item.style.background = 'transparent';
+                        
+                        item.onclick = () => {
+                            if(typeof showList === 'function') showList('chat_pacientes', 'navChatPacientes');
+                            // Esperar um pouco pra tela carregar
+                            setTimeout(() => {
+                                if(typeof openChatPaciente === 'function') openChatPaciente(pid, pNome);
+                            }, 300);
+                        };
+                        
+                        item.innerHTML = `
+                            <div style="font-size: 13px; font-weight: 600; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${pNome}</div>
+                            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${pCpf ? 'CPF: ' + pCpf : ''}</div>
+                            <div style="font-size: 12px; color: #475569; margin-top: 4px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">"${preview}"</div>
+                        `;
+                        
+                        popoverList.appendChild(item);
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Erro ao atualizar badge global do chat:", e);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('globalChatContainer');
+    const popover = document.getElementById('globalChatPopover');
+    if (container && popover) {
+        container.addEventListener('mouseenter', () => {
+            popover.style.display = 'flex';
+        });
+        container.addEventListener('mouseleave', () => {
+            popover.style.display = 'none';
+        });
+    }
+});
+async function loadChatPacientesList() {
+    const listContainer = document.getElementById('chatPacientesList');
+    if (!listContainer) return;
+    listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 20px;">Carregando...</p>';
+
+    try {
+        console.log('Dados da Sessão:', { isSuperAdmin, currentEmpresaId });
+        
+        // Obter mensagens do banco de dados (RAW)
+        let query = isSuperAdmin ? db.from('portal_mensagens').select('id, paciente_id, conteudo, remetente, lida, created_at, empresa_id, tipo_mensagem') : db.from('portal_mensagens').select('id, paciente_id, conteudo, remetente, lida, created_at, empresa_id, tipo_mensagem');
+        
+        if (!isSuperAdmin) {
+            if (currentEmpresaId) {
+                query = query.eq('empresa_id', currentEmpresaId);
+            } else {
+                query = query.eq('empresa_id', 'emp_165f9d072a');
+            }
+        }
+        
+        const { data, error } = await query.order('created_at', { ascending: false });
+        
+        console.log('Resultado Query Chat:', { data, error });
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 20px;">Nenhuma conversa encontrada.</p>';
+            return;
+        }
+
+        // Agrupar por paciente
+        const contactsMap = new Map();
+        data.forEach(msg => {
+            const pid = msg.paciente_id;
+            if (!contactsMap.has(pid)) {
+                // Find patient in global array
+                const pac = (typeof patients !== 'undefined' ? patients : []).find(p => String(p.id) === String(pid) || String(p.seqid) === String(pid));
+                contactsMap.set(pid, {
+                    paciente_id: pid,
+                    nome: pac && pac.nome ? pac.nome : (pid || 'Paciente Sem ID'),
+                    celular: pac ? pac.occ_paciente_celular : '',
+                    lastMessage: msg.conteudo,
+                    lastMessageDate: msg.created_at,
+                    unreadCount: 0
+                });
+            }
+            // case-insensitive check for remetente
+            if (msg.remetente && msg.remetente.toUpperCase() === 'PACIENTE' && !msg.lida) {
+                contactsMap.get(pid).unreadCount++;
+            }
+        });
+
+        const contacts = Array.from(contactsMap.values());
+        renderChatPacientesList(contacts);
+
+        // Inicializar Realtime se ainda não foi
+        if (!chatSubscriptionAdmin) {
+            initChatAdminRealtime();
+        }
+
+    } catch (err) {
+        console.error('Erro ao carregar lista de chat:', err);
+        listContainer.innerHTML = '<p style="text-align: center; color: var(--danger-color); font-size: 13px; margin-top: 20px;">Erro ao carregar conversas.</p>';
+    }
+}
+
+function renderChatPacientesList(contacts) {
+    const listContainer = document.getElementById('chatPacientesList');
+    if (!listContainer) return;
+    listContainer.innerHTML = '';
+
+    if (contacts.length === 0) {
+        listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 20px;">Nenhuma conversa.</p>';
+        return;
+    }
+
+    contacts.forEach(contact => {
+        const item = document.createElement('div');
+        const isActive = currentChatPacienteId === contact.paciente_id;
+        
+        item.style.padding = '12px';
+        item.style.borderRadius = '8px';
+        item.style.cursor = 'pointer';
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.gap = '10px';
+        item.style.background = isActive ? '#e0e7ff' : 'transparent';
+        item.style.transition = 'background 0.2s';
+        
+        item.onmouseenter = () => { if(!isActive) item.style.background = '#f1f5f9'; };
+        item.onmouseleave = () => { if(!isActive) item.style.background = 'transparent'; };
+
+        item.onclick = () => {
+            const container = document.getElementById('chatActiveMessages');
+            if (container) container.innerHTML = '';
+            openChatPaciente(contact.paciente_id, contact.nome);
+        };
+
+        // Avatar
+        const avatar = document.createElement('div');
+        avatar.style.width = '40px';
+        avatar.style.height = '40px';
+        avatar.style.borderRadius = '50%';
+        avatar.style.background = 'var(--primary-color)';
+        avatar.style.color = '#fff';
+        avatar.style.display = 'flex';
+        avatar.style.alignItems = 'center';
+        avatar.style.justifyContent = 'center';
+        avatar.style.fontWeight = 'bold';
+        avatar.style.fontSize = '14px';
+        avatar.innerText = (contact.nome || 'P').substring(0, 2).toUpperCase();
+
+        const info = document.createElement('div');
+        info.style.flex = '1';
+        info.style.overflow = 'hidden';
+
+        const nameDiv = document.createElement('div');
+        nameDiv.style.fontWeight = '600';
+        nameDiv.style.fontSize = '14px';
+        nameDiv.style.color = 'var(--text-color)';
+        nameDiv.style.whiteSpace = 'nowrap';
+        nameDiv.style.overflow = 'hidden';
+        nameDiv.style.textOverflow = 'ellipsis';
+        nameDiv.innerText = contact.nome;
+
+        const msgDiv = document.createElement('div');
+        msgDiv.style.fontSize = '12px';
+        msgDiv.style.color = 'var(--text-muted)';
+        msgDiv.style.whiteSpace = 'nowrap';
+        msgDiv.style.overflow = 'hidden';
+        msgDiv.style.textOverflow = 'ellipsis';
+        msgDiv.innerText = contact.lastMessage;
+
+        info.appendChild(nameDiv);
+        info.appendChild(msgDiv);
+
+        item.appendChild(avatar);
+        item.appendChild(info);
+
+        if (contact.unreadCount > 0) {
+            const badge = document.createElement('div');
+            badge.style.background = 'var(--danger-color)';
+            badge.style.color = '#fff';
+            badge.style.fontSize = '11px';
+            badge.style.fontWeight = 'bold';
+            badge.style.padding = '2px 6px';
+            badge.style.borderRadius = '10px';
+            badge.innerText = contact.unreadCount;
+            item.appendChild(badge);
+        }
+
+        listContainer.appendChild(item);
+    });
+}
+
+async function openChatPaciente(pacienteId, pacienteNome) {
+    currentChatPacienteId = pacienteId;
+    
+    // Atualizar UI
+    document.getElementById('chatActivePatientName').innerText = pacienteNome;
+    
+    const messagesContainer = document.getElementById('chatActiveMessages');
+    messagesContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 20px;">Carregando mensagens...</p>';
+    window.lastRenderedDateAdmin = null;
+
+    // Recarregar lista para marcar como ativo
+    loadChatPacientesList();
+
+    try {
+        // Buscar histórico
+        let query = isSuperAdmin ? db.from('portal_mensagens').select('id, paciente_id, conteudo, remetente, lida, created_at, empresa_id, tipo_mensagem') : db.from('portal_mensagens').select('id, paciente_id, conteudo, remetente, lida, created_at, empresa_id, tipo_mensagem');
+        
+        if (!isSuperAdmin) {
+            if (currentEmpresaId) {
+                query = query.eq('empresa_id', currentEmpresaId);
+            } else {
+                query = query.eq('empresa_id', 'emp_165f9d072a');
+            }
+        }
+        
+        const { data, error } = await query
+            .eq('paciente_id', pacienteId)
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        messagesContainer.innerHTML = '';
+        window.lastRenderedDateAdmin = null;
+        if (data && data.length > 0) {
+            data.forEach(msg => appendChatMessageAdmin(msg));
+            scrollToBottomAdmin();
+            
+            // Marcar como lida
+            const unreadIds = data.filter(m => m.remetente && m.remetente.toUpperCase() === 'PACIENTE' && !m.lida).map(m => m.id);
+            if (unreadIds.length > 0) {
+                await db.from('portal_mensagens').update({ lida: true }).in('id', unreadIds);
+                loadChatPacientesList(); // Atualizar badges
+                updateGlobalChatBadge();
+            }
+        } else {
+            messagesContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 20px;">Nenhuma mensagem ainda.</p>';
+        }
+    } catch (err) {
+        console.error('Erro ao abrir chat:', err);
+        messagesContainer.innerHTML = '<p style="text-align: center; color: var(--danger-color); font-size: 13px; margin-top: 20px;">Erro ao carregar histórico.</p>';
+    }
+
+    // Configurar botão de enviar
+    const btnSend = document.getElementById('btnSendAdminChat');
+    const inputMsg = document.getElementById('chatAdminInput');
+    
+    btnSend.disabled = false;
+    inputMsg.disabled = false;
+    const btnAnexo = document.getElementById('btnAdminAnexo');
+    if (btnAnexo) btnAnexo.disabled = false;
+
+    // Remover listeners anteriores (cloneNode trick)
+    const newBtn = btnSend.cloneNode(true);
+    btnSend.parentNode.replaceChild(newBtn, btnSend);
+    
+    const newInput = inputMsg.cloneNode(true);
+    inputMsg.parentNode.replaceChild(newInput, inputMsg);
+    
+    newBtn.onclick = () => sendChatMensagemAdmin(pacienteId);
+    newInput.onkeypress = (e) => {
+        if (e.key === 'Enter') sendChatMensagemAdmin(pacienteId);
+    };
+    newInput.focus();
+}
+
+function formatChatDateSeparatorAdmin(date) {
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+    const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
+
+    if (isToday) return 'Hoje';
+    if (isYesterday) return 'Ontem';
+    return date.toLocaleDateString('pt-BR');
+}
+
+function appendChatMessageAdmin(msg) {
+    const container = document.getElementById('chatActiveMessages');
+    if (!container) return;
+
+    // Se a mensagem inicial de carregamento estiver lá, remover
+    if (container.querySelector('p')) {
+        const p = container.querySelector('p');
+        if (p.innerText.includes('Carregando') || p.innerText.includes('Nenhuma') || p.innerText.includes('Selecione')) {
+            p.remove();
+        }
+    }
+    // Remove default placeholder text div
+    const placeholder = container.querySelector('div[style*="color: var(--text-muted)"]');
+    if (placeholder && placeholder.innerText.includes('Selecione um paciente')) {
+        placeholder.remove();
+    }
+
+    const msgDate = new Date(msg.created_at || new Date());
+    const dateString = msgDate.getFullYear() + '-' + msgDate.getMonth() + '-' + msgDate.getDate();
+    
+    if (window.lastRenderedDateAdmin !== dateString) {
+        window.lastRenderedDateAdmin = dateString;
+        const dateSep = document.createElement('div');
+        dateSep.style.background = '#e2e8f0';
+        dateSep.style.padding = '4px 12px';
+        dateSep.style.borderRadius = '10px';
+        dateSep.style.fontSize = '12px';
+        dateSep.style.fontWeight = '600';
+        dateSep.style.color = '#475569';
+        dateSep.style.margin = '10px auto';
+        dateSep.style.width = 'fit-content';
+        dateSep.style.textAlign = 'center';
+        dateSep.textContent = formatChatDateSeparatorAdmin(msgDate);
+        container.appendChild(dateSep);
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.marginBottom = '6px';
+
+    const bubble = document.createElement('div');
+    bubble.style.padding = '6px 12px';
+    bubble.style.display = 'flex';
+    bubble.style.flexDirection = 'column';
+    bubble.style.borderRadius = '15px';
+    bubble.style.maxWidth = '70%';
+    bubble.style.fontSize = '14px';
+    bubble.style.lineHeight = '1.4';
+        if (msg.tipo_mensagem === 'ARQUIVO' || msg.tipo_mensagem === 'pdf' || (msg.conteudo && msg.conteudo.toLowerCase().includes('.pdf'))) {
+        const msgDate = new Date(msg.created_at || new Date());
+        const now = new Date();
+        const diffTime = Math.abs(now - msgDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays > 10) {
+            bubble.innerHTML = `<div style="background: #fef2f2; color: #dc2626; padding: 8px; border-radius: 6px; font-size: 12px; border: 1px solid #fca5a5; margin-bottom: 4px;">⚠️ Este arquivo expirou (Prazo de 10 dias). Baixe os anexos imediatamente para o prontuário.</div><span style="color: inherit; display: flex; align-items: center; gap: 4px; font-style: italic;">❌ Arquivo expirado. Solicite o reenvio ao paciente.</span>`;
+        } else {
+            const url = msg.conteudo;
+            const ext = url.split('.').pop().toLowerCase();
+            if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {        
+                bubble.innerHTML = `<div style="background: #fef2f2; color: #dc2626; padding: 6px; border-radius: 4px; font-size: 11px; border: 1px solid #fca5a5; margin-bottom: 6px;">⚠️ Expira em 10 dias. Salve no prontuário!</div><a href="${url}" target="_blank"><img src="${url}" style="max-width: 100%; max-height: 200px; border-radius: 6px; display: block;" alt="Anexo"></a>`;
+            } else {
+                bubble.innerHTML = `
+                    <div style="background: #fef2f2; color: #dc2626; padding: 6px; border-radius: 4px; font-size: 11px; border: 1px solid #fca5a5; margin-bottom: 6px;">
+                        ⚠️ Expira em 10 dias. Salve no prontuário!
+                    </div>
+                    <a href="${url}" target="_blank" style="
+                        display: flex; 
+                        align-items: center; 
+                        gap: 8px; 
+                        background: rgba(255,255,255,0.2); 
+                        padding: 8px 12px; 
+                        border-radius: 6px; 
+                        text-decoration: none; 
+                        color: inherit; 
+                        border: 1px solid rgba(0,0,0,0.1); 
+                        font-weight: 500;
+                        transition: background 0.2s;
+                    ">
+                        <i class="ri-file-pdf-line" style="font-size: 20px; color: #dc2626;"></i>
+                        <span>📄 Visualizar PDF Anexo</span>
+                    </a>`;
+            }
+        }
+    } else {
+        bubble.innerText = msg.conteudo || '';
+    }
+
+    const timeDiv = document.createElement('div');
+    timeDiv.style.fontSize = '11px';
+    timeDiv.style.fontWeight = '500';
+    timeDiv.style.alignSelf = 'flex-end';
+    timeDiv.style.marginTop = '2px';
+    const date = new Date(msg.created_at);
+    timeDiv.innerText = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    if (msg.remetente && msg.remetente.toUpperCase() === 'CLINICA') {
+        wrapper.style.justifyContent = 'flex-end';
+        bubble.style.background = 'var(--primary-color)';
+        bubble.style.color = '#fff';
+        bubble.style.borderBottomRightRadius = '4px';
+        timeDiv.style.textAlign = 'right';
+        timeDiv.style.color = '#e0e7ff'; // Mais visível no balão azul
+        bubble.appendChild(timeDiv);
+    } else {
+        wrapper.style.justifyContent = 'flex-start';
+        bubble.style.background = '#f1f5f9';
+        bubble.style.color = 'var(--text-color)';
+        bubble.style.borderBottomLeftRadius = '4px';
+        timeDiv.style.textAlign = 'right';
+        timeDiv.style.color = '#64748b'; // Cinza mais escuro para balão branco
+        bubble.appendChild(timeDiv);
+    }
+
+    wrapper.appendChild(bubble);
+    container.appendChild(wrapper);
+}
+
+function scrollToBottomAdmin() {
+    const container = document.getElementById('chatActiveMessages');
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+async function sendChatMensagemAdmin(pacienteId) {
+    const input = document.getElementById('chatAdminInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = '';
+    
+    // Mostrar na UI imediatamente para melhor UX
+    const tempMsg = {
+        id: 'temp_' + Date.now(),
+        conteudo: text,
+        remetente: 'CLINICA',
+        tipo_mensagem: 'TEXTO',
+        created_at: new Date().toISOString()
+    };
+    appendChatMessageAdmin(tempMsg);
+    scrollToBottomAdmin();
+
+    try {
+        const { error } = await db.from('portal_mensagens').insert([{
+            empresa_id: currentEmpresaId,
+            paciente_id: pacienteId,
+            conteudo: text,
+            remetente: 'CLINICA',
+            lida: true,
+            tipo_mensagem: 'TEXTO'
+        }]);
+
+        if (error) throw error;
+        
+        loadChatPacientesList(); // Atualiza a lista lateral com a última mensagem
+    } catch (err) {
+        console.error('Erro ao enviar mensagem:', err);
+        showToast('Erro ao enviar mensagem. Tente novamente.', true);
+    }
+}
+
+function initChatAdminRealtime() {
+    if (!currentEmpresaId && !isSuperAdmin) return;
+    if (chatSubscriptionAdmin) return;
+
+    
+    const filterParams = isSuperAdmin ? {} : { filter: `empresa_id=eq.${currentEmpresaId}` };
+    chatSubscriptionAdmin = db.channel('chat_admin_channel')
+        .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'portal_mensagens', 
+            ...filterParams
+        }, 
+        (payload) => {
+            const newMsg = payload.new;
+            updateGlobalChatBadge();
+            
+            // Atualizar lista lateral para mostrar notificação
+            loadChatPacientesList();
+
+            // Se o chat atual estiver aberto, mostrar a mensagem
+            if (currentChatPacienteId === newMsg.paciente_id) {
+                // Não adicionar se for da CLINICA, pois já adicionamos o tempMsg
+                if (newMsg.remetente && newMsg.remetente.toUpperCase() === 'PACIENTE') {
+                    appendChatMessageAdmin(newMsg);
+                    scrollToBottomAdmin();
+                    
+                    // Marcar como lida automaticamente
+                    db.from('portal_mensagens').update({ lida: true }).eq('id', newMsg.id).then(() => {
+                        loadChatPacientesList();
+                    });
+                }
+            }
+        }).subscribe();
+}
+
+async function uploadArquivoAdminChat(input) {
+    const file = input.files[0];
+    if (!file || !currentChatPacienteId || !currentEmpresaId) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        showToast('Por favor, selecione apenas arquivos em formato PDF.', true);
+        input.value = '';
+        return;
+    }
+
+    input.value = ''; // Reset input
+    
+    const btnAnexo = document.getElementById('btnAdminAnexo');
+    const originalText = btnAnexo.innerHTML;
+    btnAnexo.disabled = true;
+    btnAnexo.innerHTML = '⏳';
+    
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `${currentEmpresaId}/${currentChatPacienteId}/${fileName}`;
+        
+        const { data, error: uploadError } = await db.storage
+            .from("portal_anexos")
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: true,
+                contentType: 'application/pdf'
+            });
+            
+        if (uploadError) {
+            console.error('Erro detalhado do Storage:', uploadError);
+            throw uploadError;
+        }
+        
+        const { data: publicUrlData } = db.storage
+            .from("portal_anexos")
+            .getPublicUrl(filePath);
+            
+        const publicUrl = publicUrlData.publicUrl;
+        
+        const tempMsg = {
+            paciente_id: currentChatPacienteId,
+            empresa_id: currentEmpresaId,
+            conteudo: publicUrl,
+            remetente: 'CLINICA',
+            lida: true,
+            tipo_mensagem: 'ARQUIVO',
+            created_at: new Date().toISOString()
+        };
+        
+        const { error: insertError } = await db.from('portal_mensagens').insert([tempMsg]);
+        
+        if (insertError) throw insertError;
+        
+        appendChatMessageAdmin(tempMsg);
+        scrollToBottomAdmin();
+        loadChatPacientesList(); // update last message text
+        
+    } catch (e) {
+        console.error("Erro ao enviar arquivo admin:", e);
+        alert("Erro ao enviar arquivo. Tente novamente.");
+    } finally {
+        btnAnexo.disabled = false;
+        btnAnexo.innerHTML = originalText;
+    }
+}
+
+async function updateGlobalChatBadge() {
+    if (typeof isSuperAdmin !== 'undefined' && !isSuperAdmin && typeof hasPermission === 'function' && !hasPermission('chat_pacientes')) {
+        const btn = document.getElementById('btnGlobalChat');
+        if (btn) btn.style.display = 'none';
+        return;
+    }
+    
+    const btn = document.getElementById('btnGlobalChat');
+    if (btn) btn.style.display = 'flex';
+    
+    try {
+        let query = db.from('portal_mensagens').select('*')
+                      .eq('lida', false)
+                      .ilike('remetente', 'paciente')
+                      .order('created_at', { ascending: false });
+                      
+        if (typeof isSuperAdmin !== 'undefined' && !isSuperAdmin && typeof currentEmpresaId !== 'undefined' && currentEmpresaId) {
+            query = query.eq('empresa_id', currentEmpresaId);
+        }
+        
+        const { data, error } = await query;
+        if (!error && data) {
+            const count = data.length;
+            const badge = document.getElementById('global-chat-badge');
+            if (badge) {
+                if (count > 0) {
+                    badge.innerText = count > 99 ? '99+' : count;
+                    badge.style.display = 'block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+            
+            // Atualizar lista do popover
+            const popoverList = document.getElementById('globalChatPopoverList');
+            if (popoverList) {
+                popoverList.innerHTML = '';
+                if (count === 0) {
+                    popoverList.innerHTML = '<div style="font-size: 12px; color: #64748b; text-align: center; padding: 10px;">Nenhuma mensagem pendente.</div>';
+                } else {
+                    // Agrupar por paciente (mostrar 1 de cada no máximo)
+                    const pacMap = new Map();
+                    data.forEach(msg => {
+                        if(!pacMap.has(msg.paciente_id)) {
+                            pacMap.set(msg.paciente_id, msg);
+                        }
+                    });
+                    
+                    const pList = Array.from(pacMap.values());
+                    pList.forEach(msg => {
+                        const pid = msg.paciente_id;
+                        const pac = (typeof patients !== 'undefined' ? patients : []).find(p => String(p.id) === String(pid) || String(p.seqid) === String(pid)); 
+                        const pNome = pac && pac.nome ? pac.nome : (pid || 'Paciente Sem ID');
+                        const pCpf = pac && pac.cpf ? pac.cpf : '';
+                        
+                        let preview = msg.tipo_mensagem === 'ARQUIVO' ? '📎 Anexo recebido' : (msg.conteudo || '');
+                        if (preview.length > 35) preview = preview.substring(0, 35) + '...';
+                        
+                        const item = document.createElement('div');
+                        item.style.padding = '8px';
+                        item.style.borderBottom = '1px solid #f1f5f9';
+                        item.style.cursor = 'pointer';
+                        item.style.borderRadius = '4px';
+                        item.onmouseenter = () => item.style.background = '#f8fafc';
+                        item.onmouseleave = () => item.style.background = 'transparent';
+                        
+                        item.onclick = () => {
+                            if(typeof showList === 'function') showList('chat_pacientes', 'navChatPacientes');
+                            // Esperar um pouco pra tela carregar
+                            setTimeout(() => {
+                                if(typeof openChatPaciente === 'function') openChatPaciente(pid, pNome);
+                            }, 300);
+                        };
+                        
+                        item.innerHTML = `
+                            <div style="font-size: 13px; font-weight: 600; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${pNome}</div>
+                            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${pCpf ? 'CPF: ' + pCpf : ''}</div>
+                            <div style="font-size: 12px; color: #475569; margin-top: 4px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">"${preview}"</div>
+                        `;
+                        
+                        popoverList.appendChild(item);
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Erro ao atualizar badge global do chat:", e);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('globalChatContainer');
+    const popover = document.getElementById('globalChatPopover');
+    if (container && popover) {
+        container.addEventListener('mouseenter', () => {
+            popover.style.display = 'flex';
+        });
+        container.addEventListener('mouseleave', () => {
+            popover.style.display = 'none';
+        });
+    }
+});

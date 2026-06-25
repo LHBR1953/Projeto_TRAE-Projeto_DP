@@ -34517,7 +34517,11 @@ function renderChatPacientesList(contacts) {
         item.onmouseenter = () => { if(!isActive) item.style.background = '#f1f5f9'; };
         item.onmouseleave = () => { if(!isActive) item.style.background = 'transparent'; };
 
-        item.onclick = () => openChatPaciente(contact.paciente_id, contact.nome);
+        item.onclick = () => {
+            const container = document.getElementById('chatActiveMessages');
+            if (container) container.innerHTML = '';
+            openChatPaciente(contact.paciente_id, contact.nome);
+        };
 
         // Avatar
         const avatar = document.createElement('div');
@@ -34584,6 +34588,7 @@ async function openChatPaciente(pacienteId, pacienteNome) {
     
     const messagesContainer = document.getElementById('chatActiveMessages');
     messagesContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 20px;">Carregando mensagens...</p>';
+    window.lastRenderedDateAdmin = null;
 
     // Recarregar lista para marcar como ativo
     loadChatPacientesList();
@@ -34711,7 +34716,7 @@ function appendChatMessageAdmin(msg) {
     bubble.style.maxWidth = '70%';
     bubble.style.fontSize = '14px';
     bubble.style.lineHeight = '1.4';
-        if (msg.tipo_mensagem === 'ARQUIVO') {
+        if (msg.tipo_mensagem === 'ARQUIVO' || msg.tipo_mensagem === 'pdf' || (msg.conteudo && msg.conteudo.toLowerCase().includes('.pdf'))) {
         const msgDate = new Date(msg.created_at || new Date());
         const now = new Date();
         const diffTime = Math.abs(now - msgDate);
@@ -34725,7 +34730,26 @@ function appendChatMessageAdmin(msg) {
             if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {        
                 bubble.innerHTML = `<div style="background: #fef2f2; color: #dc2626; padding: 6px; border-radius: 4px; font-size: 11px; border: 1px solid #fca5a5; margin-bottom: 6px;">⚠️ Expira em 10 dias. Salve no prontuário!</div><a href="${url}" target="_blank"><img src="${url}" style="max-width: 100%; max-height: 200px; border-radius: 6px; display: block;" alt="Anexo"></a>`;
             } else {
-                bubble.innerHTML = `<div style="background: #fef2f2; color: #dc2626; padding: 6px; border-radius: 4px; font-size: 11px; border: 1px solid #fca5a5; margin-bottom: 6px;">⚠️ Expira em 10 dias. Salve no prontuário!</div><a href="${url}" target="_blank" style="color: inherit; text-decoration: underline; display: flex; align-items: center; gap: 4px;">📎 Baixar Arquivo / Ver Exame</a>`;
+                bubble.innerHTML = `
+                    <div style="background: #fef2f2; color: #dc2626; padding: 6px; border-radius: 4px; font-size: 11px; border: 1px solid #fca5a5; margin-bottom: 6px;">
+                        ⚠️ Expira em 10 dias. Salve no prontuário!
+                    </div>
+                    <a href="${url}" target="_blank" style="
+                        display: flex; 
+                        align-items: center; 
+                        gap: 8px; 
+                        background: rgba(255,255,255,0.2); 
+                        padding: 8px 12px; 
+                        border-radius: 6px; 
+                        text-decoration: none; 
+                        color: inherit; 
+                        border: 1px solid rgba(0,0,0,0.1); 
+                        font-weight: 500;
+                        transition: background 0.2s;
+                    ">
+                        <i class="ri-file-pdf-line" style="font-size: 20px; color: #dc2626;"></i>
+                        <span>📄 Visualizar PDF Anexo</span>
+                    </a>`;
             }
         }
     } else {
