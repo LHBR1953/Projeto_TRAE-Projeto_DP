@@ -778,16 +778,18 @@
                             </div>
                         </div>
                         
-                        <div style="height: 70px; min-height: 70px; border-top: 1px solid #e5e7eb; padding: 12px; display: flex; align-items: center; background: #ffffff; box-sizing: border-box;"> 
-                            <form id="formPatientChatSend" style="display: flex; align-items: center; gap: 0.5rem; width: 100%; height: 100%;"> 
-                                <label for="inputPatientChatPdf" style="cursor: pointer; padding: 0 10px; color: #6b7280; transition: color 0.2s;" title="Anexar PDF">
-                                    <i class="ri-attachment-2" style="font-size: 1.5rem;"></i>
-                                </label>
-                                <input type="file" id="inputPatientChatPdf" accept="application/pdf" style="display: none;">
-                                <input type="text" id="inputPatientChatMessage" placeholder="Digite sua mensagem..." style="flex: 1; height: 100%; border: 1px solid #d1d5db; border-radius: 4px; padding: 0 15px; font-size: 14px; outline: none;" autocomplete="off" required> 
-                                <button type="submit" style="background: var(--primary-color); color: #ffffff; padding: 0 20px; border: none; border-radius: 4px; font-weight: 600; height: 100%; cursor: pointer; transition: background 0.2s;">
-                                    <i class="ri-send-plane-fill"></i>
-                                </button> 
+                        <div style="height: auto; min-height: 70px; border-top: 1px solid #e5e7eb; padding: 12px; background: #ffffff; box-sizing: border-box;"> 
+                            <form id="formPatientChatSend" style="display: flex; flex-direction: column; gap: 8px; width: 100%;"> 
+                                <input type="text" id="inputPatientChatMessage" placeholder="Digite sua mensagem..." style="width: 100%; height: 40px; border: 1px solid #d1d5db; border-radius: 4px; padding: 0 15px; font-size: 14px; outline: none;" autocomplete="off" required> 
+                                <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; width: 100%;">
+                                    <label for="inputPatientChatPdf" style="cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: #f3f4f6; border-radius: 4px; color: #4b5563; transition: background 0.2s;" title="Anexar PDF">
+                                        <i class="ri-attachment-2" style="font-size: 1.25rem;"></i>
+                                    </label>
+                                    <input type="file" id="inputPatientChatPdf" accept="application/pdf" style="display: none;">
+                                    <button type="submit" style="background: var(--primary-color); color: #ffffff; padding: 0 20px; height: 40px; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; transition: background 0.2s;">
+                                        <i class="ri-send-plane-fill" style="font-size: 1.25rem;"></i>
+                                    </button> 
+                                </div>
                             </form> 
                         </div>
                     </div>
@@ -5009,10 +5011,16 @@
                         </div> 
                     </div> 
         
-                    <div id="portalChatInputArea" style="height: 70px; min-height: 70px; border-top: 1px solid #e5e7eb; padding: 12px; display: flex; align-items: center; background: #ffffff; box-sizing: border-box;"> 
-                        <form id="formPortalChatSend" style="display: flex; align-items: center; gap: 0.5rem; width: 100%; height: 100%;"> 
-                            <input type="text" id="inputPortalChatMessage" placeholder="Digite sua resposta..." style="flex: 1; height: 100%; border: 1px solid #d1d5db; border-radius: 4px; padding: 0 15px; font-size: 14px; outline: none;" autocomplete="off" required> 
-                            <button type="submit" style="background: #1d4ed8; color: #ffffff; padding: 0 24px; border: none; border-radius: 4px; font-weight: 600; height: 100%; cursor: pointer; transition: background 0.2s;">Enviar</button> 
+                    <div id="portalChatInputArea" style="height: auto; min-height: 70px; border-top: 1px solid #e5e7eb; padding: 12px; background: #ffffff; box-sizing: border-box;"> 
+                        <form id="formPortalChatSend" style="display: flex; flex-direction: column; gap: 8px; width: 100%;"> 
+                            <input type="text" id="inputPortalChatMessage" placeholder="Digite sua resposta..." style="width: 100%; height: 40px; border: 1px solid #d1d5db; border-radius: 4px; padding: 0 15px; font-size: 14px; outline: none;" autocomplete="off" required> 
+                            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; width: 100%;">
+                                <label for="inputPortalChatPdfAdmin" style="cursor: pointer; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: #f3f4f6; border-radius: 4px; color: #4b5563; transition: background 0.2s;" title="Anexar Arquivo">
+                                    <i class="ri-attachment-2" style="font-size: 1.25rem;"></i>
+                                    <input type="file" id="inputPortalChatPdfAdmin" accept=".pdf,.png,.jpg,.jpeg" style="display: none;">
+                                </label>
+                                <button type="submit" style="background: #1d4ed8; color: #ffffff; padding: 0 24px; height: 40px; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; transition: background 0.2s;">Enviar</button> 
+                            </div>
                         </form> 
                     </div> 
         
@@ -6057,17 +6065,35 @@
     <input type="hidden" id="professionalPhotoCapture">
 
     <!-- Supabase JS Client -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
         if (typeof window.supabase === 'undefined') {
-            document.write('<script src="https://unpkg.com/@supabase/supabase-js@2"><\/script>');
+            document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"><\/script>');
         }
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-    <!-- App Script -->
-    <script src="app_v22.js?v=20260524_AVALIACAO_FIX3"></script>
+    <!-- App Script Loader (Robust) -->
+    <script src="app_v22.js?v=20260626_QUERIES_SEPARADAS_FIX"></script>
+    <script>
+        // Wait for Supabase to be available (handles async document.write fallbacks)
+        var supabaseCheckAttempts = 0;
+        function checkSupabaseAndLoad() {
+            if (typeof window.supabase !== 'undefined') {
+                console.log("Supabase inicializado com sucesso.");
+            } else {
+                supabaseCheckAttempts++;
+                if (supabaseCheckAttempts > 50) { // 5 seconds timeout
+                    alert('Erro crítico: Não foi possível carregar a biblioteca de banco de dados (Supabase). Verifique sua conexão com a internet ou se há algum bloqueador de anúncios/firewall impedindo o acesso aos servidores CDN.');
+                } else {
+                    setTimeout(checkSupabaseAndLoad, 100);
+                }
+            }
+        }
+        
+        checkSupabaseAndLoad();
+    </script>
     <script>
         (function () {
             const areasClinicas = ['Dentística', 'Endodontia', 'Periodontia', 'Cirurgia', 'Implantodontia', 'Ortodontia', 'Harmonização Facial', 'Instrumental', 'Prótese', 'Biossegurança', 'Geral'];

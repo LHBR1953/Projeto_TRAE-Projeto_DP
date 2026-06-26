@@ -14376,32 +14376,31 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
         paymentsRaw = paymentsRaw.filter(p => normalizeKey(String(p.forma_pagamento || '')) === formaKey);
     }
 
-    const budgetBySeqid = new Map((budgets || []).map(b => [String(b.seqid), b]));
+    const budgetById = new Map((budgets || []).map(b => [String(b.id), b]));
     const patientById = new Map((patients || []).map(p => [String(p.id), p]));
-    const patientBySeq = new Map((patients || []).map(p => [String(p.seqid), p]));
 
-    const seqids = Array.from(new Set(paymentsRaw.map(p => String(p.orcamento_id || '')).filter(Boolean)));
-    const seqidToPacienteUuid = new Map();
-    seqids.forEach(s => {
-        const b = budgetBySeqid.get(String(s));
-        const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
-        if (pid) seqidToPacienteUuid.set(String(s), pid);
+    const orcIds = Array.from(new Set(paymentsRaw.map(p => String(p.orcamento_id || '')).filter(Boolean)));
+    const fetchedBudgets = new Map();
+
+    orcIds.forEach(id => {
+        const b = budgetById.get(id);
+        if (b) fetchedBudgets.set(id, b);
     });
-    const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
-    if (missingSeq.length) {
+
+    const missingIds = orcIds.filter(id => !fetchedBudgets.has(id));
+    if (missingIds.length) {
         try {
             const { data: orcs, error: oErr } = await withTimeout(
                 db.from('orcamentos')
-                    .select('seqid,paciente_id,pacienteid,pacientenome')
+                    .select('id,seqid,paciente_id,pacienteid,pacientenome')
                     .eq('empresa_id', currentEmpresaId)
-                    .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
+                    .in('id', missingIds.slice(0, 200)),
                 15000,
-                'pagamentos_pacientes:orcamentos:seqid'
+                'pagamentos_pacientes:orcamentos:id'
             );
             if (!oErr && Array.isArray(orcs)) {
                 orcs.forEach(o => {
-                    const pid = String(o.pacienteid || o.paciente_id || '');
-                    if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
+                    fetchedBudgets.set(String(o.id), o);
                 });
             }
         } catch { }
@@ -14411,13 +14410,27 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
         const dt = p[payDateCol] ? new Date(p[payDateCol]) : null;
         const hora = dt ? formatTimeHHMM(dt) : '—';
         const data = dt ? dt.toLocaleDateString('pt-BR') : '—';
-        const seq = String(p.orcamento_id || '');
-        const pacUuid = seqidToPacienteUuid.get(seq) || '';
-        const pac = pacUuid ? (patientById.get(pacUuid) || patientBySeq.get(pacUuid)) : null;
-        const pacNome = pac ? String(pac.nome || '') : (seq ? `Orçamento #${seq}` : '—');
+        const orcId = String(p.orcamento_id || '');
+        
+        let pacNome = '';
+        let seqidStr = '';
+        
+        const b = fetchedBudgets.get(orcId);
+        if (b) {
+            seqidStr = b.seqid ? `#${b.seqid}` : '';
+            pacNome = String(b.pacientenome || '');
+            if (!pacNome) {
+                const pid = String(b.paciente_id || b.pacienteid || '');
+                const pac = patientById.get(pid);
+                if (pac) pacNome = String(pac.nome || '');
+            }
+        }
+
+        if (!pacNome) pacNome = seqidStr ? `Orçamento ${seqidStr}` : (orcId ? `Orçamento ID: ${orcId.substring(0,6)}...` : '—');
+
         const formaLabel = String(p.forma_pagamento || '—');
         const valor = Number(p.valor_pago || 0);
-        return { data, hora, orc: seq || '—', paciente: pacNome, forma: formaLabel, valor };
+        return { data, hora, orc: seqidStr || '—', paciente: pacNome, forma: formaLabel, valor };
     });
 
     const total = rows.reduce((acc, r) => acc + Number(r.valor || 0), 0);
@@ -14797,18 +14810,72 @@ async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
         return;
     }
 
-    const budgetBySeqid = new Map((budgets || []).map(b => [String(b.seqid), b]));
+    const budgetById = new Map((budgets || []).map(b => [String(b.id), b]));
     const patientById = new Map((patients || []).map(p => [String(p.id), p]));
     const servById = new Map((services || []).map(s => [String(s.id), s]));
 
+    const orcIds = Array.from(new Set(paymentsRaw.map(p => String(p.orcamento_id || '')).filter(Boolean)));
+    const fetchedBudgets = new Map();
+
+    orcIds.forEach(id => {
+        const b = budgetById.get(id);
+        if (b) fetchedBudgets.set(id, b);
+    });
+
+    const missingIds = orcIds.filter(id => !fetchedBudgets.has(id));
+    if (missingIds.length) {
+        try {
+            const { data: orcs, error: oErr } = await withTimeout(
+                db.from('orcamentos')
+                    .select('id,seqid,paciente_id,pacienteid,pacientenome')
+                    .eq('empresa_id', currentEmpresaId)
+                    .in('id', missingIds.slice(0, 200)),
+                15000,
+                'movdiaria:orcamentos:id'
+            );
+            if (!oErr && Array.isArray(orcs)) {
+                const { data: itensRaw } = await withTimeout(
+                    db.from('orcamento_itens').select('*').in('orcamento_id', missingIds.slice(0, 200)),
+                    15000,
+                    'movdiaria:orcamento_itens:id'
+                );
+                const byBudgetId = new Map();
+                if (Array.isArray(itensRaw)) {
+                    itensRaw.forEach(it => {
+                        const k = String(it.orcamento_id || '');
+                        if (!byBudgetId.has(k)) byBudgetId.set(k, []);
+                        byBudgetId.get(k).push(it);
+                    });
+                }
+                orcs.forEach(o => {
+                    o.orcamento_itens = byBudgetId.get(String(o.id)) || [];
+                    fetchedBudgets.set(String(o.id), o);
+                });
+            }
+        } catch { }
+    }
+
     const rows = [];
     paymentsRaw.forEach(p => {
-        const seq = String(p.orcamento_id || '');
-        const budget = budgetBySeqid.get(seq);
+        const orcId = String(p.orcamento_id || '');
+        const budget = fetchedBudgets.get(orcId);
+        
+        let seqidStr = '';
+        let pacNome = '';
+
+        if (budget) {
+            seqidStr = budget.seqid ? `#${budget.seqid}` : '';
+            pacNome = String(budget.pacientenome || '');
+            if (!pacNome) {
+                const pid = String(budget.paciente_id || budget.pacienteid || '');
+                const pac = patientById.get(pid);
+                if (pac) pacNome = String(pac.nome || '');
+            }
+        }
+
+        if (!pacNome) pacNome = seqidStr ? `Orçamento ${seqidStr}` : (orcId ? `Orçamento ID: ${orcId.substring(0,6)}...` : '—');
+
         const itens = budget ? (budget.orcamento_itens || budget.itens || []) : [];
-        const pacienteUuid = budget ? String(budget.pacienteid || budget.paciente_id || '') : '';
-        const paciente = pacienteUuid ? patientById.get(pacienteUuid) : null;
-        const pacNome = paciente ? String(paciente.nome || '') : (seq ? `Orçamento #${seq}` : '—');
 
         const validItens = itens.filter(it => normalizeStatusKey(String(it.status || it.item_status || '')) !== 'CANCELADO');
         const weights = validItens.map(it => {
@@ -14850,7 +14917,7 @@ async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
         byProf.forEach(info => {
             rows.push({
                 hora,
-                orcSeq: seq || '—',
+                orcSeq: seqidStr || '—',
                 paciente: pacNome,
                 profissional: info.profName,
                 forma,
@@ -15259,26 +15326,32 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
 
             const seqids = Array.from(new Set(paymentsRaw.map(p => String(p.orcamento_id || '')).filter(Boolean)));
             const seqidToPacienteUuid = new Map();
-            seqids.forEach(s => {
-                const b = budgetBySeqid.get(String(s));
+            const budgetByUuid = new Map((budgets || []).map(b => [String(b.id), b]));
+            
+            // O p.orcamento_id é um UUID. Buscamos pelo ID real.
+            seqids.forEach(uuid => {
+                const b = budgetByUuid.get(String(uuid));
                 const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
-                if (pid) seqidToPacienteUuid.set(String(s), pid);
+                if (pid) seqidToPacienteUuid.set(String(uuid), pid);
             });
-            const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
+            
+            const missingSeq = seqids.filter(uuid => !seqidToPacienteUuid.has(String(uuid)));
             if (missingSeq.length) {
                 try {
                     const { data: orcs, error: oErr } = await withTimeout(
                         db.from('orcamentos')
-                            .select('seqid,paciente_id,pacienteid')
+                            .select('id,seqid,paciente_id,pacienteid')
                             .eq('empresa_id', currentEmpresaId)
-                            .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
+                            .in('id', missingSeq.slice(0, 200)),
                         15000,
-                        'fechamento:orcamentos:seqid'
+                        'fechamento:orcamentos:id'
                     );
                     if (!oErr && Array.isArray(orcs)) {
                         orcs.forEach(o => {
+                            // Popula o cache local com os orçamentos buscados
+                            budgetByUuid.set(String(o.id), o);
                             const pid = String(o.pacienteid || o.paciente_id || '');
-                            if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
+                            if (o.id && pid) seqidToPacienteUuid.set(String(o.id), pid);
                         });
                     }
                 } catch { }
@@ -15287,13 +15360,20 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
             paymentsRows = paymentsRaw.map(p => {
                 const dt = p[payDateCol] ? new Date(p[payDateCol]) : null;
                 const hora = dt ? formatTimeHHMM(dt) : '—';
-                const seq = String(p.orcamento_id || '');
-                const pacUuid = seqidToPacienteUuid.get(seq) || '';
+                const orcUuid = String(p.orcamento_id || '');
+                const orcObj = budgetByUuid.get(orcUuid);
+                
+                // Mapeamento limpo do Orçamento #
+                const seqidStr = orcObj && orcObj.seqid ? `#${orcObj.seqid}` : '—';
+                
+                // Mapeamento limpo do Nome do Paciente
+                const pacUuid = seqidToPacienteUuid.get(orcUuid) || '';
                 const pac = pacUuid ? (patientById.get(pacUuid) || patientBySeq.get(pacUuid)) : null;
-                const pacNome = pac ? String(pac.nome || '') : (seq ? `Orçamento #${seq}` : '—');
+                const pacNome = pac ? String(pac.nome || '') : '—';
+                
                 const forma = String(p.forma_pagamento || '—');
                 const valor = Number(p.valor_pago || 0);
-                return { hora, pacNome, forma, valor };
+                return { hora, seqidStr, pacNome, forma, valor };
             });
         } catch {
             paymentsRows = [];
@@ -15316,15 +15396,16 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
             .map(r => `
                 <tr>
                     <td style="width:72px;">${escapeHtml(r.hora)}</td>
+                    <td style="width:80px; text-align:center;">${escapeHtml(r.seqidStr)}</td>
                     <td>${escapeHtml(r.pacNome)}</td>
                     <td>${escapeHtml(r.forma)}</td>
                     <td style="text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(r.valor))}</td>
                 </tr>
-            `).join('') : `<tr><td colspan="4" style="text-align:center; padding: 14px; color:#6b7280;">Nenhum pagamento registrado no dia.</td></tr>`;
+            `).join('') : `<tr><td colspan="5" style="text-align:center; padding: 14px; color:#6b7280;">Nenhum pagamento registrado no dia.</td></tr>`;
 
         const paymentsTableRowsWithTotal = paymentsRows.length ? (paymentsTableRows + `
             <tr>
-                <td colspan="3" style="text-align:right; font-weight: 900;">TOTAL</td>
+                <td colspan="4" style="text-align:right; font-weight: 900;">TOTAL</td>
                 <td style="text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(paymentsTotal))}</td>
             </tr>
         `) : paymentsTableRows;
@@ -15508,6 +15589,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
       <thead>
         <tr>
           <th style="width:72px;">Hora</th>
+          <th style="width:80px; text-align:center;">Orç. #</th>
           <th>Paciente</th>
           <th style="width:160px;">Forma</th>
           <th style="width:120px; text-align:right;">Valor</th>
@@ -28769,7 +28851,7 @@ async function showPatientDetails(id) {
     } else if (patientBalance < 0) {
         balanceBadge.innerHTML = `<span style="background: var(--danger-color); color: white; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; vertical-align: middle;">Débito Global: R$ ${Math.abs(patientBalance).toFixed(2)}</span>`;
     } else {
-        balanceBadge.innerHTML = '';
+        balanceBadge.innerHTML = `<span style="background: #6b7280; color: white; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; vertical-align: middle;">Crédito na Clínica: R$ 0,00</span>`;
     }
 
     // Fill General Tab
@@ -28824,27 +28906,92 @@ async function renderPatientFinanceiro(patientId) {
             return;
         }
 
-        // Buscar transações vinculadas a este paciente (por ID numérico paciente_id)
-        // Observação: incluímos registros legados com empresa_id NULL para não "sumirem" após migrações.
-        let query = db.from('financeiro_transacoes')
-            .select('*')
-            .eq('paciente_id', pat.seqid) // Usa o seqid numérico que é o padrão desta tabela
-            .order('data_transacao', { ascending: false });
+        const patSeq = pat.seqid;
+        const patUuid = pat.id;
 
-        if (currentEmpresaId) {
-            query = query.or(`empresa_id.eq.${currentEmpresaId},empresa_id.is.null`);
+        // 1. Buscar transações financeiras (financeiro_transacoes)
+        let qTrans = db.from('financeiro_transacoes').select('*').limit(10000);
+        
+        // Filtragem Segura: A coluna paciente_id em financeiro_transacoes é numérica (seqid)
+        // Evitamos usar o UUID (texto) para não estourar erro de tipagem no PostgREST
+        const numericId = patSeq ? patSeq : patientId;
+        qTrans = qTrans.eq('paciente_id', numericId);
+
+        if (typeof currentEmpresaId !== 'undefined' && currentEmpresaId) {
+            qTrans = qTrans.or(`empresa_id.eq.${currentEmpresaId},empresa_id.is.null`);
         }
 
-        const { data, error } = await query;
+        // 2. Encontrar orçamentos deste paciente para buscar pagamentos de orçamentos (PIX etc)
+        const patientBudgets = (typeof budgets !== 'undefined' ? budgets : []).filter(b => 
+            String(b.paciente_id) === String(patientId) || 
+            String(b.pacienteid) === String(patientId) || 
+            String(b.pacienteseqid) === String(patientId) ||
+            String(b.paciente_id) === String(patUuid) || 
+            String(b.pacienteseqid) === String(patSeq)
+        );
+        
+        const budgetIds = patientBudgets.map(b => b.id).filter(id => id);
+        
+        let pagData = [];
+        if (budgetIds.length > 0) {
+            let queryPag = db.from('orcamento_pagamentos').select('*').in('orcamento_id', budgetIds).limit(10000);
+            const { data: pData, error: pError } = await queryPag;
+            if (!pError && pData) {
+                pagData = pData;
+            }
+        }
 
-        if (error) throw error;
+        const { data: transDataRaw, error: transError } = await qTrans;
+        if (transError) throw transError;
+        
+        let transData = transDataRaw || [];
+        
+        // Remove duplicidades espelhadas da conta corrente (igual extrato global)
+        transData = transData.filter(t => {
+            const c = String(t.categoria || '').toUpperCase();
+            const o = String(t.observacoes || '');
+            if (c === 'PAGAMENTO' && t.referencia_id != null) return false;
+            if (o.startsWith('[Orçamento #')) return false;
+            return true;
+        });
 
-        if (!data || data.length === 0) {
+        // Mapear pagamentos de orçamento para o formato de transação
+        const mappedPags = pagData.map(p => {
+            const b = patientBudgets.find(b => String(b.id) === String(p.orcamento_id));
+            let seqidStr = b && b.seqid ? b.seqid : (p.orcamento_id ? String(p.orcamento_id).substring(0,6) : '—');
+            
+            const dt = p.data_pagamento || p.created_at || '';
+            const obsBase = `Recebimento - Orçamento #${seqidStr} (Paciente: ${pat.nome})`;
+            const desc = p.observacoes ? `${obsBase} - ${p.observacoes}` : obsBase;
+
+            return {
+                id: p.id,
+                data_transacao: dt,
+                categoria: 'PAGAMENTO',
+                tipo: 'CREDITO',
+                valor: p.valor_pago || 0,
+                forma_pagamento: p.forma_pagamento || '—',
+                observacoes: desc
+            };
+        });
+
+        // Unificar e ordenar
+        let allData = [...transData, ...mappedPags];
+        
+        allData.sort((a, b) => {
+            const dateA = new Date(a.data_transacao || 0).getTime();
+            const dateB = new Date(b.data_transacao || 0).getTime();
+            return dateB - dateA;
+        });
+
+        console.log("Registros carregados no Prontuário do Paciente:", allData);
+
+        if (!allData || allData.length === 0) {
             body.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted); padding: 20px;">Nenhuma movimentação financeira encontrada para este paciente.</td></tr>';
             return;
         }
 
-        body.innerHTML = data.map(t => {
+        body.innerHTML = allData.map(t => {
             const tipoUpper = (t.tipo || '').toUpperCase();
             const isCredit = tipoUpper === 'CREDITO' || tipoUpper === 'RECEITA' || tipoUpper === 'CRÉDITO';
             const typeClass = isCredit ? 'success-color' : 'danger-color';
@@ -28855,7 +29002,7 @@ async function renderPatientFinanceiro(patientId) {
                     <td>${formatDateTime(t.data_transacao)}</td>
                     <td><span class="badge badge-info">${t.categoria || 'Geral'}</span></td>
                     <td>${t.forma_pagamento || '-'}</td>
-                    <td style="text-align: right;"><strong>R$ ${(parseFloat(t.valor) || 0).toFixed(2)}</strong></td>
+                    <td style="text-align: right;"><strong>R$ ${Number(t.valor_pago || t.valor || 0).toFixed(2).replace('.', ',')}</strong></td>
                     <td style="text-align: center; color: var(--${typeClass});">
                         <i class="${typeIcon}"></i> ${t.tipo}
                     </td>
@@ -28868,7 +29015,12 @@ async function renderPatientFinanceiro(patientId) {
 
     } catch (err) {
         console.error("Erro ao carregar extrato do paciente:", err);
+        console.error("Erro Real do Supabase:", err);
         body.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--danger-color); padding: 20px;">Erro ao carregar o extrato financeiro.</td></tr>';
+    } finally {
+        // Garantia de fallback para ocultar qualquer spinner/loading visual
+        const spinner = document.getElementById('loadingSpinnerGlobal');
+        if (spinner) spinner.style.display = 'none';
     }
 }
 
@@ -28918,13 +29070,43 @@ async function loadEvolution(patientId) {
             return;
         }
 
-        timeline.innerHTML = data.map(ev => `
+        // Buscar orçamentos manualmente para evitar erro de Foreign Key
+        const orcIds = [...new Set(data.map(ev => ev.orcamento_id).filter(Boolean))];
+        const orcMap = new Map();
+        
+        if (orcIds.length > 0) {
+            try {
+                const { data: orcs } = await db.from('orcamentos')
+                    .select('id, seqid')
+                    .in('id', orcIds);
+                if (orcs) {
+                    orcs.forEach(o => orcMap.set(String(o.id), o.seqid));
+                }
+            } catch (e) {
+                console.warn("Erro ao buscar dados do orçamento para evolução:", e);
+            }
+        }
+
+        timeline.innerHTML = data.map(ev => {
+            let seqidStr = '';
+            // Tenta pegar pelo relacionamento real mapeado
+            if (ev.orcamento_id && orcMap.has(String(ev.orcamento_id))) {
+                seqidStr = `#${orcMap.get(String(ev.orcamento_id))}`;
+            } 
+            // Fallback: tentar extrair do texto caso o banco não tenha orcamento_id gravado
+            else if (ev.descricao && ev.descricao.includes('conforme orçamento')) {
+                const match = ev.descricao.match(/Orçamento\s+#(\d+)/i) || ev.descricao.match(/Orç\.\s+#(\d+)/i) || ev.descricao.match(/#(\d+)/);
+                if (match && match[1]) seqidStr = `#${match[1]}`;
+            }
+
+            return `
                                     <div class="evolution-item">
                                         <div class="evol-meta">
                                             <span><i class="ri-calendar-line"></i> ${formatDateTime(ev.created_at)}</span>
                                             <span><i class="ri-user-smile-line"></i> Profissional: <strong>${ev.profissionais?.nome || 'Não informado'}</strong></span>
                                         </div>
                                         <div class="evol-content">
+                                            ${seqidStr ? `<p style="margin-bottom:0.5rem;"><strong>Orç. #:</strong> ${seqidStr}</p>` : ''}
                                             ${ev.dente_regiao ? `<p style="margin-bottom:0.5rem;"><strong>Dente/Região:</strong> ${ev.dente_regiao}</p>` : ''}
                                             ${ev.descricao}
                                         </div>
@@ -28933,10 +29115,11 @@ async function loadEvolution(patientId) {
                                             <span>ID: ${ev.id.substring(0, 8)}</span>
                                         </div>
                                     </div>
-                                    `).join('');
+                                    `;
+        }).join('');
     } catch (err) {
         console.error("Erro ao carregar evolução:", err);
-        timeline.innerHTML = '<p style="color:red; text-align:center;">Erro ao carregar prontuário.</p>';
+        timeline.innerHTML = `<p style="color:red; text-align:center;">Erro ao carregar prontuário: ${err.message || 'Erro de conexão'}</p>`;
     }
 }
 
@@ -29225,7 +29408,7 @@ async function printPatientDetailReport(saveAsPdf = false) {
     let evolutionItems = [];
     try {
         const { data } = await db.from('paciente_evolucao')
-            .select('*, profissionais(nome)')
+            .select('*, profissionais(nome), orcamentos(seqid)')
             .eq('paciente_id', patientId)
             .order('created_at', { ascending: false });
         evolutionItems = data || [];
@@ -29265,6 +29448,7 @@ async function printPatientDetailReport(saveAsPdf = false) {
                 <span>📅 ${formatDateTime(ev.created_at)}</span>
                 <span>👤 ${ev.profissionais?.nome || 'Não informado'}</span>
             </div>
+            ${ev.orcamentos?.seqid ? `<p style="font-size:12px; margin-bottom:4px;"><strong>Orç. #:</strong> #${ev.orcamentos.seqid}</p>` : ''}
             ${ev.dente_regiao ? `<p style="font-size:12px; margin-bottom:4px;"><strong>Dente/Região:</strong> ${ev.dente_regiao}</p>` : ''}
             <p style="font-size:13px; color:#1f2937; white-space:pre-wrap;">${ev.descricao}</p>
         </div>`).join('');
@@ -30456,26 +30640,49 @@ async function fetchPatientBalance(patientId) {
     try {
         if (!patientId) return 0;
         
-        let seqid = patientId;
-        // Se patientId for UUID, buscar o seqid no banco (pois o portal pode não ter patients global)
-        if (typeof patientId === 'string' && patientId.length > 15) {
-            const { data: pData } = await db.from('pacientes').select('seqid').eq('id', patientId).single();
-            if (pData && pData.seqid) seqid = pData.seqid;
-        } else {
-            // Tentar cruzar com array global se existir (fallback administrativo)
-            if (typeof patients !== 'undefined' && Array.isArray(patients)) {
-                const pat = patients.find(p => String(p.id) === String(patientId) || String(p.seqid) === String(patientId));
-                if (pat && pat.seqid) seqid = pat.seqid;
+        let patSeq = patientId;
+        let patUuid = patientId;
+        
+        // Tentar cruzar com array global para ter os dois IDs
+        if (typeof patients !== 'undefined' && Array.isArray(patients)) {
+            const pat = patients.find(p => String(p.id) === String(patientId) || String(p.seqid) === String(patientId));
+            if (pat) {
+                patSeq = pat.seqid;
+                patUuid = pat.id;
             }
         }
         
-        const { data, error } = await db.from('view_saldo_paciente')
-            .select('*')
-            .eq('paciente_id', seqid)
-            .single();
+        // Refazendo o cálculo do saldo manualmente para garantir isolamento e precisão
+        let query = db.from('financeiro_transacoes').select('tipo, valor, paciente_id');
+        
+        // Filtro estrito: usa apenas o seqid (numérico), pois a tabela financeiro_transacoes usa seqid
+        query = query.eq('paciente_id', patSeq);
+        
+        if (typeof currentEmpresaId !== 'undefined' && currentEmpresaId) {
+            query = query.or(`empresa_id.eq.${currentEmpresaId},empresa_id.is.null`);
+        }
+        
+        const { data: trans, error } = await query;
             
-        if (error && error.code !== 'PGRST116') throw error;
-        return data ? Number(data.saldo_atual) : 0;
+        if (error) throw error;
+        
+        if (!trans || trans.length === 0) return 0;
+        
+        let saldo = 0;
+        trans.forEach(t => {
+            const tipoUpper = (t.tipo || '').toUpperCase();
+            const isCredit = tipoUpper === 'CREDITO' || tipoUpper === 'RECEITA' || tipoUpper === 'CRÉDITO';
+            const isDebit = tipoUpper === 'DEBITO' || tipoUpper === 'DESPESA' || tipoUpper === 'DÉBITO';
+            const val = parseFloat(t.valor || 0);
+            
+            if (isCredit) {
+                saldo += val;
+            } else if (isDebit) {
+                saldo -= val;
+            }
+        });
+        
+        return saldo === 0 ? 0 : saldo;
     } catch (err) {
         console.error("Erro ao buscar saldo do paciente:", err);
         return 0;
@@ -30484,14 +30691,7 @@ async function fetchPatientBalance(patientId) {
 
 async function updateBalanceUI(patientId) {
     try {
-        const { data, error } = await db.from('view_saldo_paciente')
-            .select('*')
-            .eq('paciente_id', patientId)
-            .single();
-
-        if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
-
-        const balance = data ? Number(data.saldo_atual) : 0;
+        const balance = await fetchPatientBalance(patientId);
         const patient = patients.find(p => p.seqid == patientId || p.id == patientId);
 
         if (finNomePaciente) finNomePaciente.textContent = patient ? patient.nome : 'Paciente selecionado';
@@ -30667,37 +30867,140 @@ async function deleteTransaction(id) {
 
             // Removendo a montagem do "query" antigo daqui, tudo vai pra queryBase lá embaixo
             try {
-                // O supabase falha em queries muito complexas com dados nulos, vamos apenas buscar tudo da empresa 
-                // e fazer a filtragem de datas e formas de pagamento localmente, igual fazemos com paciente.
-                // Isso garante 100% de precisão e evita erros do backend.
-                let queryBase = db.from('financeiro_transacoes')
-                    .select('*')
-                    .order('data_transacao', { ascending: false });
-                    
+                // Removemos qualquer limit() da query para garantir que TUDO seja carregado para o extrato
+                // Usando um limit muito alto apenas como teto de segurança (ex: 10.000)
+                let queryTrans = db.from('financeiro_transacoes').select('*').limit(10000);
+                let queryPag = db.from('orcamento_pagamentos').select('*').limit(10000);
+
                 if (currentEmpresaId) {
-                    queryBase = queryBase.eq('empresa_id', currentEmpresaId);
+                    queryTrans = queryTrans.eq('empresa_id', currentEmpresaId);
+                    queryPag = queryPag.eq('empresa_id', currentEmpresaId);
+                }
+                
+                // Filtragem por strings de data pura (sem timezone quebrado)
+                if (start) {
+                    try {
+                        const stringIni = `${start}T00:00:00`;
+                        queryTrans = queryTrans.gte('data_transacao', stringIni);
+                        queryPag = queryPag.gte('data_pagamento', stringIni);
+                    } catch (e) {
+                        console.warn("Data inicial inválida ignorada", e);
+                    }
+                }
+                
+                if (end) {
+                    try {
+                        const stringFin = `${end}T23:59:59`;
+                        queryTrans = queryTrans.lte('data_transacao', stringFin);
+                        queryPag = queryPag.lte('data_pagamento', stringFin);
+                    } catch (e) {
+                        console.warn("Data final inválida ignorada", e);
+                    }
                 }
 
-                const { data, error } = await queryBase;
-                if (error) {
-                    console.error("Supabase Error na queryBase:", error);
-                    throw error;
-                }
+                const [resTrans, resPag] = await Promise.all([queryTrans, queryPag]);
+                if (resTrans.error) throw resTrans.error;
+                if (resPag.error) throw resPag.error;
                 
-                // Filtros locais (Memória) - Totalmente precisos e imunes a falhas de timeout de DB
-                let localData = data || [];
+                let transData = resTrans.data || [];
+                let pagData = resPag.data || [];
                 
-                // Filtro 1: Data Inicial
-                if (start) {
-                    const startVal = start + 'T00:00:00';
-                    localData = localData.filter(t => t.data_transacao >= startVal);
-                }
-                
-                // Filtro 2: Data Final
-                if (end) {
-                    const endVal = end + 'T23:59:59';
-                    localData = localData.filter(t => t.data_transacao <= endVal);
-                }
+                // Remove duplicidades espelhadas da conta corrente
+                transData = transData.filter(t => {
+                    const c = String(t.categoria || '').toUpperCase();
+                    const o = String(t.observacoes || '');
+                    if (c === 'PAGAMENTO' && t.referencia_id != null) return false;
+                    if (o.startsWith('[Orçamento #')) return false;
+                    return true;
+                });
+
+                // Mapear caches globais para agilizar
+                const listPat = window.patients || (typeof patients !== 'undefined' ? patients : []);
+                const listBud = window.budgets || (typeof budgets !== 'undefined' ? budgets : []);
+                const patientById = new Map(listPat.map(p => [String(p.id), p]));
+                const patientBySeq = new Map(listPat.map(p => [String(p.seqid), p]));
+                const budgetById = new Map(listBud.map(b => [String(b.id), b]));
+                const budgetBySeq = new Map(listBud.map(b => [String(b.seqid), b]));
+
+                // Converter pagamentos para formato unificado
+                const mappedPags = pagData.map(p => {
+                    const orcId = String(p.orcamento_id || '');
+                    const b = budgetById.get(orcId) || budgetBySeq.get(orcId);
+                    
+                    let seqidStr = b && b.seqid ? b.seqid : (orcId ? orcId.substring(0,6) : '—');
+                    let pacNome = '';
+                    
+                    if (b) {
+                        pacNome = String(b.pacientenome || '');
+                        if (!pacNome) {
+                            const pid = String(b.paciente_id || b.pacienteid || '');
+                            const pac = patientById.get(pid) || patientBySeq.get(pid);
+                            if (pac) pacNome = String(pac.nome || '');
+                        }
+                    }
+                    if (!pacNome) pacNome = 'Paciente Desconhecido';
+
+                    const dt = p.data_pagamento || p.created_at || '';
+                    const obsBase = `Recebimento - Orçamento #${seqidStr} (Paciente: ${pacNome})`;
+                    const desc = p.observacoes ? `${obsBase} - ${p.observacoes}` : obsBase;
+
+                    return {
+                        id: p.id,
+                        data_transacao: dt,
+                        categoria: 'PAGAMENTO',
+                        tipo: 'CREDITO',
+                        valor: p.valor_pago || 0,
+                        forma_pagamento: p.forma_pagamento || '—',
+                        observacoes: desc,
+                        observacoes_display: desc,
+                        paciente_id: b ? (b.paciente_id || b.pacienteid) : null,
+                        paciente_nome: pacNome.trim().toUpperCase(),
+                        isPagamentoNativo: true
+                    };
+                });
+
+                // Formatar dados originais de transações
+                const mappedTrans = transData.map(t => {
+                    let pat = patientById.get(String(t.paciente_id)) || patientBySeq.get(String(t.paciente_id));
+                    let obsDisplay = typeof replaceObsBudgetTag === 'function' ? replaceObsBudgetTag(t.observacoes || '') : (t.observacoes || '');
+                    
+                    if (!pat) {
+                        try {
+                            const mId = String(t.observacoes || '').match(/\[Orçamento\s+([0-9a-f\-]{8,})\]/i);
+                            const mSeq = String(t.observacoes || '').match(/\[Orçamento\s*#(\d+)\]/i);
+                            let b = null;
+                            if (mId && mId[1]) b = budgetById.get(String(mId[1]));
+                            if (!b && mSeq && mSeq[1]) b = budgetBySeq.get(String(mSeq[1]));
+                            if (b) pat = patientById.get(String(b.pacienteid || b.paciente_id));
+                        } catch { }
+                    }
+                    
+                    const pNomeOriginal = pat?.nome ?? '—';
+                    const pNomeFormatado = pNomeOriginal !== '—' ? pNomeOriginal.trim().toUpperCase() : '—';
+                    
+                    return {
+                        ...t,
+                        paciente_nome: pNomeFormatado,
+                        observacoes_display: obsDisplay,
+                        isPagamentoNativo: false
+                    };
+                });
+
+                // Unificar as duas fontes e garantir normalização estrita
+                let localData = [...mappedTrans, ...mappedPags].map(t => {
+                    return {
+                        id: t.id || null,
+                        data_transacao: t.data_transacao || t.criado_em || new Date().toISOString(),
+                        categoria: (t.categoria || '').toUpperCase(),
+                        tipo: (t.tipo || '').toUpperCase(),
+                        valor: t.valor || t.valor_pago || 0,
+                        forma_pagamento: t.forma_pagamento || t.forma || '—',
+                        observacoes: t.observacoes || '',
+                        observacoes_display: t.observacoes_display || t.observacoes || '',
+                        paciente_nome: t.paciente_nome || t.paciente || '—',
+                        isPagamentoNativo: t.isPagamentoNativo || false
+                    };
+                });
                 
                 // Filtro 3: Categoria (Forma de Pagamento)
                 if (cat !== 'TODAS') {
@@ -30715,43 +31018,20 @@ async function deleteTransaction(id) {
                     });
                 }
                 
-                // Precisamos formatar e popular os nomes dos pacientes assim como no fetchTransactions
-                let localTransactions = localData.map(t => {
-                    // Garantir que as variáveis de contexto existam
-                    const listPat = window.patients || (typeof patients !== 'undefined' ? patients : []);
-                    const listBud = window.budgets || (typeof budgets !== 'undefined' ? budgets : []);
-                    
-                    let pat = listPat.find(p => String(p.seqid) === String(t.paciente_id)) || listPat.find(p => String(p.id) === String(t.paciente_id));
-                    let obsDisplay = typeof replaceObsBudgetTag === 'function' ? replaceObsBudgetTag(t.observacoes || '') : (t.observacoes || '');
-                    if (!pat) {
-                        try {
-                            const mId = String(t.observacoes || '').match(/\[Orçamento\s+([0-9a-f\-]{8,})\]/i);
-                            const mSeq = String(t.observacoes || '').match(/\[Orçamento\s*#(\d+)\]/i);
-                            let b = null;
-                            if (mId && mId[1]) b = listBud.find(x => String(x.id) === String(mId[1]));
-                            if (!b && mSeq && mSeq[1]) b = listBud.find(x => String(x.seqid) === String(mSeq[1]));
-                            if (b) {
-                                pat = listPat.find(p => String(p.id) === String(b.pacienteid || b.paciente_id));
-                                obsDisplay = typeof replaceObsBudgetTag === 'function' ? replaceObsBudgetTag(t.observacoes || '') : (t.observacoes || '');
-                            }
-                        } catch { }
-                    }
-                    
-                    const pNomeOriginal = pat ? pat.nome : '—';
-                    // Trim e Upper no nome do paciente conforme solicitado
-                    const pNomeFormatado = pNomeOriginal !== '—' ? pNomeOriginal.trim().toUpperCase() : '—';
-                    
-                    return {
-                        ...t,
-                        paciente_nome: pNomeFormatado,
-                        observacoes_display: obsDisplay
-                    };
-                });
+                // O array final já está mapeado, basta chamarmos de localTransactions
+                let localTransactions = localData;
                 
                 // Filtro dinâmico pelo nome do paciente (ignorando case)
                 if (pacText) {
-                    localTransactions = localTransactions.filter(t => t.paciente_nome.includes(pacText.toUpperCase()));
+                    localTransactions = localTransactions.filter(t => (t.paciente_nome ?? '').includes(pacText.toUpperCase()));
                 }
+
+                // Ordenação cronológica descritiva pelo Timestamp de Date (mais preciso que string)
+                localTransactions.sort((a, b) => {
+                    const dA = new Date(a.data_transacao || 0).getTime();
+                    const dB = new Date(b.data_transacao || 0).getTime();
+                    return dB - dA;
+                });
                 
         // A tabela localTransactions do extrato vai usar o id de extrato finTransacoesTable 
         // para renderizar corretamente
@@ -30763,26 +31043,33 @@ async function deleteTransaction(id) {
                         // Reutiliza a lógica visual de renderTable mas injeta direto no extrato
                         localTransactions.forEach((t, i) => {
                             const tr = document.createElement('tr');
-                            const budgetId = t.observacoes ? t.observacoes.match(/\[Orçamento\s+#?([0-9a-fA-F\-]+)\]/i) : null;
-                            const budgetText = budgetId ? `Orçamento ${budgetId[1].substring(0,6)}...` : '—';
+                            const mSeq = String(t.observacoes_display || t.observacoes || '').match(/\[Orçamento\s+#(\d+)\]/i);
+                            const mRec = String(t.observacoes_display || t.observacoes || '').match(/Recebimento - Orçamento\s+#(\d+)/i);
+                            let budgetText = '—';
+                            if (mRec && mRec[1]) budgetText = `Orçamento #${mRec[1]}`;
+                            else if (mSeq && mSeq[1]) budgetText = `Orçamento #${mSeq[1]}`;
+                            
+                            const btnExcluir = t.isPagamentoNativo 
+                                ? `<button class="btn btn-icon btn-secondary" disabled title="Não é possível excluir um pagamento de paciente pelo extrato"><i class="ri-delete-bin-line"></i></button>`
+                                : `<button class="btn btn-icon btn-danger" onclick="deleteTransaction('${t.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button>`;
                             
                             tr.innerHTML = `
                                 <td>${i + 1}</td>
                                 <td>${budgetText}</td>
-                                <td><strong>${escapeHtml(t.paciente_nome)}</strong></td>
+                                <td><strong>${escapeHtml(t.paciente_nome || '—')}</strong></td>
                                 <td>${new Date(t.data_transacao).toLocaleString('pt-BR')}</td>
                                 <td>${escapeHtml(t.forma_pagamento || '—')}</td>
-                                <td><strong style="color: ${t.tipo === 'CREDITO' ? 'var(--success-color)' : 'var(--danger-color)'};">R$ ${parseFloat(t.valor).toFixed(2).replace('.',',')}</strong></td>
-                                <td><span class="badge ${t.tipo === 'CREDITO' ? 'badge-success' : 'badge-danger'}">${t.tipo}</span></td>
+                                <td><strong style="color: ${(t.tipo || '') === 'CREDITO' ? 'var(--success-color)' : 'var(--danger-color)'};">R$ ${parseFloat(t.valor || 0).toFixed(2).replace('.',',')}</strong></td>
+                                <td><span class="badge ${(t.tipo || '') === 'CREDITO' ? 'badge-success' : 'badge-danger'}">${t.tipo || '—'}</span></td>
                                 <td><div style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(t.observacoes_display || t.observacoes || '')}">${escapeHtml(t.observacoes_display || t.observacoes || '—')}</div></td>
-                                <td><button class="btn btn-icon btn-danger" onclick="deleteTransaction('${t.id}')" title="Excluir"><i class="ri-delete-bin-line"></i></button></td>
+                                <td>${btnExcluir}</td>
                             `;
                             finTransacoesBody.appendChild(tr);
                         });
                     }
                 }
             } catch (err) {
-                console.error("Erro no filtro de extrato:", err);
+                console.error("Erro Real do Filtro:", err);
                 
                 // Captura erros de timeout do Supabase ou problemas de rede para dar um aviso melhor
                 const errMsg = err && err.message ? err.message : '';
@@ -30795,6 +31082,9 @@ async function deleteTransaction(id) {
                 if (finTransacoesBody) {
                     finTransacoesBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 2rem; color: var(--text-muted);">Erro ao carregar dados. Tente novamente.</td></tr>';
                 }
+                
+                // Mostrar alerta com erro real para debug
+                alert("Erro real: " + errMsg + "\\n\\nDetalhes no console (F12).");
             }
         });
     }
@@ -31165,7 +31455,7 @@ window.viewBudgetPayments = async function (budgetId) {
         ? `<span style="background: var(--success-color); color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">Crédito na Clínica: R$ ${saldoPaciente.toFixed(2)}</span>`
         : saldoPaciente < 0 
             ? `<span style="background: var(--danger-color); color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">Débito Global: R$ ${Math.abs(saldoPaciente).toFixed(2)}</span>`
-            : `<span style="background: var(--bg-color); color: var(--text-muted); padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">Sem Saldo Consolidado</span>`;
+            : `<span style="background: #6b7280; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">Crédito na Clínica: R$ 0,00</span>`;
 
     const body = document.getElementById('budgetDetailBody');
     if (!body) return;
@@ -32594,19 +32884,94 @@ window.executePrintExtrato = async function(customStart, customEnd, customCat, i
     }
     
     try {
-        let query = db.from('financeiro_transacoes')
-            .select('*')
-            .order('data_transacao', { ascending: true });
-            
+        // Removemos qualquer limit() da query de impressão para garantir a volumetria total do extrato
+        let queryTrans = db.from('financeiro_transacoes').select('*').limit(10000);
+        let queryPag = db.from('orcamento_pagamentos').select('*').limit(10000);
+
         if (typeof currentEmpresaId !== 'undefined' && currentEmpresaId) {
-            query = query.eq('empresa_id', currentEmpresaId);
+            queryTrans = queryTrans.eq('empresa_id', currentEmpresaId);
+            queryPag = queryPag.eq('empresa_id', currentEmpresaId);
         }
             
-        const { data, error } = await query;
-        if (error) throw error;
+        // Filtragem por strings de data pura (sem timezone quebrado)
+        if (start) {
+            try {
+                const stringIni = `${start}T00:00:00`;
+                queryTrans = queryTrans.gte('data_transacao', stringIni);
+                queryPag = queryPag.gte('data_pagamento', stringIni);
+            } catch (e) {
+                console.warn("Data inicial de impressão ignorada", e);
+            }
+        }
         
-        let filteredData = data || [];
+        if (end) {
+            try {
+                const stringFin = `${end}T23:59:59`;
+                queryTrans = queryTrans.lte('data_transacao', stringFin);
+                queryPag = queryPag.lte('data_pagamento', stringFin);
+            } catch (e) {
+                console.warn("Data final de impressão ignorada", e);
+            }
+        }
+
+        const [resTrans, resPag] = await Promise.all([queryTrans, queryPag]);
+        if (resTrans.error) throw resTrans.error;
+        if (resPag.error) throw resPag.error;
         
+        let transData = resTrans.data || [];
+        let pagData = resPag.data || [];
+        
+        // Remove transações espelhadas da tabela financeira para evitar duplicidade
+        transData = transData.filter(t => {
+            const cat = String(t.categoria || '').toUpperCase();
+            const obs = String(t.observacoes || '');
+            if (cat === 'PAGAMENTO' && t.referencia_id != null) return false;
+            if (obs.startsWith('[Orçamento #')) return false;
+            return true;
+        });
+
+        // Map pacientes e orçamentos para cruzar dados
+        const patientById = new Map((typeof patients !== 'undefined' ? patients : []).map(p => [String(p.id), p]));
+        const patientBySeq = new Map((typeof patients !== 'undefined' ? patients : []).map(p => [String(p.seqid), p]));
+        const budgetById = new Map((typeof budgets !== 'undefined' ? budgets : []).map(b => [String(b.id), b]));
+        const budgetBySeq = new Map((typeof budgets !== 'undefined' ? budgets : []).map(b => [String(b.seqid), b]));
+
+        // Converter orcamento_pagamentos para o formato de transação
+        const mappedPags = pagData.map(p => {
+            const orcId = String(p.orcamento_id || '');
+            const b = budgetById.get(orcId) || budgetBySeq.get(orcId);
+            
+            let seqidStr = b && b.seqid ? b.seqid : (orcId ? orcId.substring(0,6) : '—');
+            let pacNome = '';
+            
+            if (b) {
+                pacNome = String(b.pacientenome || '');
+                if (!pacNome) {
+                    const pid = String(b.paciente_id || b.pacienteid || '');
+                    const pac = patientById.get(pid) || patientBySeq.get(pid);
+                    if (pac) pacNome = String(pac.nome || '');
+                }
+            }
+            if (!pacNome) pacNome = 'Paciente Desconhecido';
+
+            const dt = p.data_pagamento || p.created_at || '';
+            const obsBase = `Recebimento - Orçamento #${seqidStr} (Paciente: ${pacNome})`;
+            const desc = p.observacoes ? `${obsBase} - ${p.observacoes}` : obsBase;
+
+            return {
+                data_transacao: dt,
+                categoria: 'PAGAMENTO',
+                tipo: 'CREDITO',
+                valor: p.valor_pago || 0,
+                forma_pagamento: p.forma_pagamento || '—',
+                observacoes: desc,
+                paciente_id: b ? (b.paciente_id || b.pacienteid) : null
+            };
+        });
+
+        // Unificar as duas fontes
+        let filteredData = [...transData, ...mappedPags];
+
         // Na Apuração Financeira, filtramos por transações atreladas aos itens atendidos
         // Como o Extrato baseia-se em transações financeiras e a apuração em itens do orçamento,
         // O "espelho" não pode ser construído via banco "financeiro_transacoes", 
@@ -32621,15 +32986,15 @@ window.executePrintExtrato = async function(customStart, customEnd, customCat, i
         // Filtro Local: Data Inicial
         if (start) {
             const startVal = start + 'T00:00:00';
-            filteredData = filteredData.filter(t => t.data_transacao >= startVal);
+            filteredData = filteredData.filter(t => (t.data_transacao || '') >= startVal);
         }
         
         // Filtro Local: Data Final
         if (end) {
-            const endVal = end + 'T23:59:59';
-            filteredData = filteredData.filter(t => t.data_transacao <= endVal);
+            const endVal = end + 'T23:59:59.999Z';
+            filteredData = filteredData.filter(t => (t.data_transacao || '') <= endVal);
         }
-        
+
         // Filtro Local: Categoria (Forma de Pagamento)
         if (categoria && categoria !== 'todas') {
             const normalizeStr = (str) => {
@@ -32643,6 +33008,13 @@ window.executePrintExtrato = async function(customStart, customEnd, customCat, i
                 return formaPgto.includes(catLower);
             });
         }
+        
+        // Ordenação cronológica estrita por timestamp
+        filteredData.sort((a, b) => {
+            const dA = new Date(a.data_transacao || 0).getTime();
+            const dB = new Date(b.data_transacao || 0).getTime();
+            return dA < dB ? -1 : (dA > dB ? 1 : 0);
+        });
         
         if (!filteredData || filteredData.length === 0) {
             showToast('Nenhuma transação encontrada para os filtros selecionados.', true);
@@ -33766,13 +34138,13 @@ document.addEventListener('DOMContentLoaded', () => {
         messagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); width: 100%; padding: 2rem;">Carregando mensagens...</div>';
 
         try {
-            // Mark as read
-            await db.from('portal_mensagens')
-                .update({ lida: true })
-                .eq('empresa_id', empresaId)
-                .eq('paciente_id', pacienteId)
-                .eq('remetente', 'paciente')
-                .eq('lida', false);
+            // REMOVIDO: Marcação automática como lida ao abrir o chat (Admin)
+            // await db.from('portal_mensagens')
+            //     .update({ lida: true })
+            //     .eq('empresa_id', empresaId)
+            //     .eq('paciente_id', pacienteId)
+            //     .eq('remetente', 'paciente')
+            //     .eq('lida', false);
 
             // Fetch messages
             const { data: messages, error } = await db
@@ -33804,10 +34176,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             // Previne duplicação de mensagens (UI otimista vs Realtime)
                             if (document.getElementById(`msg-${newMsg.id}`)) return;
 
-                            // Mark as read if from patient
-                            if (newMsg.remetente === 'paciente') {
-                                db.from('portal_mensagens').update({ lida: true }).eq('id', newMsg.id).then();
-                            }
+                            // REMOVIDO: Marcação de leitura automática via Realtime (Admin)
+                            // if (newMsg.remetente === 'paciente') {
+                            //     db.from('portal_mensagens').update({ lida: true }).eq('id', newMsg.id).then();
+                            // }
                             
                             // Append and scroll
                             const msgs = document.getElementById('portalChatMessagesContainer');
@@ -33815,18 +34187,69 @@ document.addEventListener('DOMContentLoaded', () => {
                             const esPaciente = (newMsg.remetente === 'paciente');
                             
                             let contentHtml = '';
-                            if (newMsg.tipo_mensagem === 'pdf') {
-                                contentHtml = `<a href="${newMsg.conteudo}" target="_blank" style="display: flex; align-items: center; gap: 0.5rem; font-weight: bold; color: inherit; text-decoration: none;">
-                                    <i class="ri-file-pdf-line" style="font-size: 1.25rem;"></i> Visualizar Documento
-                                </a>`;
+                            const isFile = newMsg.tipo_mensagem === 'ARQUIVO' || newMsg.tipo_mensagem === 'pdf' || (newMsg.conteudo && (newMsg.conteudo.toLowerCase().includes('.pdf') || newMsg.conteudo.toLowerCase().includes('.png') || newMsg.conteudo.toLowerCase().includes('.jpg') || newMsg.conteudo.toLowerCase().includes('.jpeg')));
+                            if (isFile) {
+                                let fileName = 'Anexo';
+                                try {
+                                    const urlObj = new URL(newMsg.conteudo);
+                                    if (urlObj.searchParams.has('nome')) {
+                                        fileName = urlObj.searchParams.get('nome');
+                                    } else {
+                                        fileName = newMsg.conteudo.split('/').pop().split('?')[0];
+                                        fileName = decodeURIComponent(fileName);
+                                    }
+                                } catch (e) {
+                                    fileName = newMsg.conteudo.split('/').pop().split('?')[0];
+                                }
+
+                                contentHtml = `
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        <div style="font-size: 0.65rem; opacity: 0.8; line-height: 1; word-break: break-all; margin-bottom: 2px;">
+                                            ${fileName}
+                                        </div>
+                                        <a href="${newMsg.conteudo}" target="_blank" class="btn-view-anexo" data-id="${newMsg.id}" data-remetente="${newMsg.remetente}" style="
+                                            display: flex; 
+                                            align-items: center; 
+                                            gap: 8px; 
+                                            background: rgba(255,255,255,0.2); 
+                                            padding: 8px 12px; 
+                                            border-radius: 6px; 
+                                            text-decoration: none; 
+                                            color: inherit; 
+                                            border: 1px solid rgba(0,0,0,0.1); 
+                                            font-weight: 500;
+                                            transition: background 0.2s;
+                                        ">
+                                            <i class="ri-file-pdf-line" style="font-size: 20px; color: ${esPaciente ? '#dc2626' : '#ffffff'};"></i>
+                                            <span>📄 Visualizar Arquivo Anexo</span>
+                                        </a>
+                                    </div>`;
                             } else {
                                 contentHtml = `<div style="font-size: 0.875rem; line-height: 1.4; word-wrap: break-word; white-space: pre-wrap; margin: 0;">${newMsg.conteudo}</div>`;
                             }
                             
+                            let trashIconHtml = '';
+                            const isWithin30s = (new Date() - new Date(newMsg.created_at)) < 30000;
+                            if (isFile && isWithin30s && newMsg.remetente === 'dentista') {
+                                trashIconHtml = `
+                                    <i class="ri-delete-bin-line btn-delete-anexo-admin" 
+                                       data-id="${newMsg.id}" 
+                                       data-url="${newMsg.conteudo}" 
+                                       data-created-at="${newMsg.created_at}"
+                                       style="cursor: pointer; font-size: 1rem; opacity: 0.7; transition: opacity 0.2s; margin-left: 8px; color: #fca5a5;" 
+                                       onmouseover="this.style.opacity='1'" 
+                                       onmouseout="this.style.opacity='0.7'" 
+                                       title="Remover Anexo">
+                                    </i>`;
+                            }
+
                             const templateBalao = `
                                 <div id="msg-${newMsg.id}" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-start' : 'flex-end'}; margin-bottom: 0.75rem; align-items: flex-end;">
                                     <div style="max-width: 75%; display: inline-block; padding: 0.5rem 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: #ffffff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;' : 'background: #16a34a; color: #ffffff; border-bottom-right-radius: 0;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); text-align: left;">
-                                        ${contentHtml}
+                                        <div style="display: flex; align-items: center; gap: 4px;">
+                                            ${contentHtml}
+                                            ${trashIconHtml}
+                                        </div>
                                         <div style="font-size: 0.65rem; text-align: right; opacity: 0.7; margin-top: 0.25rem; line-height: 1;">
                                             ${new Date(newMsg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                         </div>
@@ -33840,6 +34263,33 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         // Refresh patient list to show latest message
                         loadPortalChatPatients();
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'portal_mensagens', filter: `empresa_id=eq.${empresaId}` },
+                    (payload) => {
+                        const newMsg = payload.new;
+                        // REMOVIDO: Marcação automática de leitura ao receber (Admin)
+                        // if (newMsg.paciente_id == portalChatCurrentPatientId && newMsg.remetente === 'paciente') {
+                        //     db.from('portal_mensagens').update({ lida: true }).eq('id', newMsg.id).then();
+                        // }
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    { event: 'UPDATE', schema: 'public', table: 'portal_mensagens', filter: `empresa_id=eq.${empresaId}` },
+                    (payload) => {
+                        const updatedMsg = payload.new;
+                        if (updatedMsg.paciente_id == portalChatCurrentPatientId) {
+                            const msgEl = document.getElementById(`msg-${updatedMsg.id}`);
+                            if (msgEl) {
+                                // Apenas recarrega a conversa para atualizar o status visual
+                                const patientName = document.getElementById('portalChatHeaderPatientName').innerText;
+                                const phoneEl = document.getElementById('portalChatPatientPhone');
+                                loadPortalChatMessages(portalChatCurrentPatientId, patientName, phoneEl ? phoneEl.innerText : '');
+                            }
+                        }
                     }
                 )
                 .subscribe();
@@ -33898,32 +34348,76 @@ document.addEventListener('DOMContentLoaded', () => {
             const esPaciente = (msg.remetente === 'paciente');
             
             let contentHtml = '';
-            if (msg.tipo_mensagem === 'ARQUIVO' || msg.tipo_mensagem === 'pdf' || (msg.conteudo && msg.conteudo.toLowerCase().includes('.pdf'))) {
+            const isFile = msg.tipo_mensagem === 'ARQUIVO' || msg.tipo_mensagem === 'pdf' || (msg.conteudo && (msg.conteudo.toLowerCase().includes('.pdf') || msg.conteudo.toLowerCase().includes('.png') || msg.conteudo.toLowerCase().includes('.jpg') || msg.conteudo.toLowerCase().includes('.jpeg')));
+            
+            // Verifica se o arquivo foi deletado
+            const isDeleted = msg.tipo_mensagem === 'TEXTO' && msg.conteudo === '🚫 Este anexo foi removido';
+
+            if (isDeleted) {
+                contentHtml = `<div style="font-size: 0.85rem; line-height: 1.4; color: inherit; opacity: 0.7; font-style: italic;">${msg.conteudo}</div>`;
+            } else if (isFile) {
+                let fileName = 'Anexo';
+                try {
+                    const urlObj = new URL(msg.conteudo);
+                    if (urlObj.searchParams.has('nome')) {
+                        fileName = urlObj.searchParams.get('nome');
+                    } else {
+                        fileName = msg.conteudo.split('/').pop().split('?')[0];
+                        fileName = decodeURIComponent(fileName);
+                    }
+                } catch (e) {
+                    fileName = msg.conteudo.split('/').pop().split('?')[0];
+                }
+
                 contentHtml = `
-                    <a href="${msg.conteudo}" target="_blank" style="
-                        display: flex; 
-                        align-items: center; 
-                        gap: 8px; 
-                        background: rgba(255,255,255,0.2); 
-                        padding: 8px 12px; 
-                        border-radius: 6px; 
-                        text-decoration: none; 
-                        color: inherit; 
-                        border: 1px solid rgba(0,0,0,0.1); 
-                        font-weight: 500;
-                        transition: background 0.2s;
-                    ">
-                        <i class="ri-file-pdf-line" style="font-size: 20px; color: ${esPaciente ? '#dc2626' : '#ffffff'};"></i>
-                        <span>📄 Visualizar PDF Anexo</span>
-                    </a>`;
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <div style="font-size: 0.65rem; opacity: 0.8; line-height: 1; word-break: break-all; margin-bottom: 2px;">
+                            ${fileName}
+                        </div>
+                        <a href="${msg.conteudo}" target="_blank" class="btn-view-anexo" data-id="${msg.id}" data-remetente="${msg.remetente}" style="
+                            display: flex; 
+                            align-items: center; 
+                            gap: 8px; 
+                            background: rgba(255,255,255,0.2); 
+                            padding: 8px 12px; 
+                            border-radius: 6px; 
+                            text-decoration: none; 
+                            color: inherit; 
+                            border: 1px solid rgba(0,0,0,0.1); 
+                            font-weight: 500;
+                            transition: background 0.2s;
+                        ">
+                            <i class="ri-file-pdf-line" style="font-size: 20px; color: ${esPaciente ? '#dc2626' : '#ffffff'};"></i>
+                            <span>📄 Visualizar Arquivo Anexo</span>
+                        </a>
+                    </div>`;
             } else {
                 contentHtml = `<div style="font-size: 0.875rem; line-height: 1.4; word-wrap: break-word; white-space: pre-wrap; margin: 0;">${msg.conteudo}</div>`;
+            }
+            
+            // Lixeira Condicional (Apenas para o remetente original, dentro de 30 segundos, e é arquivo)
+            let trashIconHtml = '';
+            const isWithin30s = (new Date() - new Date(msg.created_at)) < 30000;
+            if (isFile && isWithin30s && msg.remetente === 'dentista') {
+                trashIconHtml = `
+                    <i class="ri-delete-bin-line btn-delete-anexo-admin" 
+                       data-id="${msg.id}" 
+                       data-url="${msg.conteudo}" 
+                       data-created-at="${msg.created_at}"
+                       style="cursor: pointer; font-size: 1rem; opacity: 0.7; transition: opacity 0.2s; margin-left: 8px; color: #fca5a5;" 
+                       onmouseover="this.style.opacity='1'" 
+                       onmouseout="this.style.opacity='0.7'" 
+                       title="Remover Anexo">
+                    </i>`;
             }
             
             const templateBalao = `
                 <div id="msg-${msg.id}" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-start' : 'flex-end'}; margin-bottom: 0.75rem; align-items: flex-end;">
                     <div style="max-width: 75%; display: inline-block; padding: 0.5rem 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: #ffffff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;' : 'background: #16a34a; color: #ffffff; border-bottom-right-radius: 0;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); text-align: left;">
-                        ${contentHtml}
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            ${contentHtml}
+                            ${trashIconHtml}
+                        </div>
                         <div style="font-size: 0.65rem; text-align: right; opacity: 0.7; margin-top: 0.25rem; line-height: 1;">
                             ${dataMensagemObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </div>
@@ -33946,6 +34440,90 @@ document.addEventListener('DOMContentLoaded', () => {
                 const phoneEl = document.getElementById('portalChatPatientPhone');
                 const patientPhone = phoneEl ? phoneEl.innerText : '';
                 loadPortalChatMessages(portalChatCurrentPatientId, patientName, patientPhone);
+            }
+        });
+    }
+
+    const inputPortalChatPdfAdmin = document.getElementById('inputPortalChatPdfAdmin');
+    if (inputPortalChatPdfAdmin) {
+        inputPortalChatPdfAdmin.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (!portalChatCurrentPatientId) return alert('Selecione um paciente primeiro.');
+            
+            const empresaId = currentEmpresaId || localStorage.getItem('lastEmpresaId');
+            if (!empresaId) return alert('Empresa não identificada para o envio.');
+
+            const input = document.getElementById('inputPortalChatMessage');
+            const submitBtn = document.querySelector('#formPortalChatSend button[type="submit"]');
+            const labelIcon = inputPortalChatPdfAdmin.parentElement.querySelector('i');
+            
+            try {
+                input.placeholder = 'Enviando arquivo...';
+                input.disabled = true;
+                if (submitBtn) submitBtn.disabled = true;
+                if (labelIcon) {
+                    labelIcon.className = 'ri-loader-4-line ri-spin';
+                    labelIcon.style.color = '#2563eb';
+                }
+
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+                const filePath = `${empresaId}/${portalChatCurrentPatientId}/${fileName}`;
+                
+                // Determine content type based on extension
+                let contentType = 'application/octet-stream';
+                const lowerExt = fileExt.toLowerCase();
+                if (lowerExt === 'pdf') contentType = 'application/pdf';
+                else if (lowerExt === 'png') contentType = 'image/png';
+                else if (['jpg', 'jpeg'].includes(lowerExt)) contentType = 'image/jpeg';
+                else if (lowerExt === 'webp') contentType = 'image/webp';
+                else if (lowerExt === 'gif') contentType = 'image/gif';
+
+                const { data: uploadData, error: uploadError } = await db.storage
+                    .from('portal_anexos')
+                    .upload(filePath, file, {
+                        cacheControl: '3600',
+                        upsert: true,
+                        contentType: contentType
+                    });
+
+                if (uploadError) {
+                    console.error('Erro detalhado do Storage:', uploadError);
+                    throw uploadError;
+                }
+
+                const { data: publicUrlData } = db.storage
+                    .from('portal_anexos')
+                    .getPublicUrl(filePath);
+                
+                // Anexa o nome original como query parameter na URL para extração fácil
+                const publicUrl = publicUrlData.publicUrl + '?nome=' + encodeURIComponent(file.name);
+
+                const { error: insertError } = await db.from('portal_mensagens').insert([{
+                    empresa_id: empresaId,
+                    paciente_id: portalChatCurrentPatientId,
+                    remetente: 'dentista',
+                    conteudo: publicUrl,
+                    lida: false,
+                    tipo_mensagem: 'ARQUIVO'
+                }]);
+
+                if (insertError) throw insertError;
+
+            } catch (err) {
+                console.error('Erro ao enviar arquivo:', err);
+                alert('Erro ao enviar o arquivo. Tente novamente.');
+            } finally {
+                input.placeholder = 'Digite sua resposta...';
+                input.disabled = false;
+                if (submitBtn) submitBtn.disabled = false;
+                if (labelIcon) {
+                    labelIcon.className = 'ri-attachment-2';
+                    labelIcon.style.color = '';
+                }
+                inputPortalChatPdfAdmin.value = '';
             }
         });
     }
@@ -34017,6 +34595,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Make functions globally available if needed
     window.loadPortalChatPatients = loadPortalChatPatients;
+
+    // Ação global para exclusão de anexo (Lixeira Inteligente - Admin e Paciente)
+    document.addEventListener('click', async (e) => {
+        const btnDeleteAdmin = e.target.closest('.btn-delete-anexo-admin');
+        const btnDeletePatient = e.target.closest('.btn-delete-anexo-paciente');
+        
+        if (btnDeleteAdmin || btnDeletePatient) {
+            const btn = btnDeleteAdmin || btnDeletePatient;
+            const msgId = btn.getAttribute('data-id');
+            const fileUrl = btn.getAttribute('data-url');
+            
+            if (!msgId || !fileUrl) return;
+
+            if (!confirm("Deseja mesmo remover este anexo?")) return;
+
+            try {
+                // Extrair path do bucket da URL pública
+                // Exemplo: https://<url>/storage/v1/object/public/portal_anexos/emp_123/pat_123/arquivo.pdf
+                const urlParts = fileUrl.split('/portal_anexos/');
+                if (urlParts.length !== 2) throw new Error("URL de anexo inválida para extração de path.");
+                const filePath = urlParts[1];
+
+                // 1. Remover do Storage
+                const { error: storageError } = await db.storage
+                    .from('portal_anexos')
+                    .remove([filePath]);
+
+                if (storageError) {
+                    console.error("Erro ao remover do storage:", storageError);
+                    // Continua mesmo com erro no storage para garantir que a UI e DB atualizem
+                }
+
+                // 2. Atualizar no DB
+                const { error: dbError } = await db.from('portal_mensagens')
+                    .update({ 
+                        tipo_mensagem: 'TEXTO', 
+                        conteudo: '🚫 Este anexo foi removido' 
+                    })
+                    .eq('id', msgId);
+
+                if (dbError) throw dbError;
+
+                // O gatilho Realtime de UPDATE cuidará de atualizar a tela automaticamente.
+
+            } catch (err) {
+                console.error("Erro ao excluir anexo:", err);
+                alert("Ocorreu um erro ao excluir o anexo. Tente novamente.");
+            }
+        }
+    });
 
     // =============================================
     //  BLOCK RETROACTIVE DATES (UI & MANIPULATION)
@@ -34112,6 +34740,13 @@ document.addEventListener('DOMContentLoaded', () => {
         patientChatMessagesContainer.innerHTML = '<p style="text-align: center; color: #9ca3af;">Carregando mensagens...</p>';
 
         try {
+            // REMOVIDO: Marcar mensagens como lidas automaticamente (Mobile)
+            // await db.from('portal_mensagens')
+            //     .update({ lida: true })
+            //     .eq('paciente_id', paciente.id)
+            //     .eq('remetente', 'dentista')
+            //     .eq('lida', false);
+
             const { data, error } = await db.from('portal_mensagens')
                 .select('*')
                 .eq('paciente_id', paciente.id)
@@ -34155,18 +34790,61 @@ document.addEventListener('DOMContentLoaded', () => {
         const dataMensagemObj = new Date(msg.created_at);
         
         let contentHtml = '';
-        if (msg.tipo_mensagem === 'pdf' || msg.tipo_mensagem === 'ARQUIVO') {
-            contentHtml = `<a href="${msg.conteudo}" target="_blank" style="display: flex; align-items: center; gap: 0.5rem; font-weight: bold; color: inherit; text-decoration: none;">
-                <i class="ri-file-pdf-line" style="font-size: 1.25rem;"></i> Visualizar Anexo
-            </a>`;
+        const isFile = msg.tipo_mensagem === 'pdf' || msg.tipo_mensagem === 'ARQUIVO' || (msg.conteudo && (msg.conteudo.toLowerCase().includes('.pdf') || msg.conteudo.toLowerCase().includes('.png') || msg.conteudo.toLowerCase().includes('.jpg') || msg.conteudo.toLowerCase().includes('.jpeg')));
+        const isDeleted = msg.tipo_mensagem === 'TEXTO' && msg.conteudo === '🚫 Este anexo foi removido';
+
+        if (isDeleted) {
+            contentHtml = `<div style="font-size: 0.85rem; line-height: 1.4; color: inherit; opacity: 0.7; font-style: italic;">${msg.conteudo}</div>`;
+        } else if (isFile) {
+            let fileName = 'Anexo';
+            try {
+                const urlObj = new URL(msg.conteudo);
+                if (urlObj.searchParams.has('nome')) {
+                    fileName = urlObj.searchParams.get('nome');
+                } else {
+                    fileName = msg.conteudo.split('/').pop().split('?')[0];
+                    fileName = decodeURIComponent(fileName);
+                }
+            } catch (e) {
+                fileName = msg.conteudo.split('/').pop().split('?')[0];
+            }
+
+            contentHtml = `
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <div style="font-size: 0.65rem; opacity: 0.8; line-height: 1; word-break: break-all; margin-bottom: 2px;">
+                        ${fileName}
+                    </div>
+                    <a href="${msg.conteudo}" target="_blank" class="btn-view-anexo" data-id="${msg.id}" data-remetente="${msg.remetente}" style="display: flex; align-items: center; gap: 0.5rem; font-weight: bold; color: inherit; text-decoration: none;">
+                        <i class="ri-file-pdf-line" style="font-size: 1.25rem;"></i> Visualizar Anexo
+                    </a>
+                </div>`;
         } else {
             contentHtml = `<div style="font-size: 0.875rem; line-height: 1.4; word-wrap: break-word; white-space: pre-wrap; margin: 0;">${msg.conteudo}</div>`;
         }
         
+        // Lixeira Condicional (Apenas para o remetente original, dentro de 30 segundos, e é arquivo)
+        let trashIconHtml = '';
+        const isWithin30s = (new Date() - new Date(msg.created_at)) < 30000;
+        if (isFile && isWithin30s && msg.remetente === 'paciente') {
+            trashIconHtml = `
+                <i class="ri-delete-bin-line btn-delete-anexo-paciente" 
+                   data-id="${msg.id}" 
+                   data-url="${msg.conteudo}" 
+                   data-created-at="${msg.created_at}"
+                   style="cursor: pointer; font-size: 1.1rem; opacity: 0.7; transition: opacity 0.2s; margin-left: 8px; color: #fca5a5;" 
+                   onmouseover="this.style.opacity='1'" 
+                   onmouseout="this.style.opacity='0.7'" 
+                   title="Remover Anexo">
+                </i>`;
+        }
+
         const templateBalao = `
             <div id="pat-msg-${msg.id}" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-end' : 'flex-start'}; margin-bottom: 0.75rem; align-items: flex-end;">
                 <div style="max-width: 75%; display: inline-block; padding: 0.5rem 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: var(--primary-color); color: #ffffff; border-bottom-right-radius: 0;' : 'background: #ffffff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); text-align: left;">
-                    ${contentHtml}
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        ${contentHtml}
+                        ${trashIconHtml}
+                    </div>
                     <div style="font-size: 0.65rem; text-align: right; opacity: 0.7; margin-top: 0.25rem; line-height: 1;">
                         ${dataMensagemObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </div>
@@ -34193,11 +34871,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!paciente || !paciente.id) return alert('Paciente não identificado.');
 
             const empresaId = paciente.empresa_id || localStorage.getItem('lastEmpresaId') || 'emp_165f9d072a';
+            const submitBtn = document.querySelector('#formPatientChatSend button[type="submit"]');
+            const labelIcon = inputPatientChatPdf.parentElement.querySelector('i');
 
             try {
                 // Notificar usuário que está enviando...
                 inputPatientChatMessage.placeholder = 'Enviando PDF...';
                 inputPatientChatMessage.disabled = true;
+                if (submitBtn) submitBtn.disabled = true;
+                if (labelIcon) {
+                    labelIcon.className = 'ri-loader-4-line ri-spin';
+                    labelIcon.style.color = '#2563eb';
+                }
 
                 const fileExt = file.name.split('.').pop();
                 const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -34219,7 +34904,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { data: publicUrlData } = db.storage
                     .from('portal_anexos')
                     .getPublicUrl(filePath);
-                const publicUrl = publicUrlData.publicUrl;
+                
+                // Anexa o nome original como query parameter na URL para extração fácil
+                const publicUrl = publicUrlData.publicUrl + '?nome=' + encodeURIComponent(file.name);
 
                 const { error: insertError } = await db.from('portal_mensagens').insert([{
                     empresa_id: empresaId,
@@ -34238,6 +34925,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } finally {
                 inputPatientChatMessage.placeholder = 'Digite sua mensagem...';
                 inputPatientChatMessage.disabled = false;
+                if (submitBtn) submitBtn.disabled = false;
+                if (labelIcon) {
+                    labelIcon.className = 'ri-attachment-2';
+                    labelIcon.style.color = '';
+                }
                 inputPatientChatPdf.value = '';
             }
         });
@@ -34290,6 +34982,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 (payload) => {
                     const newMsg = payload.new;
                     appendPatientChatMessage(newMsg);
+
+                    // REMOVIDO: Leitura imediata via Realtime (Mobile)
+                    // const contentPortalChat = document.getElementById('contentPortalChat');
+                    // if (contentPortalChat && contentPortalChat.style.display !== 'none' && newMsg.remetente === 'dentista') {
+                    //     db.from('portal_mensagens').update({ lida: true }).eq('id', newMsg.id).then();
+                    // }
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'portal_mensagens', filter: `paciente_id=eq.${paciente.id}` },
+                (payload) => {
+                    const updatedMsg = payload.new;
+                    const msgEl = document.getElementById(`pat-msg-${updatedMsg.id}`);
+                    if (msgEl) {
+                        // Recarrega mensagens para pegar o estado "Deletado"
+                        loadPatientPortalChatMessages();
+                    }
                 }
             )
             .subscribe();
@@ -34299,6 +35009,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
 
 });
+
+// Cronômetro global para sumir com lixeiras após 30 segundos
+setInterval(() => {
+    const trashIcons = document.querySelectorAll('.btn-delete-anexo-admin, .btn-delete-anexo-paciente');
+    const now = Date.now();
+    trashIcons.forEach(icon => {
+        const createdAtStr = icon.getAttribute('data-created-at');
+        if (createdAtStr) {
+            const createdAtTime = new Date(createdAtStr).getTime();
+            if (now - createdAtTime >= 30000) {
+                // Remove o ícone se já passou 30 segundos
+                icon.remove();
+            }
+        }
+    });
+}, 1000);
 
 
 
