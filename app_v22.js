@@ -118,6 +118,11 @@ const rawDb = window.supabase.createClient(supabaseUrl, supabaseKey, {
     }
 });
 
+// Força a exportação do cliente e da instância final para o escopo global do window
+// Isso resolve o problema de acesso do modulo_atendimento.js e futuros scripts isolados
+window.supabase = rawDb;
+
+
 const dbProxyHandler = {
     get(target, prop, receiver) {
         if (prop === 'then') return target.then ? target.then.bind(target) : undefined;
@@ -182,6 +187,9 @@ const db = new Proxy(rawDb, {
         return target[prop];
     }
 });
+
+// Exporta o Proxy final para ser o DB global (com todas as lógicas embutidas)
+window.db = db;
 
 setInterval(() => {
     const el = document.getElementById('buildBadge');
@@ -5329,56 +5337,64 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
                 let processedCount = 0;
                 const totalCount = selected.length;
                 
-                for (const row of selected) {
-                    const invId = String(row && row.mi && row.mi.inventory_id || '');
-                    const inv = invById.get(invId) || getInventoryById(invId);
-                    if (!inv) {
+                try {
+                    for (const row of selected) {
+                        const invId = String(row && row.mi && row.mi.inventory_id || '');
+                        const inv = invById.get(invId) || getInventoryById(invId);
+                        if (!inv) {
+                            processedCount++;
+                            if (progressBar) progressBar.style.width = `${(processedCount / totalCount) * 100}%`;
+                            continue;
+                        }
+                        const consumivel = isInventoryConsumable(inv);
+                        if (consumivel) {
+                            const novo = toDec(inv && inv.estoque_atual, 0) - toDec(row.qtd, 0);
+                            const { error: updErr } = await db.from(getDbTable('inventory')).update({ estoque_atual: novo }).eq('id', invId);
+                            if (updErr) throw updErr;
+                            try {
+                                const nextInv = { ...inv, estoque_atual: novo };
+                                invById.set(invId, nextInv);
+                                const local = (inventoryItems || []).find(i => String(i && i.id || '') === String(invId));
+                                if (local) local.estoque_atual = novo;
+                            } catch { }
+                        }
+                        
+                        let payload = {
+                            empresa_id: getEstoqueEmpresaScopeId(),
+                            inventory_id: invId,
+                            atendimento_id: atendimentoRef,
+                            orcamento_item_id: itemIdStr || null,
+                            tipo: consumivel ? 'SAIDA' : 'USO',
+                            quantidade: toDec(row.qtd, 0),
+                            motivo,
+                            responsavel_id: currentUser && currentUser.id ? currentUser.id : null
+                        };
+                        console.log('Gravando Log:', itemIdStr || null, payload);
+                        
+                        try {
+                            let ins = await db.from('inventory_logs').insert(payload);
+                            if (ins && ins.error && isMotivoSchemaError(ins.error)) {
+                                const { motivo, ...rest } = payload;
+                                payload = rest;
+                                ins = await db.from('inventory_logs').insert(payload);
+                            }
+                            if (ins && ins.error && isOrcamentoItemIdSchemaError(ins.error)) {
+                                console.warn("Schema error on inventory_logs.orcamento_item_id, retrying without it...");
+                                const { orcamento_item_id, ...rest } = payload;
+                                payload = rest;
+                                ins = await db.from('inventory_logs').insert(payload);
+                            }
+                            if (ins && ins.error) throw ins.error;
+                            console.log('Log gravado com sucesso:', { inventory_id: invId, atendimento_id: atendimentoRef, orcamento_item_id: itemIdStr || null });
+                        } catch (logErr) {
+                            console.error("ERRO COMPORTADO NO LOG DE ESTOQUE (Não interrompe o financeiro):", logErr);
+                        }
+                        
                         processedCount++;
                         if (progressBar) progressBar.style.width = `${(processedCount / totalCount) * 100}%`;
-                        continue;
                     }
-                    const consumivel = isInventoryConsumable(inv);
-                    if (consumivel) {
-                        const novo = toDec(inv && inv.estoque_atual, 0) - toDec(row.qtd, 0);
-                        const { error: updErr } = await db.from(getDbTable('inventory')).update({ estoque_atual: novo }).eq('id', invId);
-                        if (updErr) throw updErr;
-                        try {
-                            const nextInv = { ...inv, estoque_atual: novo };
-                            invById.set(invId, nextInv);
-                            const local = (inventoryItems || []).find(i => String(i && i.id || '') === String(invId));
-                            if (local) local.estoque_atual = novo;
-                        } catch { }
-                    }
-                    let payload = {
-                        empresa_id: getEstoqueEmpresaScopeId(),
-                        inventory_id: invId,
-                        atendimento_id: atendimentoRef,
-                        orcamento_item_id: itemIdStr || null,
-                        tipo: consumivel ? 'SAIDA' : 'USO',
-                        quantidade: toDec(row.qtd, 0),
-                        motivo,
-                        responsavel_id: currentUser && currentUser.id ? currentUser.id : null
-                    };
-                    console.log('Gravando Log:', itemIdStr || null, payload);
-                    let ins = await db.from('inventory_logs').insert(payload);
-                    if (ins && ins.error && isMotivoSchemaError(ins.error)) {
-                        const { motivo, ...rest } = payload;
-                        payload = rest;
-                        ins = await db.from('inventory_logs').insert(payload);
-                    }
-                    if (ins && ins.error && isOrcamentoItemIdSchemaError(ins.error)) {
-                        throw new Error("Schema cache desatualizado para inventory_logs.orcamento_item_id. Recarregue o schema do PostgREST (NOTIFY pgrst, 'reload schema') e tente novamente.");
-                    }
-                    if (ins && ins.error && isMotivoSchemaError(ins.error)) {
-                        const { motivo, ...rest } = payload;
-                        payload = rest;
-                        ins = await db.from('inventory_logs').insert(payload);
-                    }
-                    if (ins && ins.error) throw ins.error;
-                    console.log('Log gravado com sucesso:', { inventory_id: invId, atendimento_id: atendimentoRef, orcamento_item_id: itemIdStr || null });
-                    
-                    processedCount++;
-                    if (progressBar) progressBar.style.width = `${(processedCount / totalCount) * 100}%`;
+                } catch (stockErr) {
+                    console.error("ERRO COMPORTADO NO ESTOQUE (Não interrompe o financeiro):", stockErr);
                 }
                 
                 // Força visualização do final antes de fechar (opcional, pode fechar rápido)
@@ -5395,19 +5411,6 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
     });
 }
 
-async function processStockOut({ budgetId, itemId, agendamentoId }) {
-    const key = `${String(currentEmpresaId || '')}::${String(itemId || '')}::${String(agendamentoId || '')}`;
-    window.__occStockOutLocks = window.__occStockOutLocks || new Map();
-    const locks = window.__occStockOutLocks;
-    if (locks.has(key)) return await locks.get(key);
-    const p = (async () => await modalCheckOutEstoque({ budgetId, itemId, agendamentoId }))();
-    locks.set(key, p);
-    try {
-        return await p;
-    } finally {
-        try { locks.delete(key); } catch { }
-    }
-}
 
 async function tryCloseBudgetFromItems(budgetId) {
     const bid = String(budgetId || '').trim();
@@ -10903,7 +10906,7 @@ function renderTable(data = [], type = 'patients') {
                 </td>
                 <td><strong style="color: ${statusColor}">${escapeHtml(p.status || '')}</strong></td>
                 <td class="actions-cell">
-                    <button class="btn-icon" onclick="printProfessional('${p.id}')" title="Imprimir Ficha">
+                    <button class="btn-icon" onclick="printProfessionalReport('${p.id}')" title="Relatório do Profissional">
                         <i class="ri-printer-line"></i>
                     </button>
                     ${can('profissionais', 'update') ? `
@@ -11237,9 +11240,16 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
         const assinaturaStatusInput = document.getElementById('empresaAssinaturaStatus');
         const planoTipoInput = document.getElementById('empresaPlanoTipo');
         const dataVencInput = document.getElementById('empresaDataVencimento');
+        const tempoConsultaInput = document.getElementById('empresaTempoConsulta');
         const base64Input = document.getElementById('empresaLogoBase64');
         const logoPreview = document.getElementById('logoPreviewContainer');
         const containerModulos = document.getElementById('empresaModulosCheckboxes');
+
+        const empInicioSemanaEl = document.getElementById('emp_horario_inicio_semana');
+        const empFimSemanaEl = document.getElementById('emp_horario_fim_semana');
+        const empInicioSabadoEl = document.getElementById('emp_horario_inicio_sabado');
+        const empFimSabadoEl = document.getElementById('emp_horario_fim_sabado');
+        const empDomingoFechadoEl = document.getElementById('emp_domingo_fechado');
 
         // Módulos disponíveis conhecidos pelo sistema (para a venda avulsa e controle da clínica)
         const allSystemModules = [
@@ -11349,6 +11359,13 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             }
 
             if (dataVencInput) dataVencInput.value = dataObj.data_vencimento ? String(dataObj.data_vencimento).slice(0, 10) : '';
+            if (tempoConsultaInput) tempoConsultaInput.value = dataObj.tempo_consulta_padrao || 30;
+            if (empInicioSemanaEl) empInicioSemanaEl.value = dataObj.horario_inicio_semana || '08:00';
+            if (empFimSemanaEl) empFimSemanaEl.value = dataObj.horario_fim_semana || '18:00';
+            if (empInicioSabadoEl) empInicioSabadoEl.value = dataObj.horario_inicio_sabado || '08:00';
+            if (empFimSabadoEl) empFimSabadoEl.value = dataObj.horario_fim_sabado || '12:00';
+            if (empDomingoFechadoEl) empDomingoFechadoEl.checked = dataObj.domingo_fechado !== undefined ? Boolean(dataObj.domingo_fechado) : true;
+            
             document.getElementById('empresaSupervisorPin').value = dataObj.supervisor_pin || '';
             document.getElementById('empresaSupervisorPin').placeholder = 'Deixe em branco para manter a senha atual';
             base64Input.value = dataObj.logotipo || '';
@@ -11380,6 +11397,12 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             }
             renderModulosCheckboxes('');
             if (dataVencInput) dataVencInput.value = '';
+            if (tempoConsultaInput) tempoConsultaInput.value = '30';
+            if (empInicioSemanaEl) empInicioSemanaEl.value = '08:00';
+            if (empFimSemanaEl) empFimSemanaEl.value = '18:00';
+            if (empInicioSabadoEl) empInicioSabadoEl.value = '08:00';
+            if (empFimSabadoEl) empFimSabadoEl.value = '12:00';
+            if (empDomingoFechadoEl) empDomingoFechadoEl.checked = true;
             base64Input.value = '';
             logoPreview.innerHTML = `<i class="ri-image-line" style="font-size: 1.5rem; color: var(--text-muted);"></i>`;
             idInput.readOnly = false;
@@ -14920,11 +14943,74 @@ async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
                 orcSeq: seqidStr || '—',
                 paciente: pacNome,
                 profissional: info.profName,
-                forma,
-                valor: info.alocado
+                forma: `(Crédito) ${forma}`,
+                valor: info.alocado,
+                isDebito: false
             });
         });
     });
+
+    // --- INÍCIO INJEÇÃO DE DÉBITOS (SERVIÇOS EXECUTADOS) ---
+    try {
+        const { data: dData, error: dErr } = await withTimeout(
+            db.from('financeiro_transacoes')
+                .select('*')
+                .eq('empresa_id', currentEmpresaId)
+                .eq('tipo', 'DEBITO')
+                .gte('data_transacao', startIso)
+                .lte('data_transacao', endIso)
+                .order('data_transacao', { ascending: true }),
+            20000,
+            'movdiaria:financeiro_transacoes:debitos'
+        );
+        if (!dErr && Array.isArray(dData)) {
+            dData.forEach(d => {
+                let pacNome = 'Paciente Desconhecido';
+                if (patientById.has(String(d.paciente_id))) {
+                    pacNome = patientById.get(String(d.paciente_id)).nome;
+                } else if (d.referencia_id) {
+                    // Fallback: tentar achar pelo orçamento
+                    const budget = budgetById.get(String(d.referencia_id)) || Array.from(budgetById.values()).find(b => b.seqid == d.referencia_id);
+                    if (budget) {
+                        pacNome = String(budget.pacientenome || '');
+                        if (!pacNome) {
+                            const pid = String(budget.paciente_id || budget.pacienteid || '');
+                            const pac = patientById.get(pid);
+                            if (pac) pacNome = String(pac.nome || '');
+                        }
+                    }
+                }
+                
+                const orcSeq = d.referencia_id ? `#${d.referencia_id}` : '—';
+                
+                let profNameStr = '—';
+                const profExecutor = d.criado_por ? findProfessionalByAnyId(d.criado_por) : null;
+                if (profExecutor) profNameStr = profExecutor.nome;
+                
+                // Se filtramos por profissional, pula os registros que não são dele
+                if (profSeqId) {
+                    const execSeqId = profExecutor && profExecutor.seqid != null ? String(profExecutor.seqid) : '';
+                    if (execSeqId !== String(profSeqId)) return;
+                }
+                
+                const dt = new Date(d.data_transacao);
+                const hora = formatTimeHHMM(dt);
+                
+                rows.push({
+                    hora,
+                    orcSeq: orcSeq,
+                    paciente: pacNome,
+                    profissional: profNameStr,
+                    forma: `(Débito) Consumo/Execução`,
+                    valor: -Number(d.valor || 0), // Negativo para abater da movimentação do dia
+                    isDebito: true
+                });
+            });
+        }
+    } catch(err) {
+        console.warn("Aviso ao buscar débitos para Mov Diária:", err);
+    }
+    // --- FIM INJEÇÃO DE DÉBITOS ---
 
     const totalAlocado = rows.reduce((acc, r) => acc + Number(r.valor || 0), 0);
     const byForma = {};
@@ -14949,8 +15035,8 @@ async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
                 <td style="width:90px; text-align:center;">${escapeHtml(String(r.orcSeq || '—'))}</td>
                 <td>${escapeHtml(r.paciente)}</td>
                 <td>${escapeHtml(r.profissional)}</td>
-                <td style="width:160px;">${escapeHtml(r.forma)}</td>
-                <td style="width:120px; text-align:right; font-weight: 900;">${escapeHtml(formatCurrencyBRL(r.valor))}</td>
+                <td style="width:160px; color: ${r.isDebito ? '#dc2626' : '#16a34a'};">${escapeHtml(r.forma)}</td>
+                <td style="width:120px; text-align:right; font-weight: 900; color: ${r.isDebito ? '#dc2626' : '#16a34a'};">${escapeHtml(formatCurrencyBRL(r.valor))}</td>
             </tr>
         `).join('') : `<tr><td colspan="6" style="text-align:center; padding: 14px; color:#6b7280;">Nenhum registro para o dia/filtro.</td></tr>`;
 
@@ -15887,38 +15973,6 @@ function getPacienteDetailsBySeqId(seqId) {
     return (patients || []).find(p => Number(p.seqid) === n) || null;
 }
 
-function bindAtendimentoFinalizeSingle() {
-    if (!atendimentoBody) return;
-    if (atendimentoBody.dataset.finalizeBound === '1') return;
-    atendimentoBody.dataset.finalizeBound = '1';
-    atendimentoBody.addEventListener('click', async (ev) => {
-        if (window.__isFinalizingItem) return; // Bloqueio global contra cliques múltiplos
-        const target = ev && ev.target && typeof ev.target.closest === 'function'
-            ? ev.target.closest('button[data-action="finalize-one"]')
-            : null;
-        if (!target) return;
-        if (target.disabled) return;
-        const budgetId = target.getAttribute('data-budget') || '';
-        const itemId = target.getAttribute('data-item') || '';
-        const agendamentoId = target.getAttribute('data-agendamento') || '';
-        if (!itemId) return;
-        
-        window.__isFinalizingItem = true;
-        target.disabled = true;
-        const originalHtml = target.innerHTML;
-        target.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processando...';
-        
-        try {
-            await confirmAtendimentoItem({ budgetId, itemId, agendamentoId }, { suppressRefresh: false });
-        } finally {
-            window.__isFinalizingItem = false;
-            if (document.body.contains(target)) {
-                target.disabled = false;
-                target.innerHTML = originalHtml;
-            }
-        }
-    });
-}
 
 async function fetchAtendimentoForUI() {
     if (!atendimentoDate || !atendimentoProfessional) return;
@@ -15980,7 +16034,7 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
         const extraBudgets = (budgets || []).filter(b => {
             if (b.empresa_id !== currentEmpresaId) return false;
             const stKey = normalizeKey(b.status || '');
-            return stKey === 'APROVADO' || stKey === 'EMEXECUCAO' || stKey === 'LIBERADO';
+            return stKey === 'APROVADO' || stKey === 'EMANDAMENTO' || stKey === 'EMEXECUCAO' || stKey === 'LIBERADO';
         });
 
         // Adiciona os pacientes desses orçamentos na nossa lista de análise, 
@@ -16055,8 +16109,13 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
 
                     const st = String(it.status || it.item_status || '').trim();
                     const stKey = normalizeStatusKey(st);
-                    if (stKey === 'FINALIZADO' || stKey === 'CANCELADO') return;
-                    // Allowed all non-finalized items to have checkbox, to fix regression
+                    
+                    // Permitimos itens já finalizados passarem para a tela com uma marcação visual.
+                    // Apenas cancelados são barrados sumariamente.
+                    if (stKey === 'CANCELADO') return;
+                    
+                    const isAlreadyFinished = (stKey === 'FINALIZADO' || stKey === 'CONCLUIDO');
+                    
                     const eligible = true;
                     if (!eligible) {
                         hasMatchButNotEligible = true;
@@ -16077,7 +16136,8 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
                         budget: b,
                         itemId: String(it.id || ''),
                         itemLabel: itemLabelWithEls,
-                        itemStatus: it.status || '-'
+                        itemStatus: it.status || '-',
+                        isAlreadyFinished
                     });
                 });
             });
@@ -16140,7 +16200,6 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
         }
 
         if (!atendimentoBody) return;
-        bindAtendimentoFinalizeSingle();
         atendimentoBody.innerHTML = '';
         itemsRows.forEach(r => {
             const tr = document.createElement('tr');
@@ -16152,11 +16211,13 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
                 <td style="text-align:center; font-weight:800;">${escapeHtml(String(r.budget?.seqid || '-'))}</td>
                 <td>${escapeHtml(String(r.itemStatus || '-'))}</td>
                 <td>
-                    ${r.isPlaceholder ? '' : `
-                        <button type="button" class="btn btn-sm btn-primary" data-action="finalize-one" data-agendamento="${escapeHtml(r.agendamentoId || '')}" data-budget="${escapeHtml(r.budget?.id || '')}" data-item="${escapeHtml(r.itemId || '')}" title="Marcar este item como Finalizado">
+                    ${r.isPlaceholder ? '' : (
+                        r.isAlreadyFinished 
+                        ? `<span class="badge bg-success text-white" style="background-color: #28a745; padding: 5px 10px; border-radius: 4px; font-weight: bold;"><i class="ri-check-line"></i> Finalizado</span>`
+                        : `<button type="button" class="btn btn-sm btn-primary" data-item-id="${escapeHtml(r.itemId || '')}" onclick="window.finalizeBudgetItem('${escapeHtml(r.budget?.id || '')}', '${escapeHtml(r.itemId || '')}', event)" title="Marcar este item como Finalizado">
                             <i class="ri-check-double-line"></i> Finalizar
-                        </button>
-                    `}
+                        </button>`
+                    )}
                     ${r.paciente?.id ? `<button class="btn-icon" onclick="showPatientDetails('${escapeHtml(r.paciente?.id)}')" title="Prontuário"><i class="ri-folder-user-line"></i></button>` : ''}
                     ${r.budget && r.budget.id ? `<button class="btn-icon" onclick="viewBudgetPayments('${escapeHtml(r.budget?.id)}')" title="Orçamento"><i class="ri-file-list-3-line"></i></button>` : ''}
                 </td>
@@ -16170,92 +16231,6 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
     }
 }
 
-async function confirmAtendimentoItem({ budgetId, itemId, agendamentoId }, { suppressRefresh } = {}) {
-    if (!itemId) return { ok: false, reason: 'missing_item_id' };
-    try {
-        console.log('[Atendimento] UPDATE item:', { itemId: String(itemId), budgetId: String(budgetId || ''), agendamentoId: String(agendamentoId || '') });
-        
-        // Bloqueio cirúrgico: verifica se o item JÁ ESTÁ finalizado no banco antes de prosseguir
-        const { data: checkItem, error: checkErr } = await withTimeout(
-            db.from('orcamento_itens').select('status').eq('id', itemId).maybeSingle(),
-            10000,
-            'orcamento_itens:check_status'
-        );
-        if (checkErr) throw checkErr;
-        if (checkItem && (String(checkItem.status || '').trim().toUpperCase() === 'FINALIZADO' || String(checkItem.status || '').trim().toUpperCase() === 'CONCLUÍDO')) {
-            console.warn(`[Atendimento] Item ${itemId} já se encontra finalizado no banco de dados. Abortando operação duplicada.`);
-            if (!suppressRefresh) showToast('O item já havia sido finalizado anteriormente.', false);
-            return { ok: true, skipped: true };
-        }
-
-        const checkout = await processStockOut({ budgetId, itemId, agendamentoId });
-        if (!checkout || checkout.ok !== true) {
-            if (!suppressRefresh) showToast('Conclusão cancelada no check-out de estoque.', true);
-            return { ok: false, reason: 'checkout_cancelled' };
-        }
-        const { data, error } = await withTimeout(
-            db.from('orcamento_itens')
-                .update({ status: 'Finalizado' })
-                .eq('empresa_id', currentEmpresaId)
-                .eq('id', itemId)
-                .select('id'),
-            15000,
-            'orcamento_itens:finalizar_atendimento'
-        );
-        if (error) throw error;
-        const updatedRows = Array.isArray(data) ? data : [];
-        if (!updatedRows.length) throw new Error('Item não encontrado ou sem permissão para atualizar.');
-
-        let agendaOk = true;
-        let agendaErrorMessage = '';
-        if (agendamentoId) {
-            const { error: agErr } = await withTimeout(
-                db.from('agenda_agendamentos')
-                    .update({ status: 'CONCLUIDO' })
-                    .eq('empresa_id', currentEmpresaId)
-                    .eq('id', agendamentoId),
-                15000,
-                'agenda_agendamentos:concluir_atendimento'
-            );
-            if (agErr) {
-                agendaOk = false;
-                agendaErrorMessage = agErr && agErr.message ? String(agErr.message) : 'Falha ao concluir agendamento.';
-                console.error('Falha ao concluir agenda do atendimento:', agErr);
-            }
-        }
-
-        const b = (budgets || []).find(x => String(x.id) === String(budgetId));
-        if (b && Array.isArray(b.orcamento_itens)) {
-            const it = b.orcamento_itens.find(x => String(x.id) === String(itemId));
-            if (it) it.status = 'Finalizado';
-        }
-        
-        // --- 1. CHAMADA DE COMISSÃO (CORREÇÃO DE REGRA DE NEGÓCIO) ---
-        // Chama a função global que gera a comissão do item.
-        if (typeof window.generateCommissionForItem === 'function') {
-            await window.generateCommissionForItem(budgetId, itemId, true);
-        }
-
-        // A pedido do usuário: chamada tryCloseBudgetFromItems removida
-        // O status do orçamento mudará apenas se o trigger do banco de dados (que ouve a finalização do item) atuar.
-        const closeRes = { closed: false, budget: b };
-
-        if (!suppressRefresh) {
-            showToast('Serviço marcado como Finalizado.');
-            await fetchAtendimentoForUI();
-        }
-        return { ok: true, agendaOk, agendaErrorMessage };
-    } catch (err) {
-        console.error('Erro ao finalizar item do atendimento:', err);
-        const msg = err && err.message ? err.message : 'Erro desconhecido';
-        if (!suppressRefresh) {
-            showToast(`Falha ao finalizar: ${msg}`, true);
-            await fetchAtendimentoForUI();
-        } else {
-            throw err;
-        }
-    }
-}
 
 async function refreshDashboardFromUI() {
     const dashDate = document.getElementById('dashDate');
@@ -21698,9 +21673,143 @@ function renderAgendaSlots({ dateStr, profSeqId, disponibilidade, agendamentos }
         btn.addEventListener('click', () => {
             const id = btn.getAttribute('data-id');
             const a = (agendamentos || []).find(x => String(x.id) === String(id));
-            if (a) openAgendaModalEdit(a);
+            if (a) openAgendaModalEdit(a, dateStr);
         });
     });
+
+    if (slots.length > 0) {
+        window.__currentAgendaSlots = slots;
+        const firstSlot = slots[0];
+        const lastSlot = slots[slots.length - 1];
+        const lastM = parseTimeToMinutes(lastSlot.time) + lastSlot.step;
+        const lastHH = String(Math.floor(lastM / 60)).padStart(2, '0');
+        const lastMM = String(lastM % 60).padStart(2, '0');
+        
+        const minTime = `${firstSlot.time}:00`;
+        const maxTime = `${lastHH}:${lastMM}:00`;
+        
+        if (window.meuCalendarioFull) {
+            window.meuCalendarioFull.destroy();
+        }
+        const calendarEl = document.getElementById('calendarioFull');
+        if (calendarEl && window.FullCalendar) {
+            window.meuCalendarioFull = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'timeGridWeek',
+                slotMinTime: minTime,
+                slotMaxTime: maxTime,
+                locale: 'pt-br',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                }
+            });
+            window.meuCalendarioFull.render();
+        }
+    }
+}
+
+function updateAgendaFimOptions(dateStr) {
+    if (!agendaInicio || !agendaFim) return;
+    const slots = window.__currentAgendaSlots || [];
+    if (!slots.length) return;
+
+    const inicioVal = agendaInicio.value;
+    if (!inicioVal) return;
+    
+    // Garantir que a extração de horas funcione, independentemente do formato do input datetime-local
+    let inicioTimeStr = '';
+    if (inicioVal.includes('T')) {
+        inicioTimeStr = inicioVal.split('T')[1].substring(0, 5);
+    } else if (inicioVal.includes(' ')) {
+        inicioTimeStr = inicioVal.split(' ')[1].substring(0, 5);
+    } else {
+        // Fallback: assume que já é apenas a hora
+        inicioTimeStr = inicioVal.substring(0, 5);
+    }
+    
+    const inicioMins = parseTimeToMinutes(inicioTimeStr);
+    
+    const currentFimVal = agendaFim.value;
+    agendaFim.innerHTML = '';
+    
+    // Set map to avoid duplicates
+    const addedTimes = new Set();
+    
+    // Add valid end slots strictly greater than start time
+    slots.forEach((s) => {
+        const slotMins = parseTimeToMinutes(s.time);
+        if (slotMins <= inicioMins) { 
+            return; // PULA O SLOT SE FOR MENOR OU IGUAL!
+        }
+        
+        if (!addedTimes.has(s.time)) {
+            const val = toLocalDatetimeInputValue(new Date(`${dateStr}T${s.time}:00`));
+            agendaFim.add(new Option(s.time, val));
+            addedTimes.add(s.time);
+        }
+    });
+    
+    // COMO O LUIZ HENRIQUE SUGERIU: APAGAR O ÚLTIMO ITEM DA GRID QUE ENTROU INDEVIDAMENTE NO FIM (ex: "13:30" não faz sentido no fim se a consulta vai além disso, ou vice versa). 
+    // Na verdade, para o combo FIM, nós DEVEMOS adicionar o limite final absoluto (ex: 14:00) 
+    // e DELETAR o item da própria grade que não deve ser o fim.
+    
+    // Add the absolute last possible end time (fechamento da clínica/escala)
+    const lastSlot = slots[slots.length - 1];
+    const lastM = parseTimeToMinutes(lastSlot.time) + lastSlot.step;
+    if (lastM > inicioMins) {
+        const lastHH = String(Math.floor(lastM / 60)).padStart(2, '0');
+        const lastMM = String(lastM % 60).padStart(2, '0');
+        const lastTimeStr = `${lastHH}:${lastMM}`;
+        
+        if (!addedTimes.has(lastTimeStr)) {
+            const lastVal = toLocalDatetimeInputValue(new Date(`${dateStr}T${lastTimeStr}:00`));
+            agendaFim.add(new Option(lastTimeStr, lastVal));
+            addedTimes.add(lastTimeStr);
+        }
+    }
+    
+    // Try to restore previous selection if it's still valid
+    let found = false;
+    for (let i = 0; i < agendaFim.options.length; i++) {
+        if (agendaFim.options[i].value === currentFimVal) {
+            agendaFim.selectedIndex = i;
+            found = true;
+            break;
+        }
+    }
+    
+    // If previous selection is invalid or none was set, select the first valid option
+    if (!found && agendaFim.options.length > 0) {
+        agendaFim.selectedIndex = 0;
+    }
+}
+
+function populateAgendaSelects(dateStr) {
+    if (!agendaInicio || !agendaFim) return;
+    agendaInicio.innerHTML = '';
+    
+    const slots = window.__currentAgendaSlots || [];
+    if (!slots.length) return;
+    
+    // O select de Início carrega normalmente todos os slots (ex: 10:00, 10:30, ... 13:30)
+    slots.forEach((s) => {
+        const val = toLocalDatetimeInputValue(new Date(`${dateStr}T${s.time}:00`));
+        agendaInicio.add(new Option(s.time, val));
+    });
+    
+    // Remover o event listener anterior para evitar múltiplos binds (solução mais segura sem replaceChild que pode falhar em modais dinâmicos)
+    if (window._agendaInicioChangeHandler) {
+        agendaInicio.removeEventListener('change', window._agendaInicioChangeHandler);
+    }
+    
+    window._agendaInicioChangeHandler = () => {
+        updateAgendaFimOptions(dateStr);
+    };
+    
+    agendaInicio.addEventListener('change', window._agendaInicioChangeHandler);
+    
+    updateAgendaFimOptions(dateStr);
 }
 
 function openAgendaModalNew({ dateStr, time, step, profSeqId }) {
@@ -21713,6 +21822,8 @@ function openAgendaModalNew({ dateStr, time, step, profSeqId }) {
     if (agendaObs) agendaObs.value = '';
     if (agendaStatus) agendaStatus.value = 'MARCADO';
 
+    populateAgendaSelects(dateStr);
+
     const start = new Date(`${dateStr}T${time}:00`);
     const end = new Date(start.getTime() + (step * 60000));
     if (agendaInicio) agendaInicio.value = toLocalDatetimeInputValue(start);
@@ -21721,7 +21832,7 @@ function openAgendaModalNew({ dateStr, time, step, profSeqId }) {
     modalAgenda.classList.remove('hidden');
 }
 
-function openAgendaModalEdit(a) {
+function openAgendaModalEdit(a, dateStrArg) {
     if (!modalAgenda) return;
     if (modalAgendaTitle) modalAgendaTitle.textContent = 'Editar Agendamento';
     if (agendaId) agendaId.value = a.id;
@@ -21730,6 +21841,10 @@ function openAgendaModalEdit(a) {
     if (agendaTitulo) agendaTitulo.value = a.titulo || '';
     if (agendaObs) agendaObs.value = a.observacoes || '';
     if (agendaStatus) agendaStatus.value = a.status || 'MARCADO';
+    
+    const dateStr = dateStrArg || a.inicio.split('T')[0];
+    populateAgendaSelects(dateStr);
+    
     if (agendaInicio) agendaInicio.value = toLocalDatetimeInputValue(new Date(a.inicio));
     if (agendaFim) agendaFim.value = toLocalDatetimeInputValue(new Date(a.fim));
 
@@ -21927,8 +22042,16 @@ if (agendaCard) {
     resetAgendaForm();
 }
 
-if (agendaDate) agendaDate.addEventListener('change', () => fetchAgendaForUI());
-if (agendaProfessional) agendaProfessional.addEventListener('change', () => fetchAgendaForUI());
+if (agendaDate) {
+    agendaDate.addEventListener('change', () => {
+        fetchAgendaForUI();
+    });
+}
+if (agendaProfessional) {
+    agendaProfessional.addEventListener('change', () => {
+        fetchAgendaForUI();
+    });
+}
 if (btnAgendaRefresh) btnAgendaRefresh.addEventListener('click', () => fetchAgendaForUI());
 function findNextAvailableAgendaSlotTime(dateStr, stepMins = 30) {
     const now = new Date();
@@ -23265,7 +23388,7 @@ window.renderTable = function (data, type) {
                 <td><span class="badge badge-${escapeHtml(String(item.status || 'Ativo').toLowerCase())}">${escapeHtml(item.status || 'Ativo')}</span></td>
                 <td>
                     <div class="actions">
-                        <button onclick="printProfessional('${item.id}')" class="btn-icon" title="Imprimir Ficha"><i class="ri-printer-line"></i></button>
+                        <button onclick="printProfessionalReport('${item.id}')" class="btn-icon" title="Relatório do Profissional"><i class="ri-printer-line"></i></button>
                         <button onclick="editProfessional('${item.id}')" class="btn-icon" title="Editar"><i class="ri-edit-line"></i></button>
                         <button onclick="deleteProfessional('${item.id}')" class="btn-icon btn-delete" title="Excluir"><i class="ri-delete-bin-line"></i></button>
                     </div>
@@ -25346,6 +25469,20 @@ async function checkAndGenerateProtocoloFiscal(orcamento_id) {
                 console.log(`DEBUG V20: Protocolo Fiscal ${protocol} gerado para o orçamento ${orcamento_id}`);
             }
         }
+        
+        // Verifica se a empresa tem o Hub Fiscal "MANUAL" ativado.
+        // Se for MANUAL, bypass automático para APIs de NFSe, a clínica apenas controla internamente.
+        if (currentEmpresaId) {
+            const emp = activeEmpresasList.find(e => String(e.id) === String(currentEmpresaId));
+            const fiscalCfg = emp ? emp.fiscal_config : null;
+            const provider = String(fiscalCfg && fiscalCfg.provedor_nfe || 'FOCUS_NFE').trim().toUpperCase();
+            
+            if (provider === 'MANUAL') {
+                console.log(`[HUB FISCAL] Bypass de NFSe: Modo MANUAL ativo para orçamento ${orcamento_id}. Nenhuma nota externa será gerada.`);
+                return;
+            }
+        }
+        
     } catch (e) {
         console.error("Erro ao gerar protocolo fiscal:", e);
     }
@@ -26129,6 +26266,82 @@ window.printBudget = function (id) {
     if (!ok) return;
 };
 
+window.printGeneralPatientsReport = function() {
+    if (!patients || patients.length === 0) {
+        showToast('Nenhum paciente para imprimir.', true);
+        return;
+    }
+
+    const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    
+    // Sort alphabetically
+    const sortedPatients = [...patients].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
+    let rowsHtml = '';
+    sortedPatients.forEach(p => {
+        const doc = p.cpf || p.rg || '-';
+        const fone = p.celular || p.telefone || '-';
+        const nasc = p.datanascimento ? new Date(p.datanascimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
+        const status = p.status || 'Ativo';
+        
+        rowsHtml += `
+            <tr>
+                <td>${p.nome || '-'}</td>
+                <td>${doc}</td>
+                <td>${fone}</td>
+                <td>${nasc}</td>
+                <td>${status}</td>
+            </tr>
+        `;
+    });
+
+    const html = `<!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <title>Relatório Geral de Pacientes</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 30px; color: #333; line-height: 1.6; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #003366; padding-bottom: 10px; }
+            .header h1 { color: #003366; font-size: 24px; margin: 0; }
+            .header p { color: #666; font-size: 12px; margin-top: 5px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+            th { background-color: #f0f4f8; color: #003366; font-weight: bold; }
+            tr:nth-child(even) { background-color: #fafafa; }
+            .footer { margin-top: 40px; font-size: 10px; color: #999; text-align: right; }
+            @media print { .no-print { display: none; } }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Relatório Geral de Pacientes</h1>
+            <p>Emitido em: ${hoje}</p>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nome do Paciente</th>
+                    <th>Documento (CPF/RG)</th>
+                    <th>Telefone/Celular</th>
+                    <th>Data de Nascimento</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+        <div class="footer">
+            Documento gerado pelo Sistema OCC - Total de Registros: ${sortedPatients.length}
+        </div>
+    </body>
+    </html>`;
+
+    const ok = openOCCReportPrintWindowFromLegacyHtml({ reportName: 'Relatório Geral de Pacientes', legacyHtml: html, width: 900, height: 700 });
+    if (!ok) return;
+};
+
 window.printPatient = function (id) {
     const p = patients.find(x => x.id === id);
     if (!p) { showToast('Paciente n\u00e3o encontrado.', true); return; }
@@ -26239,13 +26452,58 @@ window.printPatient = function (id) {
     if (!ok) return;
 };
 
-window.printProfessional = function (id) {
+window.printProfessional = async function (id) {
     const p = professionals.find(x => x.id === id);
     if (!p) { showToast('Profissional n\u00e3o encontrado.', true); return; }
 
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
     const specName = getSpecialtyName(p.especialidadeid);
     const com = p.comissions || {};
+    
+    let agendaHtmlRows = '';
+    try {
+        const { data, error } = await db.from('agenda_disponibilidade')
+            .select('*')
+            .eq('empresa_id', currentEmpresaId)
+            .eq('profissional_id', Number(p.seqid))
+            .eq('ativo', true);
+
+        if (error) throw error;
+
+        const byDay = new Map();
+        (data || []).forEach(r => byDay.set(Number(r.dia_semana), r));
+
+        const getDayStr = (dayNum) => {
+            const r = byDay.get(dayNum);
+            if (!r) return 'FECHADO';
+            return `${String(r.hora_inicio).slice(0, 5)} \u00e0s ${String(r.hora_fim).slice(0, 5)}`;
+        };
+
+        const weekDays = [
+            { name: 'Segunda-feira', str: getDayStr(1) },
+            { name: 'Ter\u00e7a-feira', str: getDayStr(2) },
+            { name: 'Quarta-feira', str: getDayStr(3) },
+            { name: 'Quinta-feira', str: getDayStr(4) },
+            { name: 'Sexta-feira', str: getDayStr(5) },
+            { name: 'S\u00e1bado', str: getDayStr(6) },
+            { name: 'Domingo', str: getDayStr(7) }
+        ];
+
+        agendaHtmlRows = weekDays.map(d => `
+            <tr>
+                <td style="padding: 10px; border: 1px solid #d1d5db;"><strong>${d.name}</strong></td>
+                ${d.str === 'FECHADO' 
+                    ? `<td colspan="2" style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-weight: bold; color: #d9534f;">FECHADO</td>` 
+                    : `<td style="padding: 10px; border: 1px solid #d1d5db;">${d.str.split(' \u00e0s ')[0]}</td>
+                       <td style="padding: 10px; border: 1px solid #d1d5db;">${d.str.split(' \u00e0s ')[1]}</td>`
+                }
+            </tr>
+        `).join('');
+
+    } catch (err) {
+        console.error('Erro ao buscar agenda do profissional', err);
+        agendaHtmlRows = `<tr><td colspan="3" style="padding: 10px; text-align: center; color: #666;">Nenhuma escala definida ou erro ao carregar.</td></tr>`;
+    }
 
     const html = `
                                     <!DOCTYPE html>
@@ -26334,14 +26592,39 @@ window.printProfessional = function (id) {
                                                 </table>
                                             </div>
 
+                                            <div class="section">
+                                                <div class="section-title" style="font-size: 14px; font-weight: bold; color: #003366; margin-bottom: 10px;">Agenda Semanal de Atendimento</div>
+                                                <table class="comission-table" style="width: 100%; border-collapse: collapse;">
+                                                    <thead>
+                                                        <tr style="background-color: #f0f4f8; color: #003366; text-align: left;">
+                                                            <th style="padding: 10px; border: 1px solid #d1d5db;">Dias da Semana</th>
+                                                            <th style="padding: 10px; border: 1px solid #d1d5db;">Hor\u00e1rio de In\u00edcio</th>
+                                                            <th style="padding: 10px; border: 1px solid #d1d5db;">Hor\u00e1rio de T\u00e9rmino</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        ${agendaHtmlRows}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
                                             <div class="footer">
-                                                Documento para uso interno da cl\u00ednica.
+                                                Documento gerado pelo Sistema OCC <span style="float: right;">Página 1 de 1</span>
                                             </div>
                                         </body>
                                     </html>`;
 
     const ok = openOCCReportPrintWindowFromLegacyHtml({ reportName: `Ficha do Profissional - ${String(p.nome || '')}`, legacyHtml: html, width: 900, height: 700 });
     if (!ok) return;
+};
+
+window.printProfessionalReport = function(id) {
+    if (!id) return;
+    const p = professionals.find(x => x.id === id);
+    if (!p) { showToast('Profissional não encontrado.', true); return; }
+
+    // Chamando a função original de impressão (que já estava correta, mas agora tem a agenda)
+    window.printProfessional(id);
 };
 
 window.printService = function (id) {
@@ -27569,6 +27852,14 @@ if (empresaForm) {
                 return;
             }
 
+            const inicioSemana = String((document.getElementById('emp_horario_inicio_semana') || {}).value || '08:00').trim();
+            const fimSemana = String((document.getElementById('emp_horario_fim_semana') || {}).value || '18:00').trim();
+            const inicioSabado = String((document.getElementById('emp_horario_inicio_sabado') || {}).value || '08:00').trim();
+            const fimSabado = String((document.getElementById('emp_horario_fim_sabado') || {}).value || '12:00').trim();
+            const domEl = document.getElementById('emp_domingo_fechado');
+            const domingoFechado = domEl ? Boolean(domEl.checked) : true;
+            const tempoConsulta = document.getElementById('empresaTempoConsulta') ? parseInt(document.getElementById('empresaTempoConsulta').value, 10) : 30;
+
             if (!oldId) {
                 if (!supervisorPin) {
                     showToast("Senha do Supervisor é obrigatória ao criar nova empresa.", true);
@@ -27597,7 +27888,13 @@ if (empresaForm) {
                         logotipo: logo || null,
                         assinatura_status: 'TRIAL',
                         plano_tipo: planoTipo,
-                        modulos_contratados: modulosContratados || null
+                        modulos_contratados: modulosContratados || null,
+                        tempo_consulta_padrao: tempoConsulta,
+                        horario_inicio_semana: inicioSemana,
+                        horario_fim_semana: fimSemana,
+                        horario_inicio_sabado: inicioSabado,
+                        horario_fim_sabado: fimSabado,
+                        domingo_fechado: domingoFechado
                     })
                 });
                 const result = await resp.json();
@@ -27624,7 +27921,13 @@ if (empresaForm) {
                     plano_tipo: String((document.getElementById('empresaPlanoTipo') || {}).value || '').trim() || null,
                     data_vencimento: String((document.getElementById('empresaDataVencimento') || {}).value || '').trim() || null,
                     assinatura_status: String((document.getElementById('empresaAssinaturaStatus') || {}).value || '').trim() || null,
-                    modulos_contratados: modulosContratados || null
+                    modulos_contratados: modulosContratados || null,
+                    tempo_consulta_padrao: tempoConsulta,
+                    horario_inicio_semana: inicioSemana,
+                    horario_fim_semana: fimSemana,
+                    horario_inicio_sabado: inicioSabado,
+                    horario_fim_sabado: fimSabado,
+                    domingo_fechado: domingoFechado
                 };
                 
                 if (supervisorPin) {
@@ -28348,8 +28651,15 @@ function initFinancialParamsForm() {
             PLUGNOTAS: byId('fpFiscalCredPlugNotas'),
             EMISSOR_NACIONAL: byId('fpFiscalCredEmissorNacional')
         };
-        Object.values(boxes).forEach((el) => { if (el) el.classList.add('hidden'); });
-        if (boxes[provider]) boxes[provider].classList.remove('hidden');
+        const credsWrapper = document.querySelector('#fpFiscalCredFocus').parentElement; // The container holding all boxes
+        
+        if (provider === 'MANUAL') {
+            if (credsWrapper) credsWrapper.style.display = 'none';
+        } else {
+            if (credsWrapper) credsWrapper.style.display = 'block';
+            Object.values(boxes).forEach((el) => { if (el) el.classList.add('hidden'); });
+            if (boxes[provider]) boxes[provider].classList.remove('hidden');
+        }
     };
 
     const verifyPlanNfseModule = async () => {
@@ -28680,6 +28990,14 @@ function initMyCompanyForm() {
     const logoBase64El = document.getElementById('myCompanyLogoBase64');
     const logoPreviewEl = document.getElementById('myCompanyLogoPreview');
 
+    // Campos de Agenda
+    const tempoConsultaEl = document.getElementById('myCompanyTempoConsulta');
+    const domingoFechadoEl = document.getElementById('myCompanyDomingoFechado');
+    const inicioSemanaEl = document.getElementById('myCompanyHorarioInicioSemana');
+    const fimSemanaEl = document.getElementById('myCompanyHorarioFimSemana');
+    const inicioSabadoEl = document.getElementById('myCompanyHorarioInicioSabado');
+    const fimSabadoEl = document.getElementById('myCompanyHorarioFimSabado');
+
     const emp = (activeEmpresasList || []).find(e => String(e && e.id || '') === String(currentEmpresaId || '')) || null;
     if (idEl) idEl.value = String(currentEmpresaId || '');
     if (nomeEl) nomeEl.value = emp && emp.nome ? String(emp.nome) : '';
@@ -28687,6 +29005,15 @@ function initMyCompanyForm() {
     if (telEl) telEl.value = emp && emp.telefone ? String(emp.telefone) : '';
     if (celEl) celEl.value = emp && emp.celular ? String(emp.celular) : '';
     if (logoBase64El) logoBase64El.value = emp && emp.logotipo ? String(emp.logotipo) : '';
+    
+    // Preencher Agenda
+    if (tempoConsultaEl) tempoConsultaEl.value = emp && emp.tempo_consulta_padrao ? emp.tempo_consulta_padrao : 30;
+    if (domingoFechadoEl) domingoFechadoEl.checked = emp && emp.domingo_fechado !== undefined ? Boolean(emp.domingo_fechado) : true;
+    if (inicioSemanaEl) inicioSemanaEl.value = emp && emp.horario_inicio_semana ? emp.horario_inicio_semana : '08:00';
+    if (fimSemanaEl) fimSemanaEl.value = emp && emp.horario_fim_semana ? emp.horario_fim_semana : '18:00';
+    if (inicioSabadoEl) inicioSabadoEl.value = emp && emp.horario_inicio_sabado ? emp.horario_inicio_sabado : '08:00';
+    if (fimSabadoEl) fimSabadoEl.value = emp && emp.horario_fim_sabado ? emp.horario_fim_sabado : '12:00';
+
     if (logoPreviewEl) {
         if (emp && emp.logotipo) {
             logoPreviewEl.innerHTML = `<img src="${String(emp.logotipo)}" style="width: 100%; height: 100%; object-fit: cover;">`;
@@ -28721,6 +29048,13 @@ function initMyCompanyForm() {
             const celular = String(celEl && celEl.value || '').trim();
             const logotipo = String(logoBase64El && logoBase64El.value || '').trim();
 
+            const tempoConsulta = document.getElementById('myCompanyTempoConsulta') ? parseInt(document.getElementById('myCompanyTempoConsulta').value, 10) : 30;
+            const domingoFechado = document.getElementById('myCompanyDomingoFechado') ? Boolean(document.getElementById('myCompanyDomingoFechado').checked) : true;
+            const inicioSemana = String((document.getElementById('myCompanyHorarioInicioSemana') || {}).value || '08:00').trim();
+            const fimSemana = String((document.getElementById('myCompanyHorarioFimSemana') || {}).value || '18:00').trim();
+            const inicioSabado = String((document.getElementById('myCompanyHorarioInicioSabado') || {}).value || '08:00').trim();
+            const fimSabado = String((document.getElementById('myCompanyHorarioFimSabado') || {}).value || '12:00').trim();
+
             if (!nome || !email) {
                 showToast('Nome e e-mail são obrigatórios.', true);
                 return;
@@ -28732,18 +29066,26 @@ function initMyCompanyForm() {
             }
 
             try {
+                const updateData = {
+                    nome: nome,
+                    email: email,
+                    telefone: telefone || null,
+                    celular: celular || null,
+                    logotipo: logotipo || null,
+                    tempo_consulta_padrao: tempoConsulta,
+                    domingo_fechado: domingoFechado,
+                    horario_inicio_semana: inicioSemana,
+                    horario_fim_semana: fimSemana,
+                    horario_inicio_sabado: inicioSabado,
+                    horario_fim_sabado: fimSabado
+                };
+
                 const { data, error } = await withTimeout(
-                    db.rpc('rpc_update_empresa_profile', {
-                        p_empresa_id: String(currentEmpresaId || ''),
-                        p_nome: nome,
-                        p_email: email,
-                        p_telefone: telefone || null,
-                        p_celular: celular || null,
-                        p_logotipo: logotipo || null
-                    }),
+                    db.from('empresas').update(updateData).eq('id', String(currentEmpresaId || '')).select(),
                     20000,
-                    'empresas:rpc_update_empresa_profile'
+                    'empresas:update_empresa_profile'
                 );
+                
                 if (error) throw error;
 
                 const row = Array.isArray(data) ? data[0] : data;
@@ -28950,8 +29292,10 @@ async function renderPatientFinanceiro(patientId) {
         transData = transData.filter(t => {
             const c = String(t.categoria || '').toUpperCase();
             const o = String(t.observacoes || '');
-            if (c === 'PAGAMENTO' && t.referencia_id != null) return false;
-            if (o.startsWith('[Orçamento #')) return false;
+            const isCredit = String(t.tipo || '').toUpperCase() === 'CREDITO';
+            // Apenas ocultamos o espelho se for CREDITO. Os Débitos de serviços (PAGAMENTO) devem aparecer!
+            if (isCredit && c === 'PAGAMENTO' && t.referencia_id != null) return false;
+            if (isCredit && o.startsWith('[Orçamento #')) return false;
             return true;
         });
 
@@ -28975,8 +29319,33 @@ async function renderPatientFinanceiro(patientId) {
             };
         });
 
+        // Mapear transações financeiras puras (Débitos/Créditos avulsos)
+        const mappedTrans = transData.map(t => {
+            const isCredit = String(t.tipo || '').toUpperCase() === 'CREDITO';
+            let orcNum = t.referencia_id ? `#${t.referencia_id}` : '—';
+            let catStr = t.categoria || 'Geral';
+            let formaStr = t.forma_pagamento || t.forma || '—';
+            
+            // Padroniza a exibição de Débitos Clínicos
+            if (!isCredit && catStr.toUpperCase() === 'PAGAMENTO') {
+                catStr = 'Consumo/Execução';
+                formaStr = 'Baixa Clínica';
+            }
+
+            return {
+                id: t.id,
+                data_transacao: t.data_transacao || t.criado_em,
+                categoria: catStr,
+                tipo: t.tipo,
+                valor: t.valor || 0,
+                forma_pagamento: formaStr,
+                observacoes: t.observacoes || '-',
+                orcamentoNum: orcNum
+            };
+        });
+
         // Unificar e ordenar
-        let allData = [...transData, ...mappedPags];
+        let allData = [...mappedTrans, ...mappedPags];
         
         allData.sort((a, b) => {
             const dateA = new Date(a.data_transacao || 0).getTime();
@@ -28996,10 +29365,12 @@ async function renderPatientFinanceiro(patientId) {
             const isCredit = tipoUpper === 'CREDITO' || tipoUpper === 'RECEITA' || tipoUpper === 'CRÉDITO';
             const typeClass = isCredit ? 'success-color' : 'danger-color';
             const typeIcon = isCredit ? 'ri-arrow-up-circle-line' : 'ri-arrow-down-circle-line';
+            const orcamentoLabel = t.orcamentoNum ? `<strong>${t.orcamentoNum}</strong>` : '—';
 
             return `
                 <tr>
                     <td>${formatDateTime(t.data_transacao)}</td>
+                    <td style="text-align: center;">${orcamentoLabel}</td>
                     <td><span class="badge badge-info">${t.categoria || 'Geral'}</span></td>
                     <td>${t.forma_pagamento || '-'}</td>
                     <td style="text-align: right;"><strong>R$ ${Number(t.valor_pago || t.valor || 0).toFixed(2).replace('.', ',')}</strong></td>
@@ -29966,7 +30337,7 @@ async function fetchFinanceiroNotasStatusMap(txRows = []) {
 
 function getFiscalProviderFromConfig(fiscalCfg) {
     const provider = String(fiscalCfg && fiscalCfg.provedor_nfe || 'FOCUS_NFE').trim().toUpperCase();
-    if (['FOCUS_NFE', 'NFE_IO', 'PLUGNOTAS', 'EMISSOR_NACIONAL'].includes(provider)) return provider;
+    if (['FOCUS_NFE', 'NFE_IO', 'PLUGNOTAS', 'EMISSOR_NACIONAL', 'MANUAL'].includes(provider)) return provider;
     return 'FOCUS_NFE';
 }
 
@@ -30671,8 +31042,9 @@ async function fetchPatientBalance(patientId) {
         let saldo = 0;
         trans.forEach(t => {
             const tipoUpper = (t.tipo || '').toUpperCase();
+            // Inclusão rigorosa da palavra 'DÉBITO' em todas as suas variações ortográficas
             const isCredit = tipoUpper === 'CREDITO' || tipoUpper === 'RECEITA' || tipoUpper === 'CRÉDITO';
-            const isDebit = tipoUpper === 'DEBITO' || tipoUpper === 'DESPESA' || tipoUpper === 'DÉBITO';
+            const isDebit = tipoUpper === 'DEBITO' || tipoUpper === 'DESPESA' || tipoUpper === 'DÉBITO' || tipoUpper === 'DEBITOS';
             const val = parseFloat(t.valor || 0);
             
             if (isCredit) {
@@ -30909,8 +31281,10 @@ async function deleteTransaction(id) {
                 transData = transData.filter(t => {
                     const c = String(t.categoria || '').toUpperCase();
                     const o = String(t.observacoes || '');
-                    if (c === 'PAGAMENTO' && t.referencia_id != null) return false;
-                    if (o.startsWith('[Orçamento #')) return false;
+                    const isCredit = String(t.tipo || '').toUpperCase() === 'CREDITO';
+                    // Apenas ocultamos o espelho se for CREDITO. Os Débitos de serviços (PAGAMENTO) devem aparecer!
+                    if (isCredit && c === 'PAGAMENTO' && t.referencia_id != null) return false;
+                    if (isCredit && o.startsWith('[Orçamento #')) return false;
                     return true;
                 });
 
@@ -30955,6 +31329,7 @@ async function deleteTransaction(id) {
                         observacoes_display: desc,
                         paciente_id: b ? (b.paciente_id || b.pacienteid) : null,
                         paciente_nome: pacNome.trim().toUpperCase(),
+                        orcamentoNum: seqidStr !== '—' ? `#${seqidStr}` : '—',
                         isPagamentoNativo: true
                     };
                 });
@@ -30964,25 +31339,42 @@ async function deleteTransaction(id) {
                     let pat = patientById.get(String(t.paciente_id)) || patientBySeq.get(String(t.paciente_id));
                     let obsDisplay = typeof replaceObsBudgetTag === 'function' ? replaceObsBudgetTag(t.observacoes || '') : (t.observacoes || '');
                     
+                    let b = null;
                     if (!pat) {
                         try {
                             const mId = String(t.observacoes || '').match(/\[Orçamento\s+([0-9a-f\-]{8,})\]/i);
                             const mSeq = String(t.observacoes || '').match(/\[Orçamento\s*#(\d+)\]/i);
-                            let b = null;
                             if (mId && mId[1]) b = budgetById.get(String(mId[1]));
                             if (!b && mSeq && mSeq[1]) b = budgetBySeq.get(String(mSeq[1]));
                             if (b) pat = patientById.get(String(b.pacienteid || b.paciente_id));
                         } catch { }
+                    } else {
+                        // Tentar achar o orçamento pelo referencia_id se o paciente for conhecido
+                        if (t.referencia_id) {
+                            b = budgetBySeq.get(String(t.referencia_id));
+                        }
                     }
                     
                     const pNomeOriginal = pat?.nome ?? '—';
                     const pNomeFormatado = pNomeOriginal !== '—' ? pNomeOriginal.trim().toUpperCase() : '—';
                     
+                    const isCredit = String(t.tipo || '').toUpperCase() === 'CREDITO';
+                    let catStr = t.categoria || 'Geral';
+                    let formaStr = t.forma_pagamento || t.forma || '—';
+                    
+                    if (!isCredit && catStr.toUpperCase() === 'PAGAMENTO') {
+                        catStr = 'Consumo/Execução';
+                        formaStr = 'Baixa Clínica';
+                    }
+
                     return {
                         ...t,
                         paciente_nome: pNomeFormatado,
                         observacoes_display: obsDisplay,
-                        isPagamentoNativo: false
+                        isPagamentoNativo: false,
+                        orcamentoNum: b && b.seqid ? `#${b.seqid}` : (t.referencia_id ? `#${t.referencia_id}` : '—'),
+                        categoria: catStr,
+                        forma_pagamento: formaStr
                     };
                 });
 
@@ -30998,7 +31390,9 @@ async function deleteTransaction(id) {
                         observacoes: t.observacoes || '',
                         observacoes_display: t.observacoes_display || t.observacoes || '',
                         paciente_nome: t.paciente_nome || t.paciente || '—',
-                        isPagamentoNativo: t.isPagamentoNativo || false
+                        isPagamentoNativo: t.isPagamentoNativo || false,
+                        orcamentoNum: t.orcamentoNum || '—',
+                        item: t.item || ''
                     };
                 });
                 
@@ -31033,6 +31427,9 @@ async function deleteTransaction(id) {
                     return dB - dA;
                 });
                 
+                // Guarda em memória global para que a impressão (PDF) use EXATAMENTE a grid que o usuário está vendo
+                window.__lastExtratoFilteredData = localTransactions;
+                
         // A tabela localTransactions do extrato vai usar o id de extrato finTransacoesTable 
         // para renderizar corretamente
         if (finTransacoesBody) {
@@ -31045,8 +31442,10 @@ async function deleteTransaction(id) {
                             const tr = document.createElement('tr');
                             const mSeq = String(t.observacoes_display || t.observacoes || '').match(/\[Orçamento\s+#(\d+)\]/i);
                             const mRec = String(t.observacoes_display || t.observacoes || '').match(/Recebimento - Orçamento\s+#(\d+)/i);
+                            
                             let budgetText = '—';
-                            if (mRec && mRec[1]) budgetText = `Orçamento #${mRec[1]}`;
+                            if (t.orcamentoNum && t.orcamentoNum !== '—') budgetText = `Orçamento ${t.orcamentoNum}`;
+                            else if (mRec && mRec[1]) budgetText = `Orçamento #${mRec[1]}`;
                             else if (mSeq && mSeq[1]) budgetText = `Orçamento #${mSeq[1]}`;
                             
                             const btnExcluir = t.isPagamentoNativo 
@@ -31058,6 +31457,7 @@ async function deleteTransaction(id) {
                                 <td>${budgetText}</td>
                                 <td><strong>${escapeHtml(t.paciente_nome || '—')}</strong></td>
                                 <td>${new Date(t.data_transacao).toLocaleString('pt-BR')}</td>
+                                <td>${escapeHtml(t.categoria || 'Geral')}</td>
                                 <td>${escapeHtml(t.forma_pagamento || '—')}</td>
                                 <td><strong style="color: ${(t.tipo || '') === 'CREDITO' ? 'var(--success-color)' : 'var(--danger-color)'};">R$ ${parseFloat(t.valor || 0).toFixed(2).replace('.',',')}</strong></td>
                                 <td><span class="badge ${(t.tipo || '') === 'CREDITO' ? 'badge-success' : 'badge-danger'}">${t.tipo || '—'}</span></td>
@@ -31451,6 +31851,7 @@ window.viewBudgetPayments = async function (budgetId) {
         console.error("Erro ao carregar saldo global do paciente no modal", e);
     }
     
+    // Atualiza a renderização do badge no modal com base no saldo real extraído do DB
     const saldoBadgeHtml = saldoPaciente > 0 
         ? `<span style="background: var(--success-color); color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">Crédito na Clínica: R$ ${saldoPaciente.toFixed(2)}</span>`
         : saldoPaciente < 0 
@@ -31541,7 +31942,7 @@ window.viewBudgetPayments = async function (budgetId) {
                         <span style="color: var(--success-color); font-weight:bold;"><i class="ri-checkbox-circle-fill"></i> Concluído</span>
                         ${canRevertBudgetItemByProfile(it) ? `<button class="btn btn-sm" onclick="revertBudgetItem('${budget.id}', '${it.id}')" style="background:#f59e0b; color:white; border:none; padding:4px 8px; border-radius:4px;" title="Estornar Finalização">Estornar</button>` : ''}
                     </div>`
-                    : `<button class="btn btn-sm" onclick="finalizeBudgetItem('${budget.id}', '${it.id}')" style="background:#10b981; color:white; border:none; padding:4px 8px; border-radius:4px;" title="Marcar como Finalizado">Finalizar</button>`
+                    : `<button class="btn btn-sm" onclick="window.finalizeBudgetItem('${budget.id}', '${it.id}')" style="background:#10b981; color:white; border:none; padding:4px 8px; border-radius:4px;" title="Marcar como Finalizado">Finalizar</button>`
             }
                         </td>
                     </tr>`;
@@ -31669,10 +32070,14 @@ window.recordBudgetPayment = async function (budgetId) {
     }
 
     try {
+        const pacIdRaw = budget.pacienteid || budget.paciente_id;
+        const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
+        const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
+
         // 1. Inserir em orcamento_pagamentos
         const paymentData = {
-            orcamento_id: budget.seqid,
-            valor_pago: valor,
+            orcamento_id: budget.id,
+            valor_pago: parseFloat(valor),
             forma_pagamento: forma,
             observacoes: obs,
             empresa_id: currentEmpresaId
@@ -31702,10 +32107,6 @@ window.recordBudgetPayment = async function (budgetId) {
             showToast("Pagamento via Saldo registrado!");
         } else {
             try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
-                const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
-                const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
-
                 const transactionData = {
                     paciente_id: pacNumId,
                     tipo: 'CREDITO', // Somente métodos externos (PIX, Dinheiro, etc) geram crédito aqui
@@ -31756,7 +32157,7 @@ window.recordBudgetPayment = async function (budgetId) {
         }
 
     } catch (error) {
-        console.error("Error recording payment:", error);
+        console.error("Erro detalhado do Supabase:", error);
         showToast("Erro ao processar pagamento no banco de dados.", true);
     }
 };
@@ -31777,9 +32178,6 @@ async function autoReleaseEligibleBudgetItems(budget, autorizadoPor) {
             if (valorLiberado + itemTotal > (Number(budget.total_pago || 0) + 0.01)) break;
 
             const profId = item.profissional_id;
-            const profissional = professionals.find(p => p.seqid == profId);
-            let valorComissao = 0;
-            if (profissional) valorComissao = calculateCommission(profissional, item, budget);
 
             const { error: itErr } = await db.from('orcamento_itens').update({
                 status: 'Liberado',
@@ -31789,52 +32187,6 @@ async function autoReleaseEligibleBudgetItems(budget, autorizadoPor) {
 
             item.status = 'Liberado';
             item.autorizado_por = autorizadoPor;
-
-            if (valorComissao > 0) {
-                const { data: existing, error: exErr } = await withTimeout(
-                    db.from('financeiro_comissoes')
-                        .select('id')
-                        .eq('item_id', item.id)
-                        .eq('empresa_id', currentEmpresaId)
-                        .maybeSingle(),
-                    15000,
-                    'financeiro_comissoes:auto_exists'
-                );
-                if (exErr) throw exErr;
-                if (!existing) {
-                    const nowIso = new Date().toISOString();
-                    const comissaoData = {
-                        profissional_id: profId,
-                        item_id: item.id,
-                        valor_comissao: valorComissao,
-                        status: 'PENDENTE',
-                        data_geracao: nowIso,
-                        empresa_id: currentEmpresaId
-                    };
-                    const { error: cErr } = await db.from('financeiro_comissoes').insert(comissaoData);
-                    if (cErr) throw cErr;
-                }
-            }
-
-            try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
-                const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
-                const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
-                const desc = item.descricao || 'Serviço';
-                const debitoData = {
-                    paciente_id: pacNumId,
-                    tipo: 'DEBITO',
-                    categoria: 'PAGAMENTO',
-                    valor: itemTotal,
-                    observacoes: `[Consumo] ${desc} (Orçamento #${budget.seqid})`,
-                    referencia_id: budget.seqid,
-                    empresa_id: currentEmpresaId,
-                    criado_por: currentUser.id
-                };
-                await db.from('financeiro_transacoes').insert(debitoData);
-            } catch (debErr) {
-                console.warn("Aviso: Não foi possível registrar o débito do serviço no financeiro.", debErr);
-            }
 
             valorLiberado += itemTotal;
             releasedCount += 1;
@@ -32171,46 +32523,7 @@ window.revertBudgetItem = async function (budgetId, itemId) {
     }
 };
 
-window.finalizeBudgetItem = async function (budgetId, itemId) {
-    if (!confirm('Confirmar a conclusão deste serviço?')) return;
-
-    try {
-        const budget = budgets.find(b => b.id === budgetId || b.seqid == budgetId);
-        if (!budget) return;
-        const prevStatus = String(budget.status || '').trim();
-        const checkout = await processStockOut({ budgetId: String(budget.id || budgetId || ''), itemId: String(itemId || ''), agendamentoId: String(itemId || '') });
-        if (!checkout || checkout.ok !== true) {
-            showToast('Conclusão cancelada no check-out de estoque.', true);
-            return;
-        }
-
-        await window.generateCommissionForItem(budgetId, itemId, true);
-
-        // 1. Atualizar o item para Finalizado no banco
-        const { error: itErr } = await db.from('orcamento_itens')
-            .update({ status: 'Finalizado' })
-            .eq('id', itemId);
-
-        if (itErr) throw itErr;
-
-        // 2. Atualizar estado local
-        const item = (budget.orcamento_itens || []).find(it => it.id === itemId);
-        if (item) item.status = 'Finalizado';
-
-        // A pedido do usuário: chamada tryCloseBudgetFromItems removida
-        // O status do orçamento mudará apenas se o trigger do banco de dados (que ouve a finalização do item) atuar.
-        
-        budget.status = prevStatus;
-        showToast('Item marcado como Finalizado.');
-
-        viewBudgetPayments(budgetId);
-        refreshBudgetsListView();
-
-    } catch (err) {
-        console.error('Erro ao finalizar item:', err);
-        showToast('Erro ao finalizar item no banco de dados.', true);
-    }
-};
+// A rotina window.finalizeBudgetItem foi migrada para modulo_atendimento.js para isolamento e performance
 
 window.generateCommissionForItem = async function (budgetId, itemId, silent) {
     window.__commLocks = window.__commLocks || new Set();
@@ -32884,93 +33197,7 @@ window.executePrintExtrato = async function(customStart, customEnd, customCat, i
     }
     
     try {
-        // Removemos qualquer limit() da query de impressão para garantir a volumetria total do extrato
-        let queryTrans = db.from('financeiro_transacoes').select('*').limit(10000);
-        let queryPag = db.from('orcamento_pagamentos').select('*').limit(10000);
-
-        if (typeof currentEmpresaId !== 'undefined' && currentEmpresaId) {
-            queryTrans = queryTrans.eq('empresa_id', currentEmpresaId);
-            queryPag = queryPag.eq('empresa_id', currentEmpresaId);
-        }
-            
-        // Filtragem por strings de data pura (sem timezone quebrado)
-        if (start) {
-            try {
-                const stringIni = `${start}T00:00:00`;
-                queryTrans = queryTrans.gte('data_transacao', stringIni);
-                queryPag = queryPag.gte('data_pagamento', stringIni);
-            } catch (e) {
-                console.warn("Data inicial de impressão ignorada", e);
-            }
-        }
-        
-        if (end) {
-            try {
-                const stringFin = `${end}T23:59:59`;
-                queryTrans = queryTrans.lte('data_transacao', stringFin);
-                queryPag = queryPag.lte('data_pagamento', stringFin);
-            } catch (e) {
-                console.warn("Data final de impressão ignorada", e);
-            }
-        }
-
-        const [resTrans, resPag] = await Promise.all([queryTrans, queryPag]);
-        if (resTrans.error) throw resTrans.error;
-        if (resPag.error) throw resPag.error;
-        
-        let transData = resTrans.data || [];
-        let pagData = resPag.data || [];
-        
-        // Remove transações espelhadas da tabela financeira para evitar duplicidade
-        transData = transData.filter(t => {
-            const cat = String(t.categoria || '').toUpperCase();
-            const obs = String(t.observacoes || '');
-            if (cat === 'PAGAMENTO' && t.referencia_id != null) return false;
-            if (obs.startsWith('[Orçamento #')) return false;
-            return true;
-        });
-
-        // Map pacientes e orçamentos para cruzar dados
-        const patientById = new Map((typeof patients !== 'undefined' ? patients : []).map(p => [String(p.id), p]));
-        const patientBySeq = new Map((typeof patients !== 'undefined' ? patients : []).map(p => [String(p.seqid), p]));
-        const budgetById = new Map((typeof budgets !== 'undefined' ? budgets : []).map(b => [String(b.id), b]));
-        const budgetBySeq = new Map((typeof budgets !== 'undefined' ? budgets : []).map(b => [String(b.seqid), b]));
-
-        // Converter orcamento_pagamentos para o formato de transação
-        const mappedPags = pagData.map(p => {
-            const orcId = String(p.orcamento_id || '');
-            const b = budgetById.get(orcId) || budgetBySeq.get(orcId);
-            
-            let seqidStr = b && b.seqid ? b.seqid : (orcId ? orcId.substring(0,6) : '—');
-            let pacNome = '';
-            
-            if (b) {
-                pacNome = String(b.pacientenome || '');
-                if (!pacNome) {
-                    const pid = String(b.paciente_id || b.pacienteid || '');
-                    const pac = patientById.get(pid) || patientBySeq.get(pid);
-                    if (pac) pacNome = String(pac.nome || '');
-                }
-            }
-            if (!pacNome) pacNome = 'Paciente Desconhecido';
-
-            const dt = p.data_pagamento || p.created_at || '';
-            const obsBase = `Recebimento - Orçamento #${seqidStr} (Paciente: ${pacNome})`;
-            const desc = p.observacoes ? `${obsBase} - ${p.observacoes}` : obsBase;
-
-            return {
-                data_transacao: dt,
-                categoria: 'PAGAMENTO',
-                tipo: 'CREDITO',
-                valor: p.valor_pago || 0,
-                forma_pagamento: p.forma_pagamento || '—',
-                observacoes: desc,
-                paciente_id: b ? (b.paciente_id || b.pacienteid) : null
-            };
-        });
-
-        // Unificar as duas fontes
-        let filteredData = [...transData, ...mappedPags];
+        let filteredData = [];
 
         // Na Apuração Financeira, filtramos por transações atreladas aos itens atendidos
         // Como o Extrato baseia-se em transações financeiras e a apuração em itens do orçamento,
@@ -32981,35 +33208,19 @@ window.executePrintExtrato = async function(customStart, customEnd, customCat, i
             // Chama a função dedicada de impressão da apuração
             printApuracaoFinanceira(start, end);
             return;
-        }
-
-        // Filtro Local: Data Inicial
-        if (start) {
-            const startVal = start + 'T00:00:00';
-            filteredData = filteredData.filter(t => (t.data_transacao || '') >= startVal);
-        }
-        
-        // Filtro Local: Data Final
-        if (end) {
-            const endVal = end + 'T23:59:59.999Z';
-            filteredData = filteredData.filter(t => (t.data_transacao || '') <= endVal);
-        }
-
-        // Filtro Local: Categoria (Forma de Pagamento)
-        if (categoria && categoria !== 'todas') {
-            const normalizeStr = (str) => {
-                let n = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-                return n.replace(" de ", " ");
-            };
-            const catLower = normalizeStr(categoria);
-            
-            filteredData = filteredData.filter(t => {
-                const formaPgto = normalizeStr(t.forma_pagamento || '');
-                return formaPgto.includes(catLower);
-            });
+        } else {
+            // SE FOR EXTRATO NORMAL, LER EXATAMENTE A GRID FILTRADA EM MEMÓRIA (ESPELHO DA TELA)
+            if (window.__lastExtratoFilteredData && window.__lastExtratoFilteredData.length > 0) {
+                // Clonamos para não afetar a ordem em tela (vamos ordenar crescente para impressão)
+                filteredData = [...window.__lastExtratoFilteredData];
+            } else {
+                showToast('Nenhum dado na grid. Filtre os dados na tela antes de imprimir.', true);
+                if (loader) loader.style.display = 'none';
+                return;
+            }
         }
         
-        // Ordenação cronológica estrita por timestamp
+        // Ordenação cronológica estrita por timestamp (CRESCENTE para impressão contábil)
         filteredData.sort((a, b) => {
             const dA = new Date(a.data_transacao || 0).getTime();
             const dB = new Date(b.data_transacao || 0).getTime();
@@ -33031,56 +33242,166 @@ window.executePrintExtrato = async function(customStart, customEnd, customCat, i
             return d;
         };
         
-        let totalReceita = 0;
-        let totalDespesa = 0;
+        let totalGlobalReceita = 0;
+        let totalGlobalDespesa = 0;
         
-        let trHtml = '';
+        // 1. Agrupamento por Orçamento
+        const groupedData = {};
+        
         filteredData.forEach(t => {
             const val = parseFloat(t.valor) || 0;
-            if (t.tipo === 'CREDITO') totalReceita += val;
-            if (t.tipo === 'DEBITO') totalDespesa += val;
+            if (t.tipo === 'CREDITO') totalGlobalReceita += val;
+            if (t.tipo === 'DEBITO') totalGlobalDespesa += val;
             
-            // Tentar pegar nome do paciente do cache
-            let pNome = '';
-            if (t.paciente_id && typeof patients !== 'undefined' && Array.isArray(patients)) {
-                const p = patients.find(x => String(x.id) === String(t.paciente_id) || String(x.seqid) === String(t.paciente_id));
-                if (p) pNome = p.nome;
+            // Usamos os dados já formatados e enriquecidos na grid
+            const pNome = t.paciente_nome || '';
+            
+            // Determinar a chave do grupo
+            let groupKey = t.orcamentoNum && t.orcamentoNum !== '—' ? `Orçamento ${t.orcamentoNum}` : 'Transações Avulsas';
+            
+            // Tentar extrair orçamento da observação caso seja avulsa
+            if (groupKey === 'Transações Avulsas') {
+                const descStr = t.observacoes_display || t.observacoes || '';
+                const mSeq = String(descStr).match(/\[Orçamento\s+#(\d+)\]/i);
+                const mRec = String(descStr).match(/Recebimento - Orçamento\s+#(\d+)/i);
+                if (mRec && mRec[1]) groupKey = `Orçamento #${mRec[1]}`;
+                else if (mSeq && mSeq[1]) groupKey = `Orçamento #${mSeq[1]}`;
             }
             
-            const desc = t.observacoes ? t.observacoes : (pNome ? 'Paciente: ' + pNome : '-');
-            const color = t.tipo === 'CREDITO' ? '#166534' : '#991b1b';
+            if (!groupedData[groupKey]) {
+                groupedData[groupKey] = {
+                    transactions: [],
+                    totalReceita: 0,
+                    totalDespesa: 0,
+                    pacienteNome: pNome
+                };
+            }
             
-            trHtml += `
-                <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${formatDataBR(t.data_transacao)}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${t.categoria || '-'}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${desc}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${t.forma_pagamento || '-'}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: ${color}; font-weight: 600; text-align: right;">${formatCurrencyBRL(val)}</td>
-                </tr>
-            `;
+            groupedData[groupKey].transactions.push(t);
+            if (t.tipo === 'CREDITO') groupedData[groupKey].totalReceita += val;
+            if (t.tipo === 'DEBITO') groupedData[groupKey].totalDespesa += val;
         });
         
-        const saldo = totalReceita - totalDespesa;
-        const saldoColor = saldo >= 0 ? '#166534' : '#991b1b';
+        // 2. Construção do HTML por Grupos
+        let groupsHtml = '';
+        
+        for (const [groupName, groupData] of Object.entries(groupedData)) {
+            let trHtml = '';
+            
+            groupData.transactions.forEach(t => {
+                const val = parseFloat(t.valor) || 0;
+                let desc = t.observacoes_display || t.observacoes || '';
+                
+                // Limpar textos redundantes do grupo e extrair a descrição real do procedimento
+                let itemName = desc.replace(/\[Orçamento\s+#\d+\]\s*/ig, '')
+                           .replace(/\s*\(*Orçamento\s*#\d+\)*\s*/ig, '')
+                           .replace(/\[Consumo\/Execução\]\s*/ig, '')
+                           .replace(/Recebimento\s*-\s*Paciente:[^\|]+\|\s*/ig, '')
+                           .replace(/Recebimento\s*-\s*/ig, '')
+                           .replace(/Paciente:[^\|]+\|\s*/ig, '')
+                           .trim();
+                
+                // Limpeza extra para pipes perdidos no início ou fim
+                itemName = itemName.replace(/^\|\s*/, '').replace(/\s*\|$/, '').replace(/Serviço Executado/ig, '').trim();
+                
+                if (!itemName || itemName.trim() === '') {
+                    itemName = t.tipo === 'CREDITO' ? 'Recebimento' : 'Movimentação';
+                }
+                
+                const valCredito = t.tipo === 'CREDITO' ? formatCurrencyBRL(val) : '';
+                const valDebito = t.tipo === 'DEBITO' ? formatCurrencyBRL(val) : '';
+                
+                // Se for DÉBITO, forçamos a coluna "Item / Serviço" a receber a string limpa do nome do procedimento
+                // Se for CRÉDITO, mantemos "PAGAMENTO" ou a categoria original
+                const colItemServico = t.tipo === 'DEBITO' ? (t.item || itemName) : (t.categoria || '-');
+                
+                // Limpamos a coluna descrição para não ficar repetitiva com o item
+                const colDescricao = t.tipo === 'DEBITO' ? '-' : itemName;
+                
+                trHtml += `
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; width: 90px;">${formatDataBR(t.data_transacao)}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; width: 140px; font-weight: 500;">${colItemServico}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${colDescricao}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; width: 130px;">${t.forma_pagamento || '-'}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #166534; font-weight: 600; width: 110px;">${valCredito}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #991b1b; font-weight: 600; width: 110px;">${valDebito}</td>
+                    </tr>
+                `;
+            });
+            
+            const subSaldo = groupData.totalReceita - groupData.totalDespesa;
+            const subSaldoColor = subSaldo >= 0 ? '#166534' : '#991b1b';
+            
+            const headerInfo = groupName === 'Transações Avulsas' ? groupName : `${groupName} <span style="color: #64748b; font-size: 15px; font-weight: 500; margin-left: 10px;">Paciente: ${groupData.pacienteNome || '—'}</span>`;
+            
+            groupsHtml += `
+                <div class="budget-group">
+                    <h3 class="budget-title">${headerInfo}</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Item / Serviço</th>
+                                <th>Descrição / Observação</th>
+                                <th>Forma de Pag.</th>
+                                <th style="text-align: right;">Entradas (Crédito)</th>
+                                <th style="text-align: right;">Saídas (Débito)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${trHtml}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4" style="text-align: right; padding: 10px 8px; font-weight: bold; background: #f8fafc; color: #475569;">SUBTOTAIS DO GRUPO:</td>
+                                <td style="text-align: right; padding: 10px 8px; font-weight: bold; background: #f8fafc; color: #166534;">${formatCurrencyBRL(groupData.totalReceita)}</td>
+                                <td style="text-align: right; padding: 10px 8px; font-weight: bold; background: #f8fafc; color: #991b1b;">${formatCurrencyBRL(groupData.totalDespesa)}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="6" style="text-align: right; padding: 10px 8px; font-weight: bold; background: #f1f5f9; font-size: 14px;">
+                                    SALDO DO ORÇAMENTO: <span style="color: ${subSaldoColor}; margin-left: 10px; font-size: 15px;">${formatCurrencyBRL(subSaldo)}</span>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            `;
+        }
+        
+        const saldoGlobal = totalGlobalReceita - totalGlobalDespesa;
+        const saldoGlobalColor = saldoGlobal >= 0 ? '#166534' : '#991b1b';
         
         const printHtml = `
             <!DOCTYPE html>
             <html lang="pt-BR">
             <head>
                 <meta charset="UTF-8">
-                <title>Extrato de Transações</title>
+                <title>Extrato de Transações Contábil</title>
                 <style>
-                    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; margin: 0; padding: 20px; font-size: 13px; }
-                    .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #cbd5e1; }
-                    .header h1 { margin: 0 0 5px 0; color: #0f172a; font-size: 20px; }
+                    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; margin: 0; padding: 20px; font-size: 12px; }
+                    .header { text-align: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #cbd5e1; }
+                    .header h1 { margin: 0 0 8px 0; color: #0f172a; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
                     .header p { margin: 0; color: #64748b; font-size: 14px; }
-                    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-                    th { background-color: #f8fafc; color: #475569; font-weight: 600; text-align: left; padding: 10px 8px; border-bottom: 2px solid #e2e8f0; }
-                    .totals { display: flex; justify-content: flex-end; gap: 30px; margin-top: 20px; padding-top: 15px; border-top: 2px solid #cbd5e1; }
-                    .total-box { text-align: right; }
-                    .total-box div:first-child { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-                    .total-box div:last-child { font-size: 18px; font-weight: 700; margin-top: 4px; }
+                    
+                    .budget-group { margin-bottom: 35px; page-break-inside: avoid; }
+                    .budget-title { background: #e2e8f0; color: #1e293b; padding: 8px 12px; margin: 0 0 10px 0; font-size: 16px; border-radius: 4px 4px 0 0; border-left: 4px solid #3b82f6; }
+                    
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+                    th { background-color: #f8fafc; color: #475569; font-weight: 600; text-align: left; padding: 8px; border-bottom: 2px solid #e2e8f0; font-size: 12px; text-transform: uppercase; }
+                    td { font-size: 12px; }
+                    
+                    .global-totals-card { 
+                        margin-top: 40px; padding: 20px; border: 2px solid #cbd5e1; border-radius: 8px; 
+                        background: #f8fafc; page-break-inside: avoid; 
+                    }
+                    .global-totals-title { text-align: center; font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }
+                    .totals { display: flex; justify-content: space-around; }
+                    .total-box { text-align: center; flex: 1; border-right: 1px solid #cbd5e1; }
+                    .total-box:last-child { border-right: none; }
+                    .total-box div:first-child { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+                    .total-box div:last-child { font-size: 20px; font-weight: 800; }
+                    
                     @media print {
                         body { padding: 0; }
                         button { display: none !important; }
@@ -33089,38 +33410,28 @@ window.executePrintExtrato = async function(customStart, customEnd, customCat, i
             </head>
             <body>
                 <div class="header">
-                    <h1>Extrato de Transações</h1>
-                    <p>Período: ${formatDataBR(start)} a ${formatDataBR(end)}</p>
-                    ${categoria ? `<p>Filtro Categoria: ${categoria}</p>` : ''}
+                    <h1>Relatório Financeiro Contábil</h1>
+                    <p>Período de Apuração: ${formatDataBR(start)} a ${formatDataBR(end)}</p>
+                    ${categoria ? `<p>Filtro Aplicado: ${categoria}</p>` : ''}
                 </div>
                 
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 90px;">Data</th>
-                            <th style="width: 150px;">Categoria</th>
-                            <th>Descrição / Observação</th>
-                            <th style="width: 130px;">Forma de Pag.</th>
-                            <th style="width: 120px; text-align: right;">Valor</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${trHtml}
-                    </tbody>
-                </table>
+                ${groupsHtml}
                 
-                <div class="totals">
-                    <div class="total-box">
-                        <div>Total Entradas</div>
-                        <div style="color: #166534;">${formatCurrencyBRL(totalReceita)}</div>
-                    </div>
-                    <div class="total-box">
-                        <div>Total Saídas</div>
-                        <div style="color: #991b1b;">${formatCurrencyBRL(totalDespesa)}</div>
-                    </div>
-                    <div class="total-box">
-                        <div>Saldo do Período</div>
-                        <div style="color: ${saldoColor};">${formatCurrencyBRL(saldo)}</div>
+                <div class="global-totals-card">
+                    <div class="global-totals-title">Consolidado Administrativo Geral</div>
+                    <div class="totals">
+                        <div class="total-box">
+                            <div>Total Global de Entradas</div>
+                            <div style="color: #166534;">${formatCurrencyBRL(totalGlobalReceita)}</div>
+                        </div>
+                        <div class="total-box">
+                            <div>Total Global de Saídas</div>
+                            <div style="color: #991b1b;">${formatCurrencyBRL(totalGlobalDespesa)}</div>
+                        </div>
+                        <div class="total-box">
+                            <div>Balanço Geral do Período</div>
+                            <div style="color: ${saldoGlobalColor};">${formatCurrencyBRL(saldoGlobal)}</div>
+                        </div>
                     </div>
                 </div>
                 

@@ -1,25 +1,15 @@
-const { createClient } = require('C:/Projeto_TRAE/Projeto_DP/node_modules/@supabase/supabase-js');
-const db = createClient('https://trcktinwjpvcikidrryn.supabase.co', 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA');
+const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
 
-async function run() {
-    console.log("Checking DB...");
-    // 1. Get budget 18
-    const { data: budget, error: bErr } = await db.from('orcamentos').select('*').eq('seqid', 18).single();
-    if (bErr) { console.error("Budget err:", bErr); return; }
-    console.log("Budget:", budget.id, budget.status);
-
-    // 2. Get items
-    const { data: items, error: iErr } = await db.from('orcamento_itens').select('*').eq('orcamento_id', budget.id);
-    if (iErr) { console.error("Items err:", iErr); return; }
-    console.log("Items:");
-    items.forEach(i => console.log(` - ID: ${i.id}, Status: ${i.status}, Prof: ${i.profissional_id}`));
-
-    // 3. Get commissions
-    const itemIds = items.map(i => i.id);
-    const { data: comms, error: cErr } = await db.from('financeiro_comissoes').select('*').in('item_id', itemIds);
-    if (cErr) { console.error("Comms err:", cErr); return; }
-    console.log("Commissions:");
-    comms.forEach(c => console.log(` - ID: ${c.id}, Item: ${c.item_id}, Valor: ${c.valor_comissao}, Prof: ${c.profissional_id}`));
+async function check() {
+    const code = fs.readFileSync('c:\\Projeto_TRAE\\Projeto_DP\\app_v22.js', 'utf8');
+    const urlMatch = code.match(/const\s+supabaseUrl\s*=\s*['"]([^'"]+)['"]/);
+    const keyMatch = code.match(/const\s+supabaseKey\s*=\s*['"]([^'"]+)['"]/);
+    if (urlMatch && keyMatch) {
+        const supabase = createClient(urlMatch[1], keyMatch[1]);
+        const { data, error } = await supabase.from('orcamento_pagamentos').select('*').limit(1);
+        if (error) console.error("Error:", error);
+        else console.log("Columns:", data && data.length ? Object.keys(data[0]) : "No data");
+    }
 }
-
-run();
+check();

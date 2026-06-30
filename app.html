@@ -801,9 +801,14 @@
             <section id="patientListView" class="view-section active">
                 <div class="section-header">
                     <h2>Pacientes</h2>
-                    <button id="btnAddNew" class="btn btn-primary">
-                        <i class="ri-user-add-line"></i> Novo Paciente
-                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="btnPrintPatients" class="btn btn-secondary" onclick="printGeneralPatientsReport()">
+                            <i class="ri-printer-line"></i> Imprimir Geral
+                        </button>
+                        <button id="btnAddNew" class="btn btn-primary">
+                            <i class="ri-user-add-line"></i> Novo Paciente
+                        </button>
+                    </div>
                 </div>
 
                 <div class="search-bar">
@@ -2526,6 +2531,41 @@
                                     <input type="hidden" id="myCompanyLogoBase64">
                                 </div>
                             </div>
+                            
+                            <div class="form-group span-2" style="border: 1px dashed var(--border-color); padding: 15px; border-radius: var(--border-radius); background-color: #f8fafc; margin-top: 10px;">
+                                <h4 style="margin: 0 0 15px 0; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
+                                    <i class="ri-calendar-event-line"></i> Configurações da Agenda
+                                </h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div class="form-group">
+                                        <label for="myCompanyTempoConsulta">Tempo de Consulta Padrão (minutos) *</label>
+                                        <input type="number" id="myCompanyTempoConsulta" min="5" step="5" value="30" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="display:block;">&nbsp;</label>
+                                        <label class="checkbox-label" style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+                                            <input type="checkbox" id="myCompanyDomingoFechado" checked> 
+                                            <span style="font-weight: 500;">Domingo Fechado?</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="myCompanyHorarioInicioSemana">Início da Agenda (Seg-Sex) *</label>
+                                        <input type="time" id="myCompanyHorarioInicioSemana" required value="08:00">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="myCompanyHorarioFimSemana">Fim da Agenda (Seg-Sex) *</label>
+                                        <input type="time" id="myCompanyHorarioFimSemana" required value="18:00">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="myCompanyHorarioInicioSabado">Início da Agenda (Sábado)</label>
+                                        <input type="time" id="myCompanyHorarioInicioSabado" value="08:00">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="myCompanyHorarioFimSabado">Fim da Agenda (Sábado)</label>
+                                        <input type="time" id="myCompanyHorarioFimSabado" value="12:00">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -2595,6 +2635,7 @@
                                         <option value="NFE_IO">NFe.io (Planos Mensais)</option>
                                         <option value="PLUGNOTAS">PlugNotas / TecnoSpeed</option>
                                         <option value="EMISSOR_NACIONAL">Emissor Nacional Direto (Beta - Requer Certificado A1)</option>
+                                        <option value="MANUAL">Controle Interno (Sem Provedor / Avulso)</option>
                                     </select>
                                     <button type="button" id="btnOpenFiscalHubInfo" class="btn btn-secondary" title="Informações do Hub Fiscal"><i class="ri-information-line"></i> Info</button>
                                 </div>
@@ -2856,6 +2897,41 @@
                                 <input type="date" id="empresaDataVencimento">
                             </div>
 
+                            <div class="form-group span-2" style="border: 1px dashed var(--border-color); padding: 15px; border-radius: var(--border-radius); background-color: #f8fafc; margin-top: 10px;">
+                                <h4 style="margin: 0 0 15px 0; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
+                                    <i class="ri-calendar-event-line"></i> Configurações da Agenda
+                                </h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div class="form-group">
+                                        <label for="empresaTempoConsulta">Tempo de Consulta Padrão (minutos) *</label>
+                                        <input type="number" id="empresaTempoConsulta" min="5" step="5" value="30" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="display:block;">&nbsp;</label>
+                                        <label class="checkbox-label" style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+                                            <input type="checkbox" id="emp_domingo_fechado" checked> 
+                                            <span style="font-weight: 500;">Domingo Fechado?</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="empresaHorarioInicioSemana">Início da Agenda (Seg-Sex) *</label>
+                                        <input type="time" id="emp_horario_inicio_semana" required value="08:00">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="empresaHorarioFimSemana">Fim da Agenda (Seg-Sex) *</label>
+                                        <input type="time" id="emp_horario_fim_semana" required value="18:00">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="empresaHorarioInicioSabado">Início da Agenda (Sábado)</label>
+                                        <input type="time" id="emp_horario_inicio_sabado" value="08:00">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="empresaHorarioFimSabado">Fim da Agenda (Sábado)</label>
+                                        <input type="time" id="emp_horario_fim_sabado" value="12:00">
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="form-group span-2">
                                 <label for="empresaLogo">Logotipo (Arquivo)</label>
                                 <div style="display: flex; align-items: center; gap: 15px;">
@@ -3037,6 +3113,7 @@
                             <thead>
                                 <tr>
                                     <th>Data</th>
+                                    <th style="text-align: center;">Orçamento</th>
                                     <th>Categoria</th>
                                     <th>Forma</th>
                                     <th style="text-align: right;">Valor</th>
@@ -4743,11 +4820,11 @@
                             </div>
                             <div class="form-group">
                                 <label for="agendaInicio">Início</label>
-                                <input id="agendaInicio" type="datetime-local" class="form-control" required>
+                                <select id="agendaInicio" class="form-control" required></select>
                             </div>
                             <div class="form-group">
                                 <label for="agendaFim">Fim</label>
-                                <input id="agendaFim" type="datetime-local" class="form-control" required>
+                                <select id="agendaFim" class="form-control" required></select>
                             </div>
                             <div class="form-group">
                                 <label for="agendaStatus">Status</label>
@@ -6075,7 +6152,9 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <!-- App Script Loader (Robust) -->
-    <script src="app_v22.js?v=20260626_QUERIES_SEPARADAS_FIX"></script>
+    <script src="modulo_financeiro.js?v=20260629_NEW_CHAT_CLEAN_FIX"></script>
+    <script src="modulo_atendimento.js?v=20260629_NEW_CHAT_CLEAN_FIX"></script>
+    <script src="app_v22.js?v=20260629_NEW_CHAT_CLEAN_FIX"></script>
     <script>
         // Wait for Supabase to be available (handles async document.write fallbacks)
         var supabaseCheckAttempts = 0;
