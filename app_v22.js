@@ -10087,6 +10087,44 @@ function bindEstoqueModule() {
             }
         });
     }
+
+    if (document.getElementById('btnMenuNotasFiscais')) {
+        document.getElementById('btnMenuNotasFiscais').addEventListener('click', () => {
+            stockReportsActiveKey = 'notasFiscais';
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            const navFin = document.getElementById('navFinanceiro');
+            if(navFin) navFin.classList.add('active');
+
+            const financeiroView = document.getElementById('financeiroView');
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            if(financeiroView) financeiroView.classList.remove('hidden');
+
+            const reportPanel = document.getElementById('stockReportPanel');
+            const homePanel = document.getElementById('stockReportsHomePanel');
+            const cardBusca = document.getElementById('finPacienteSearch')?.closest('.card');
+            const cardSaldo = document.getElementById('finPainelSaldo');
+            const cardExtrato = document.getElementById('finExtratoCard');
+            const cardEmissao = document.getElementById('financeiroEmissaoNotasWrapper');
+            const cardConciliacao = document.getElementById('financeiroConciliacaoFiscalWrapper');
+            
+            if (reportPanel) reportPanel.classList.add('hidden');
+            if (homePanel) homePanel.classList.add('hidden');
+            if (cardBusca) cardBusca.style.display = 'none';
+            if (cardSaldo) cardSaldo.classList.add('hidden');
+            if (cardExtrato) cardExtrato.style.display = 'none';
+
+            if (cardEmissao) cardEmissao.style.display = 'block';
+            if (cardConciliacao) cardConciliacao.style.display = 'block';
+
+            void renderFinanceiroNotasGrid();
+
+            const topButtons = financeiroView.querySelectorAll('.section-header .btn');
+            topButtons.forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
+            document.getElementById('btnMenuNotasFiscais').classList.remove('btn-secondary');
+            document.getElementById('btnMenuNotasFiscais').classList.add('btn-primary');
+        });
+    }
+
     if (btnStockReportBack) btnStockReportBack.addEventListener('click', () => setStockReportsActive('home'));
     syncStockReportInitialAdjustButton();
     if (btnStockReportPrint) btnStockReportPrint.addEventListener('click', printStockReportActive);
@@ -30189,7 +30227,8 @@ function getNotaStatusVisual(rawStatus) {
     const k = normalizeKey(String(rawStatus || 'PENDENTE'));
     if (k.includes('ERRO') || k.includes('REJEIT')) return { icon: '🔴', label: 'Erro' };
     if (k.includes('EMIT') || k.includes('APROV') || k.includes('SUCESS') || k.includes('SIMULAD') || k.includes('CONCLUID')) return { icon: '🟢', label: 'Concluída' };
-    if (k.includes('PROC') || k.includes('VALID') || k.includes('FILA') || k.includes('PEND')) return { icon: '🟡', label: 'Em processamento' };
+    if (k.includes('PROC') || k.includes('VALID') || k.includes('FILA')) return { icon: '🟡', label: 'Em processamento' };
+    if (k.includes('PEND') || k === 'NAOEMITIDA' || k === '') return { icon: '⚪', label: 'Não Emitida' };
     return { icon: '⚪', label: 'Sem nota' };
 }
 
@@ -30446,6 +30485,10 @@ const OCC_NFE_ADAPTERS = {
             numero_nota: `EN-${ref}-${String(now).slice(0, 10).replace(/-/g, '')}`,
             chave_acesso: `ENAC-${ref}-${String(now).replace(/\D/g, '').slice(0, 24)}`
         };
+    },
+    async MANUAL(ctx) {
+        // NÃO deve ser chamado. No modo MANUAL a nota é processada pelo Modal de Associação.
+        throw new Error('Modo MANUAL não deve disparar API Fiscal.');
     }
 };
 
@@ -30466,6 +30509,25 @@ async function updateFinanceiroNotaProviderResult(payload, providerResult, provi
         chave_acesso: String(result.chave_acesso || ''),
         provedor_nfe: String(providerKey || '')
     };
+
+    // VERIFICAÇÃO DE SEGURANÇA: Não sobrescrever nota já concluída (proteção contra duplo clique/concorrência)
+    const checkQuery = await db.from('financeiro_notas')
+        .select('status_nota, numero_nota, chave_acesso')
+        .eq('empresa_id', String(payload && payload.empresa_id || ''))
+        .eq('referencia_id', String(payload && payload.referencia_id || ''))
+        .maybeSingle();
+        
+    if (checkQuery.data) {
+        const currentStatus = String(checkQuery.data.status_nota || '').toUpperCase();
+        const hasNumber = String(checkQuery.data.numero_nota || '').trim().length > 0;
+        const hasKey = String(checkQuery.data.chave_acesso || '').trim().length > 0;
+        
+        if (currentStatus === 'CONCLUIDO' && (hasNumber || hasKey)) {
+            console.warn(`[SEGURANÇA FISCAL] Tentativa de sobrescrita bloqueada para Orçamento ${payload.referencia_id}. Nota já processada.`);
+            return true; // Aborta update silenciosamente para evitar quebrar o fluxo do usuário
+        }
+    }
+
     let q = db.from('financeiro_notas')
         .update(patch)
         .eq('empresa_id', String(payload && payload.empresa_id || ''))
@@ -30571,15 +30633,20 @@ async function renderFinanceiroNotasGrid() {
     const wrapper = document.getElementById('financeiroEmissaoNotasWrapper');
     const conciliaWrapper = document.getElementById('financeiroConciliacaoFiscalWrapper');
     const hasNfse = await checkEmpresaHasNfseModule();
-    if (wrapper) {
-        if (!hasNfse) {
-            wrapper.style.display = 'none';
-            if (conciliaWrapper) conciliaWrapper.style.display = 'block';
-            return;
-        } else {
-            wrapper.style.display = 'block';
-            if (conciliaWrapper) conciliaWrapper.style.display = 'none';
+    
+    if (stockReportsActiveKey === 'notasFiscais') {
+        if (wrapper) {
+            if (!hasNfse) {
+                wrapper.style.display = 'none';
+                if (conciliaWrapper) conciliaWrapper.style.display = 'block';
+                return;
+            } else {
+                wrapper.style.display = 'block';
+                if (conciliaWrapper) conciliaWrapper.style.display = 'none';
+            }
         }
+    } else {
+        if (!hasNfse) return;
     }
 
     if (!finNotasBody) return;
@@ -30630,16 +30697,31 @@ async function renderFinanceiroNotasGrid() {
     void autoFixPatientsIbgeForTransactions(txRowsRaw);
     const statusMap = await fetchFinanceiroNotasStatusMap(txRows);
     finNotasBody.innerHTML = groups.map((g) => {
-        const meta = statusMap.get(`ref:${g.ref}`) || { status: 'PENDENTE', pdf_url: '' };
-        const st = String(meta && meta.status || 'PENDENTE');
+        const meta = statusMap.get(`ref:${g.ref}`);
+        const hasRealData = meta && (meta.numero_nota || meta.chave_acesso || meta.pdf_url);
+        
+        // Se não houver meta real ou estiver vazio, força o status para PENDENTE/Não Emitida
+        const st = hasRealData ? String(meta.status || 'PENDENTE') : 'PENDENTE';
         const v = getNotaStatusVisual(st);
+        
         const pdfUrl = String(meta && meta.pdf_url || '').trim();
+        const protocoloNfe = String(meta && meta.chave_acesso || '');
+        const protocoloNumber = String(meta && meta.numero_nota || '');
+        const protocoloToUse = protocoloNfe || protocoloNumber || `OCC-2026-${g.ref}`;
+        
+        // Exibir sempre o protocolo, independente do provedor, usando o mesmo estilo da imagem
+        const showProtocolo = `<small style="color: #d32f2f; display: block; margin-top: 4px; font-weight: bold;">Protocolo para NFSe: ${protocoloToUse}</small>`;
+
         const detailsItems = (g.itens || []).map(it => {
             const d = String(it && (it.descricao || it.servicodescricao || it.nome) || 'Serviço').trim();
             const q = toDec(it && (it.qtde || it.quantidade), 1);
             const u = toDec(it && it.valor, 0);
             return `<li>${escapeHtml(d)} — ${escapeHtml(formatNumberBR(q, 2))} x ${escapeHtml(formatCurrencyBRL(u))} = <strong>${escapeHtml(formatCurrencyBRL(q * u))}</strong></li>`;
         }).join('');
+
+        const isNotaBloqueada = st === 'CONCLUIDO' || st === 'PROCESSANDO' || st === 'EM PROCESSAMENTO';
+        const buttonDisabled = isNotaBloqueada ? 'disabled style="pointer-events: none; opacity: 0.6; padding:4px 10px; font-size:12px;"' : 'style="padding:4px 10px; font-size:12px;"';
+
         return `
             <tr>
                 <td style="padding:0.65rem; border-bottom:1px solid var(--border-color);"><strong>#${escapeHtml(g.ref)}</strong><br><span style="font-size:11px; color:var(--text-muted);">${escapeHtml(formatDateTime(g.data))}</span></td>
@@ -30649,11 +30731,12 @@ async function renderFinanceiroNotasGrid() {
                         <summary style="cursor:pointer;">${escapeHtml(g.descricao || `Serviços Odontológicos ref. ao Orçamento #${g.ref}`)}</summary>
                         ${detailsItems ? `<ul style="margin:8px 0 0 18px; padding:0;">${detailsItems}</ul>` : '<div style="margin-top:6px; color:var(--text-muted);">Sem itens detalhados.</div>'}
                     </details>
+                    ${showProtocolo}
                 </td>
                 <td style="padding:0.65rem; border-bottom:1px solid var(--border-color); text-align:right;"><strong>${escapeHtml(formatCurrencyBRL(g.valorBruto))}</strong></td>
                 <td style="padding:0.65rem; border-bottom:1px solid var(--border-color); text-align:center;" title="${escapeHtml(String(st))}">${v.icon} ${escapeHtml(v.label)}</td>
                 <td style="padding:0.65rem; border-bottom:1px solid var(--border-color); text-align:center;">
-                    <button class="btn btn-secondary" style="padding:4px 10px; font-size:12px;" onclick="emitirNotaTesteFinanceiro('${escapeHtml(g.ref)}')"><i class="ri-file-add-line"></i> Emitir NF-e do Orçamento</button>
+                    <button class="btn btn-secondary" ${buttonDisabled} onclick="this.disabled=true; this.style.opacity='0.6'; this.style.pointerEvents='none'; emitirNotaTesteFinanceiro('${escapeHtml(g.ref)}')"><i class="ri-file-add-line"></i> Emitir NF-e do Orçamento</button>
                     ${pdfUrl ? `<button class="btn btn-muted" style="padding:4px 10px; font-size:12px; margin-left:6px;" onclick="occOpenNotaPdf('${escapeJsString(pdfUrl)}')"><i class="ri-file-pdf-line"></i> PDF</button>` : ''}
                 </td>
             </tr>
@@ -30747,8 +30830,17 @@ window.emitirNotaTesteFinanceiro = async function (budgetRef) {
             valor: valorBruto,
             created_at: new Date().toISOString()
         };
-        await saveFinanceiroNotaTeste(notaPayload);
+        
         const provider = getFiscalProviderFromConfig(fiscalCfg);
+        if (provider === 'MANUAL') {
+            // Abre o modal de associação manual (NENHUM INSERT AQUI)
+            openFinanceiroNotaManualModal(notaPayload);
+            return;
+        }
+
+        // Para os outros providers automáticos, salva a linha de auditoria PENDENTE primeiro e depois envia
+        await saveFinanceiroNotaTeste(notaPayload);
+
         const credentials = getFiscalProviderCredentials(fiscalCfg);
         const providerResult = await dispatchFiscalHubNfe({ provider, credentials, payload: notaPayload, jsonBase: jsonTeste });
         if (providerResult && providerResult.status_nota === 'ERRO') {
@@ -30767,18 +30859,113 @@ window.emitirNotaTesteFinanceiro = async function (budgetRef) {
     }
 };
 
+window.openFinanceiroNotaManualModal = function(payload) {
+    // Garante que o modal existe
+    let modal = document.getElementById('modalFinanceiroNotaManual');
+    
+    // Função para reativar o botão na grid se fechar sem salvar
+    const closeModalAndEnableBtn = () => {
+        if (modal) modal.classList.add('hidden');
+        void renderFinanceiroNotasGrid(); // Recarrega a grid limpando os disabled temporários
+    };
+
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modalFinanceiroNotaManual';
+        modal.className = 'modal-overlay hidden';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h2>Controle Interno: Associação Manual de Nota</h2>
+                    <button type="button" class="btn-close-modal" id="btnManualNotaClose1"><i class="ri-close-line"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.9rem;">Preencha os dados da nota emitida externamente para vincular a este orçamento no sistema.</p>
+                    <div class="form-group">
+                        <label>Número da Nota</label>
+                        <input type="text" id="manualNotaNumero" class="form-control" placeholder="Ex: 12345">
+                    </div>
+                    <div class="form-group">
+                        <label>Chave de Acesso / Token de Autenticidade</label>
+                        <input type="text" id="manualNotaChave" class="form-control" placeholder="Opcional">
+                    </div>
+                    <div class="form-group">
+                        <label>Link para o PDF da Nota</label>
+                        <input type="url" id="manualNotaPdfUrl" class="form-control" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="modal-footer" style="display:flex; justify-content:flex-end; gap: 0.75rem;">
+                    <button type="button" class="btn btn-secondary" id="btnManualNotaClose2">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnSalvarNotaManual">Salvar Associação</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Atrela os eventos de fechar que limpam o bloqueio
+        document.getElementById('btnManualNotaClose1').addEventListener('click', closeModalAndEnableBtn);
+        document.getElementById('btnManualNotaClose2').addEventListener('click', closeModalAndEnableBtn);
+    }
+
+    // Limpa campos
+    document.getElementById('manualNotaNumero').value = '';
+    document.getElementById('manualNotaChave').value = '';
+    document.getElementById('manualNotaPdfUrl').value = '';
+
+    // Remove event listener antigo e adiciona novo
+    const btnSalvar = document.getElementById('btnSalvarNotaManual');
+    const newBtnSalvar = btnSalvar.cloneNode(true);
+    btnSalvar.parentNode.replaceChild(newBtnSalvar, btnSalvar);
+
+    newBtnSalvar.addEventListener('click', async () => {
+        const numero = document.getElementById('manualNotaNumero').value.trim();
+        const chave = document.getElementById('manualNotaChave').value.trim();
+        const pdfUrl = document.getElementById('manualNotaPdfUrl').value.trim();
+
+        if (!numero) {
+            showToast('Por favor, preencha o número da nota fiscal emitida.', true);
+            return;
+        }
+
+        const now = new Date().toISOString();
+        const providerResult = {
+            status_nota: 'CONCLUIDO',
+            pdf_url: pdfUrl,
+            xml_retorno: `<manual><status>CONCLUIDO</status><referencia>${escapeHtml(payload.referencia_id)}</referencia><data>${now}</data></manual>`,
+            mensagem_sefaz: 'Associação Manual Registrada.',
+            numero_nota: numero,
+            chave_acesso: chave || `MANUAL-${Date.now()}`
+        };
+
+        newBtnSalvar.disabled = true;
+        newBtnSalvar.innerHTML = 'Salvando...';
+
+        try {
+            // No fluxo manual, cria a linha base no banco AGORA, junto com o salvamento do usuário
+            await saveFinanceiroNotaTeste(payload);
+            await updateFinanceiroNotaProviderResult(payload, providerResult, 'MANUAL');
+            showToast('Associação manual da nota registrada com sucesso!');
+            modal.classList.add('hidden');
+            void renderFinanceiroNotasGrid();
+        } catch (err) {
+            console.error('Erro ao salvar nota manual:', err);
+            showToast('Erro ao salvar os dados da nota.', true);
+        } finally {
+            newBtnSalvar.disabled = false;
+            newBtnSalvar.innerHTML = 'Salvar Associação';
+        }
+    });
+
+    modal.classList.remove('hidden');
+};
+
 async function fetchTransactions(patientId = null) {
     try {
+        // Oculta os painéis de emissão por padrão, pois eles agora pertencem apenas à aba Notas Fiscais
         const nfseWrapper = document.getElementById('financeiroEmissaoNotasWrapper');
         const conciliaWrapper = document.getElementById('financeiroConciliacaoFiscalWrapper');
-        if (nfseWrapper) {
-            checkEmpresaHasNfseModule().then(hasNfse => {
-                nfseWrapper.style.display = hasNfse ? 'block' : 'none';
-                if (conciliaWrapper) {
-                    conciliaWrapper.style.display = hasNfse ? 'none' : 'block';
-                }
-            });
-        }
+        if (nfseWrapper) nfseWrapper.style.display = 'none';
+        if (conciliaWrapper) conciliaWrapper.style.display = 'none';
 
         // Mostra o card do extrato para os resultados da busca
         const cardExtrato = document.getElementById('finExtratoCard');
