@@ -23,13 +23,11 @@ window.gravarDebitoPaciente = async function(orcamentoId, valor, empresaId, paci
         
         if (debErrDb) {
             console.error("ERRO CRÍTICO DO POSTGRES:", JSON.stringify(debErrDb));
-            alert("FALHA NO DÉBITO: " + debErrDb.message + " | Detalhes: " + debErrDb.details);
+            // alert("FALHA NO DÉBITO: " + debErrDb.message + " | Detalhes: " + debErrDb.details);
         } else {
             console.log("MÓDULO FINANCEIRO - DÉBITO registrado com sucesso na tabela financeiro_transacoes!");
-            alert("MÓDULO FINANCEIRO: Débito gravado com sucesso!");
         }
     } catch (debErr) {
         console.error("MÓDULO FINANCEIRO - FALHA CRÍTICA NO INSERT DO DÉBITO (catch):", debErr);
-        alert("MÓDULO FINANCEIRO: FALHA no catch do Débito!");
     }
 };

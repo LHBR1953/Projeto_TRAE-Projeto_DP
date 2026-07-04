@@ -5257,6 +5257,14 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
     });
 
     overlay.classList.remove('hidden');
+    
+    // Forçar scroll para o topo do modal e da tela para melhorar a usabilidade
+    const modalBody = overlay.querySelector('.modal-body');
+    if (modalBody) {
+        modalBody.scrollTop = 0;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
     return await new Promise((resolve) => {
         let done = false;
         let isSaving = false;
@@ -20177,29 +20185,12 @@ function getSelectedCommissionRows() {
 
 function updateCommTransferButtonState() {
     if (!btnCommTransfer) return;
-    const rows = getSelectedCommissionRows();
-    const hasPerm = isSuperAdmin || isAdminRole() || can('comissoes', 'update');
-    if (!hasPerm) {
-        btnCommTransfer.disabled = true;
-        return;
-    }
-    if (!rows.length) {
-        btnCommTransfer.disabled = true;
-        return;
-    }
     btnCommTransfer.disabled = false;
 }
 
 function updateCommAdvanceButtonState() {
     if (!btnCommAdvance) return;
-    const rows = getSelectedCommissionRows();
-    const hasPerm = isSuperAdmin || isAdminRole() || can('comissoes', 'update');
-    if (!hasPerm || !rows.length) {
-        btnCommAdvance.disabled = true;
-        return;
-    }
-    const hasPaid = rows.some(r => String(r.status || '').toUpperCase() === 'PAGA');
-    btnCommAdvance.disabled = hasPaid;
+    btnCommAdvance.disabled = false;
 }
 
 function getProfessionalNameBySeqId(seqId) {
@@ -20242,35 +20233,111 @@ function getCommissionBreakdown(r) {
         ? budget.orcamento_itens.find(it => String(it && it.id || '') === itemId)
         : null;
 
-    const valorUnit = toDec(item && item.valor, toDec(r && (r.valor_item || r.valor_servico), 0));
-    const qtde = toDec(item && (item.qtde || item.quantidade), 1);
-    const valorItem = Math.max(0, valorUnit * qtde);
-    const vlrProtetico = Math.max(0, toDec(item && (item.valor_protetico || item.valorProtetico), toDec(r && (r.vlr_protetico || r.valor_protetico), 0)));
+    // Dedução Primária do Protético
+    const valUnit = Number(item && item.valor) || Number(r && (r.valor_item || r.valor_servico)) || 0;
+    const qtde = Number(item && (item.qtde || item.quantidade)) || 1;
+    const valorTotalItem = Number(item && item.valor_total) || (valUnit * qtde);
+    const valorProtetico = Number(item && (item.valor_protetico || item.valorProtetico)) || Number(r && (r.vlr_protetico || r.valor_protetico)) || 0;
+    const baseLiquida = Math.max(0, valorTotalItem - valorProtetico);
 
     const pagamentos = (budget && budget.pagamentos) ? budget.pagamentos : [];
-    const formas = (pagamentos || []).map(p => String(p && p.forma_pagamento ? p.forma_pagamento : '')).filter(Boolean);
-    const hasCard = formas.some(f => f.toLowerCase().includes('cart'));
-    const hasPix = formas.some(f => f.toLowerCase().includes('pix'));
-    const hasNonCash = formas.some(f => f.toLowerCase() !== 'dinheiro');
+    
+    let totalPago = 0;
+    let totalDinheiro = 0;
+    let totalPix = 0;
+    let totalCartao = 0;
 
-    let percComissao = 0;
-    if (tipo === 'Clinico') {
-        if (hasCard) percComissao = toDec(rules.cc, 0);
-        else if (hasPix) percComissao = toDec(rules.cp, 0);
-        else percComissao = toDec(rules.ce, 0);
-    } else if (tipo === 'Especialista') {
-        if (hasCard) percComissao = toDec(rules.ec, 0);
-        else if (hasPix) percComissao = toDec(rules.ep, 0);
-        else percComissao = toDec(rules.ee, 0);
-    } else if (tipo === 'Protetico') {
-        percComissao = toDec(rules.cp, 0);
+    pagamentos.forEach(p => {
+        const val = parseFloat(p.valor_pago || p.valor) || 0;
+        const forma = String(p.forma_pagamento || '').toLowerCase();
+        totalPago += val;
+        
+        if (forma.includes('cart')) {
+            totalCartao += val;
+        } else if (forma.includes('pix')) {
+            totalPix += val;
+        } else {
+            totalDinheiro += val;
+        }
+    });
+
+    if (totalPago <= 0) {
+        totalPago = 1;
+        totalDinheiro = 1;
     }
 
-    const percImposto = hasNonCash ? toDec(rules.imp, 0) : 0;
-    const baseLiquida = Math.max(0, valorItem - vlrProtetico);
-    const valorAposImposto = baseLiquida * (1 - (percImposto / 100));
-    const valorComissaoCalc = Math.max(0, (valorAposImposto * percComissao) / 100);
-    return { valorItem, vlrProtetico, percComissao, percImposto, valorComissaoCalc };
+    const pesoDinheiro = totalDinheiro / totalPago;
+    const pesoPix = totalPix / totalPago;
+    const pesoCartao = totalCartao / totalPago;
+
+    let CE = 0, CP = 0, CC = 0;
+    if (tipo === 'Clinico') {
+        CE = parseFloat(rules.ce) || 0;
+        CP = parseFloat(rules.cp) || 0;
+        CC = parseFloat(rules.cc) || 0;
+    } else if (tipo === 'Especialista') {
+        CE = parseFloat(rules.ee) || 0;
+        CP = parseFloat(rules.ep) || 0;
+        CC = parseFloat(rules.ec) || 0;
+    } else if (tipo === 'Protetico') {
+        CE = parseFloat(rules.cp) || 0;
+        CP = parseFloat(rules.cp) || 0;
+        CC = parseFloat(rules.cp) || 0;
+    }
+
+    const Imp = parseFloat(rules.imp) || 0;
+    
+    // Fatiamento Flutuante Puro (Sem Arredondar as Fatias)
+    const fatiaDinheiro = (baseLiquida * pesoDinheiro) * (CE / 100);
+    const fatiaPix = ((baseLiquida * pesoPix) * (1 - (Imp / 100))) * (CP / 100);
+    const fatiaCartao = ((baseLiquida * pesoCartao) * (1 - (Imp / 100))) * (CC / 100);
+
+    // Soma e Arredondamento Único no Final
+    const valorComissaoCalc = Number((fatiaDinheiro + fatiaPix + fatiaCartao).toFixed(2));
+
+    // Exibe apenas a comissão se for 100% de uma forma, senão mostra MIX
+    let percComissao = CE; // default
+    if (pesoCartao === 1) percComissao = CC;
+    else if (pesoPix === 1) percComissao = CP;
+    else if (pesoCartao > 0 || pesoPix > 0) percComissao = 'MIX'; // Usado para mostrar que é misto
+
+    return { 
+        valorItem: valorTotalItem, 
+        vlrProtetico: valorProtetico, 
+        percComissao, 
+        percImposto: Imp, 
+        valorComissaoCalc,
+        propDinheiro: pesoDinheiro,
+        propPix: pesoPix,
+        propCartao: pesoCartao,
+        percDinheiro: CE,
+        percPix: CP,
+        percCartao: CC
+    };
+}
+
+function getCommissionCompositionLabel(breakdown) {
+    if (!breakdown || (breakdown.propDinheiro === undefined)) return '';
+    
+    let pDin = Number((breakdown.propDinheiro * 100).toFixed(2));
+    let pPix = Number((breakdown.propPix * 100).toFixed(2));
+    let pCart = Number((breakdown.propCartao * 100).toFixed(2));
+    
+    const sum = pDin + pPix + pCart;
+    if (sum > 0 && Math.abs(sum - 100) > 0.001) {
+        const diff = Number((100 - sum).toFixed(2));
+        if (pCart > 0) pCart = Number((pCart + diff).toFixed(2));
+        else if (pPix > 0) pPix = Number((pPix + diff).toFixed(2));
+        else if (pDin > 0) pDin = Number((pDin + diff).toFixed(2));
+    }
+    
+    const parts = [];
+    if (pDin > 0) parts.push(`DIN: ${formatNumberBR(pDin, 2)}%`);
+    if (pPix > 0) parts.push(`PIX: ${formatNumberBR(pPix, 2)}%`);
+    if (pCart > 0) parts.push(`CART: ${formatNumberBR(pCart, 2)}%`);
+    
+    if (parts.length === 0) return '';
+    return `[${parts.join(' | ')}]`;
 }
 
 async function enrichCommissionsItems(rows) {
@@ -20390,7 +20457,7 @@ function renderCommissionsTable(rows, statusVal) {
     if (commissionsEmptyState) commissionsEmptyState.classList.add('hidden');
 
     const showPayActions = statusVal !== 'PAGAS';
-    if (btnCommPay) btnCommPay.disabled = !showPayActions;
+    if (btnCommPay) btnCommPay.disabled = false;
     updateCommTransferButtonState();
 
     rows.forEach(r => {
@@ -20398,7 +20465,13 @@ function renderCommissionsTable(rows, statusVal) {
         const dt = r.data_geracao ? formatDateTime(r.data_geracao) : '-';
         const prof = getProfessionalNameBySeqId(r.profissional_id);
         const orcSeq = r._orcamentoSeqid != null ? String(r._orcamentoSeqid) : '';
-        const item = getCommissionItemLabel(r);
+        let item = getCommissionItemLabel(r);
+        const breakdown = getCommissionBreakdown(r);
+        const compLabel = getCommissionCompositionLabel(breakdown);
+        if (compLabel) {
+            item += `<br><span style="font-size: 10px; color: var(--text-muted);">${compLabel}</span>`;
+        }
+
         const val = Number(r.valor_comissao || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         const status = String(r.status || '-');
         const checked = selectedCommissionIds.has(id) ? 'checked' : '';
@@ -20444,7 +20517,8 @@ function syncCommissionSelectAll() {
 }
 
 async function markSelectedCommissionsPaid() {
-    if (!can('comissoes', 'update')) {
+    const hasPerm = typeof isSuperAdmin !== 'undefined' && isSuperAdmin || (typeof isAdminRole === 'function' && isAdminRole()) || can('comissoes', 'update');
+    if (!hasPerm) {
         showToast('Você não possui permissão para marcar comissões como pagas.', true);
         return;
     }
@@ -20494,85 +20568,154 @@ async function markSelectedCommissionsPaid() {
 }
 
 async function markSelectedCommissionsAdvanced() {
-    if (!can('comissoes', 'update')) {
+    const hasPerm = typeof isSuperAdmin !== 'undefined' && isSuperAdmin || (typeof isAdminRole === 'function' && isAdminRole()) || can('comissoes', 'update');
+    if (!hasPerm) {
         showToast('Você não possui permissão para antecipar comissões.', true);
         return;
     }
 
-    const rows = getSelectedCommissionRows();
-    if (!rows.length) {
-        showToast('Selecione pelo menos uma comissão.', true);
-        return;
-    }
-
-    const toAdvance = rows.filter(r => String(r.status || '').toUpperCase() !== 'PAGA' && String(r.status || '').toUpperCase() !== 'TRANSFERIDA' && String(r.status || '').toUpperCase() !== 'ESTORNADA');
-    if (!toAdvance.length) {
-        showToast('Nenhuma comissão selecionada pode ser antecipada.', true);
-        return;
-    }
+    const orcSeqIdRaw = prompt('Digite o NÚMERO DO ORÇAMENTO (ID) para antecipar comissões:', '');
+    if (!orcSeqIdRaw) return; // Aborta se cancelar ou não digitar
+    const orcSeqId = orcSeqIdRaw.trim();
 
     try {
-        const itemIds = Array.from(new Set(toAdvance.map(r => r.item_id).filter(Boolean).map(String)));
-        if (itemIds.length) {
-            let q = db.from('orcamento_itens').select('id,status').in('id', itemIds);
-            if (currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
-            const { data, error } = await withTimeout(q, 15000, 'orcamento_itens:status_for_comm_advance');
-            if (error) throw error;
-            const statusDone = new Set(['finalizado', 'executado', 'atendido']);
-            const doneIds = (data || [])
-                .filter(it => statusDone.has(String(it.status || '').trim().toLowerCase()))
-                .map(it => String(it.id));
-            if (doneIds.length) {
-                showToast('Existem comissões de serviços já realizados. Use "Marcar como Pago" (não antecipar).', true);
-                return;
-            }
+        // Find budget by seqid
+        let qOrc = db.from('orcamentos').select('id, seqid, profissional_id').eq('seqid', orcSeqId);
+        if (currentEmpresaId) qOrc = qOrc.eq('empresa_id', currentEmpresaId);
+        const { data: orcData, error: orcErr } = await withTimeout(qOrc, 15000, 'orcamentos:find_for_advance');
+        if (orcErr) throw orcErr;
+        
+        if (!orcData || !orcData.length) {
+            showToast('Orçamento não encontrado com este número.', true);
+            return;
         }
-    } catch (e) {
-        showToast('Não foi possível validar se o serviço foi realizado. Use "Marcar como Pago" se já foi feito.', true);
-        return;
-    }
+        const orcamentoId = orcData[0].id;
+        const budgetProfId = orcData[0].profissional_id;
 
-    const obsRaw = prompt('Observação da antecipação (opcional):', '') || '';
-    const nowIso = new Date().toISOString();
-    const receiptId = genUuid();
-    const payloadFull = {
-        status: 'ANTECIPADA',
-        data_pagamento: nowIso,
-        pago_por: currentUser?.id || null,
-        recibo_id: receiptId,
-        observacoes: obsRaw
-    };
-    const payloadFallback = { status: 'ANTECIPADA', data_pagamento: nowIso, pago_por: currentUser?.id || null };
+        // Find commissions linked to this budget's items
+        let qItems = db.from('orcamento_itens').select('id, profissional_id, valor, valor_protetico, qtde, servico_id, servicos(descricao)').eq('orcamento_id', orcamentoId);
+        if (currentEmpresaId) qItems = qItems.eq('empresa_id', currentEmpresaId);
+        const { data: itemData, error: itemErr } = await withTimeout(qItems, 15000, 'orcamento_itens:find_for_advance');
+        if (itemErr) throw itemErr;
 
-    const ids = toAdvance.map(r => r.id);
-    if (!confirm(`Confirmar antecipação de ${ids.length} comissão(ões)?`)) return;
+        if (!itemData || !itemData.length) {
+            showToast('Este orçamento não possui itens.', true);
+            return;
+        }
+        
+        const itemIds = itemData.map(i => i.id);
+        
+        // Validate if items already have commissions
+        let qCheckCom = db.from('financeiro_comissoes').select('id, item_id, status').in('item_id', itemIds);
+        if (currentEmpresaId) qCheckCom = qCheckCom.eq('empresa_id', currentEmpresaId);
+        const { data: existingComs, error: checkComErr } = await withTimeout(qCheckCom, 15000, 'financeiro_comissoes:check_existing');
+        if (checkComErr) throw checkComErr;
 
-    if (btnCommAdvance) btnCommAdvance.disabled = true;
-    try {
+        const invalidItems = new Set();
+        (existingComs || []).forEach(com => {
+            const st = String(com.status || '').toUpperCase();
+            if (st === 'ANTECIPADA' || st === 'PAGA') {
+                invalidItems.add(String(com.item_id));
+            }
+        });
+
+        const validItems = itemData.filter(i => !invalidItems.has(String(i.id)));
+        if (!validItems.length) {
+            showToast('Todos os itens deste orçamento já possuem comissões pagas ou antecipadas.', true);
+            return;
+        }
+
+        // Fetch payments for the budget to calculate commission properly
+        let qPags = db.from('orcamento_pagamentos').select('forma_pagamento, valor_pago').eq('orcamento_id', orcamentoId);
+        if (currentEmpresaId) qPags = qPags.eq('empresa_id', currentEmpresaId);
+        const { data: pagsData } = await withTimeout(qPags, 15000, 'orcamento_pagamentos:find_for_advance');
+        
+        const pseudoBudget = {
+            id: orcamentoId,
+            pagamentos: pagsData || []
+        };
+
+        const obsRaw = prompt(`Foram encontrados ${validItems.length} item(ns) válidos para antecipação no Orçamento #${orcSeqId}.\n\nObservação da antecipação (opcional):`, '');
+        if (obsRaw === null) return; // Aborta se o usuário cancelar
+
+        const nowIso = new Date().toISOString();
+        const receiptId = genUuid();
+        const uId = currentUser?.id || null;
+
+        const newCommissionsFull = validItems.map(item => {
+            const profId = item.profissional_id || budgetProfId;
+            const profObj = (professionals || []).find(p => String(p.seqid) === String(profId) || String(p.id) === String(profId));
+            
+            let valComissao = 0;
+            if (profObj && typeof calculateCommission === 'function') {
+                valComissao = calculateCommission(profObj, item, pseudoBudget);
+            } else {
+                valComissao = Number(item.valor_protetico || 0) > 0 ? Number(item.valor_protetico) : Number(item.valor || 0);
+            }
+            
+            const descricaoServico = item.servicos && item.servicos.descricao ? item.servicos.descricao : 'Serviço';
+            return {
+                seqid: Math.floor(Math.random() * 1000000000), // Fallback if no sequence logic
+                profissional_id: profId,
+                item_id: item.id,
+                valor_comissao: valComissao > 0 ? valComissao : 0,
+                status: 'ANTECIPADA',
+                data_geracao: nowIso,
+                empresa_id: currentEmpresaId,
+                data_pagamento: nowIso,
+                pago_por: uId,
+                recibo_id: receiptId,
+                observacoes: obsRaw,
+                criado_por: uId,
+                _item_descricao: descricaoServico // Passando para o recibo
+            };
+        });
+
+        if (btnCommAdvance) btnCommAdvance.disabled = true;
+
+        const dbInsertPayload = newCommissionsFull.map(c => {
+            const { _item_descricao, ...dbCols } = c;
+            return dbCols;
+        });
+
         try {
-            let q = db.from('financeiro_comissoes').update(payloadFull).in('id', ids);
-            if (currentEmpresaId) q = q.eq('empresa_id', currentEmpresaId);
-            const { error } = await withTimeout(q, 15000, 'financeiro_comissoes:advance');
+            const { error } = await withTimeout(db.from('financeiro_comissoes').insert(dbInsertPayload), 15000, 'financeiro_comissoes:advance:insert');
             if (error) throw error;
-        } catch (e1) {
-            let q2 = db.from('financeiro_comissoes').update(payloadFallback).in('id', ids);
-            if (currentEmpresaId) q2 = q2.eq('empresa_id', currentEmpresaId);
-            const { error: e2 } = await withTimeout(q2, 15000, 'financeiro_comissoes:advance2');
+        } catch (eIns) {
+            const fallbackCommissions = dbInsertPayload.map(c => {
+                const { pago_por, ...rest } = c;
+                return rest;
+            });
+            const { error: e2 } = await withTimeout(db.from('financeiro_comissoes').insert(fallbackCommissions), 15000, 'financeiro_comissoes:advance:insert2');
             if (e2) throw e2;
         }
 
-        showToast('Comissões antecipadas.');
+        showToast('Comissões do orçamento antecipadas com sucesso.');
+        
+        // Recarrega as comissões na UI PRIMEIRO para pegar o valor exato (arredondado) que bateu no banco
         resetCommissionSelection();
         await fetchCommissionsFromUI();
 
-        const printed = (commissionsList || []).filter(r => ids.includes(String(r.id)));
-        printCommissionReceipt({ rows: printed, mode: 'ANTECIPACAO' });
+        // Para a impressão, usa a lista atualizada que acabou de chegar do Supabase
+        const printedRows = commissionsList.filter(c => c.recibo_id === receiptId).map(r => ({
+            ...r,
+            _orcamentoSeqid: orcSeqId,
+            item_descricao: r.item_descricao || (newCommissionsFull.find(nc => nc.item_id === r.item_id)?._item_descricao) || 'Serviço Antecipado'
+        }));
+
+        // Fallback: se por delay o Supabase não trouxer a tempo, usa o newCommissionsFull (que já está com valor_comissao arredondado)
+        const rowsToPrint = printedRows.length > 0 ? printedRows : newCommissionsFull.map(r => ({ 
+            ...r, 
+            _orcamentoSeqid: orcSeqId,
+            item_descricao: r._item_descricao || 'Serviço Antecipado'
+        }));
+
+        printCommissionReceipt({ rows: rowsToPrint, mode: 'ANTECIPACAO' });
     } catch (err) {
-        console.error('Erro ao antecipar comissões:', err);
+        console.error('Erro ao antecipar comissões do orçamento:', err);
         showToast('Erro ao antecipar comissões.', true);
     } finally {
         if (btnCommAdvance) btnCommAdvance.disabled = false;
-        updateCommAdvanceButtonState();
     }
 }
 
@@ -20945,13 +21088,18 @@ function printCommissionReceipt(opts = null) {
         const rowsHtml = list.map(r => {
             const dt = r.data_geracao ? formatDateTime(r.data_geracao) : '-';
             const orcSeq = r && r._orcamentoSeqid != null ? String(r._orcamentoSeqid) : '';
-            const item = getCommissionItemLabel(r);
+            const breakdown = getCommissionBreakdown(r);
+            const compLabel = getCommissionCompositionLabel(breakdown);
+            let item = escapeHtml(getCommissionItemLabel(r));
+            if (compLabel) {
+                item += `<br><span style="font-size: 10px; color: #555;">${escapeHtml(compLabel)}</span>`;
+            }
             const val = Number(r.valor_comissao || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             return `<tr style="border-bottom: 1px solid #000;">
-                <td style="padding: 6px 8px;">${dt}</td>
-                <td style="padding: 6px 8px; text-align:center; font-weight:700;">${orcSeq ? `#${orcSeq}` : '-'}</td>
+                <td style="padding: 6px 8px;">${escapeHtml(dt)}</td>
+                <td style="padding: 6px 8px; text-align:center; font-weight:700;">${orcSeq ? `#${escapeHtml(orcSeq)}` : '-'}</td>
                 <td style="padding: 6px 8px;">${item}</td>
-                <td style="padding: 6px 8px; text-align:right; font-weight:700;">${val}</td>
+                <td style="padding: 6px 8px; text-align:right; font-weight:700;">${escapeHtml(val)}</td>
             </tr>`;
         }).join('');
 
@@ -21064,11 +21212,23 @@ async function printCommissionsReportFromUI() {
             const dt = getCommissionDateForFilter(r, statusVal);
             const dtLabel = dt ? formatDateTime(dt) : '-';
             const orcSeq = (r._orcamentoSeqid != null) ? String(r._orcamentoSeqid) : (r.orcamento_seqid != null ? String(r.orcamento_seqid) : '');
-            const item = getCommissionItemLabel(r);
+            
             const breakdown = getCommissionBreakdown(r);
+            const compLabel = getCommissionCompositionLabel(breakdown);
+            let item = escapeHtml(getCommissionItemLabel(r));
+            // A proporção vai direto na coluna de % Comissao, então o item fica limpo
+            
             const valorItem = formatCurrencyBRL(toDec(breakdown.valorItem, 0));
             const vlrProtetico = formatCurrencyBRL(toDec(breakdown.vlrProtetico, 0));
-            const percComissao = `${formatNumberBR(toDec(breakdown.percComissao, 0), 2)}%`;
+            
+            let percComissaoStr = breakdown.percComissao;
+            if (percComissaoStr === 'MIX') {
+                percComissaoStr = compLabel || 'MIX';
+            } else {
+                percComissaoStr = `${formatNumberBR(toDec(breakdown.percComissao, 0), 2)}%`;
+            }
+            
+            const percComissao = percComissaoStr;
             const percImposto = `${formatNumberBR(toDec(breakdown.percImposto, 0), 2)}%`;
             const val = formatCurrencyBRL(Number(r.valor_comissao || 0));
             const st = String(r.status || '-');
@@ -21076,13 +21236,13 @@ async function printCommissionsReportFromUI() {
                 <tr>
                     <td style="width: 140px;">${escapeHtml(dtLabel)}</td>
                     <td style="width: 90px; text-align:center;">${orcSeq ? `#${escapeHtml(orcSeq)}` : '-'}</td>
-                    <td>${escapeHtml(item)}</td>
+                    <td>${item}</td>
                     <td style="width: 120px; text-align:right;">${escapeHtml(valorItem)}</td>
                     <td style="width: 120px; text-align:right;">${escapeHtml(vlrProtetico)}</td>
-                    <td style="width: 95px; text-align:right;">${escapeHtml(percComissao)}</td>
-                    <td style="width: 95px; text-align:right;">${escapeHtml(percImposto)}</td>
-                    <td style="width: 120px;">${escapeHtml(st)}</td>
-                    <td style="width: 140px; text-align:right; font-weight: 900;">${escapeHtml(val)}</td>
+                    <td style="width: 160px; text-align:right; font-size: 10px;">${escapeHtml(percComissao)}</td>
+                    <td style="width: 80px; text-align:right;">${escapeHtml(percImposto)}</td>
+                    <td style="width: 100px;">${escapeHtml(st)}</td>
+                    <td style="width: 120px; text-align:right; font-weight: 900;">${escapeHtml(val)}</td>
                 </tr>
             `;
         }).join('') + `
@@ -32541,48 +32701,72 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
 function calculateCommission(prof, item, budget) {
     const tipo = prof.tipo;
     const rules = prof.comissions || {}; // Nota: o banco usa 'comissions' com double 's' no JSON
-    const valor = parseFloat(item.valor) || 0;
-    const qtde = parseInt(item.qtde) || 1;
-    const totalItem = valor * qtde;
-    const valorProtetico = parseFloat(item.valor_protetico) || 0;
-
-    const pagamentos = (budget && budget.pagamentos) ? budget.pagamentos : [];
-    const formas = (pagamentos || []).map(p => String(p && p.forma_pagamento ? p.forma_pagamento : '')).filter(Boolean);
-    const hasCard = formas.some(f => f.toLowerCase().includes('cart'));
-    const hasPix = formas.some(f => f.toLowerCase().includes('pix'));
-    const hasNonCash = formas.some(f => f.toLowerCase() !== 'dinheiro');
-
-    let percComissao = 0;
-    if (tipo === 'Clinico') {
-        if (hasCard) percComissao = parseFloat(rules.cc) || 0;
-        else if (hasPix) percComissao = parseFloat(rules.cp) || 0;
-        else percComissao = parseFloat(rules.ce) || 0;
-    } else if (tipo === 'Especialista') {
-        if (hasCard) percComissao = parseFloat(rules.ec) || 0;
-        else if (hasPix) percComissao = parseFloat(rules.ep) || 0;
-        else percComissao = parseFloat(rules.ee) || 0;
-    } else if (tipo === 'Protetico') {
-        percComissao = parseFloat(rules.cp) || 0;
-    }
-
-    // Regra: (Valor total - Custo Protético)
-    const baseLiquida = totalItem - valorProtetico;
+    
+    // Dedução Primária do Protético
+    const valorTotalItem = Number(item.valor_total) || (Number(item.valor || 0) * Number(item.qtde || 1));
+    const valorProtetico = Number(item.valor_protetico || 0);
+    const baseLiquida = valorTotalItem - valorProtetico;
+    
     if (baseLiquida <= 0) return 0;
 
-    // Se houver QUALQUER pagamento que NÃO seja dinheiro, aplica imposto
-    const temPagamentoComTaxa = hasNonCash;
+    const pagamentos = (budget && budget.pagamentos) ? budget.pagamentos : [];
+    
+    let totalPago = 0;
+    let totalDinheiro = 0;
+    let totalPix = 0;
+    let totalCartao = 0;
 
-    let percImposto = 0;
-    if (temPagamentoComTaxa) {
-        percImposto = parseFloat(rules.imp) || 0;
+    pagamentos.forEach(p => {
+        const val = parseFloat(p.valor_pago || p.valor) || 0;
+        const forma = String(p.forma_pagamento || '').toLowerCase();
+        totalPago += val;
+        
+        if (forma.includes('cart')) {
+            totalCartao += val;
+        } else if (forma.includes('pix')) {
+            totalPix += val;
+        } else {
+            // Dinheiro, transferência, etc.
+            totalDinheiro += val;
+        }
+    });
+
+    // Fallback: se não houver pagamentos registrados, assume 100% dinheiro
+    if (totalPago <= 0) {
+        totalPago = 1;
+        totalDinheiro = 1;
     }
 
-    // O imposto é uma porcentagem aplicada sobre a base líquida
-    // Comissão = (BaseLiquida * (1 - Imposto/100)) * (PercComissao/100)
-    const valorAposImposto = baseLiquida * (1 - (percImposto / 100));
-    const comissaoFinal = (valorAposImposto * percComissao) / 100;
+    const pesoDinheiro = totalDinheiro / totalPago;
+    const pesoPix = totalPix / totalPago;
+    const pesoCartao = totalCartao / totalPago;
 
-    return Math.max(0, comissaoFinal);
+    let CE = 0, CP = 0, CC = 0;
+    if (tipo === 'Clinico') {
+        CE = parseFloat(rules.ce) || 0;
+        CP = parseFloat(rules.cp) || 0;
+        CC = parseFloat(rules.cc) || 0;
+    } else if (tipo === 'Especialista') {
+        CE = parseFloat(rules.ee) || 0;
+        CP = parseFloat(rules.ep) || 0;
+        CC = parseFloat(rules.ec) || 0;
+    } else if (tipo === 'Protetico') {
+        CE = parseFloat(rules.cp) || 0;
+        CP = parseFloat(rules.cp) || 0;
+        CC = parseFloat(rules.cp) || 0;
+    }
+
+    const Imp = parseFloat(rules.imp) || 0;
+
+    // Fatiamento Flutuante Puro (Sem Arredondar as Fatias)
+    const fatiaDinheiro = (baseLiquida * pesoDinheiro) * (CE / 100);
+    const fatiaPix = ((baseLiquida * pesoPix) * (1 - (Imp / 100))) * (CP / 100);
+    const fatiaCartao = ((baseLiquida * pesoCartao) * (1 - (Imp / 100))) * (CC / 100);
+
+    // Soma e Arredondamento Único no Final
+    const resultadoFinal = Number((fatiaDinheiro + fatiaPix + fatiaCartao).toFixed(2));
+
+    return Math.max(0, resultadoFinal);
 }
 
 // Modal Budget Detail Close Listeners
