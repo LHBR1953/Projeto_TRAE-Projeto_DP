@@ -340,6 +340,22 @@ async function confirmAtendimentoItem({ budgetId, itemId, agendamentoId }, { sup
             await window.generateCommissionForItem(budgetId, itemId, true);
         }
 
+        // UPDATE NA MARRA: Forçar a comissão do item a virar PAGA 
+        try { 
+            const { error: marraErr } = await db 
+                .from('financeiro_comissoes') 
+                .update({ status: 'PAGA' }) 
+                .eq('item_id', itemId); // itemId que vem do escopo da função (id de orcamento_itens) 
+        
+            if (marraErr) { 
+                console.error('Erro no update na marra:', marraErr); 
+            } else { 
+                console.log(`[Sucesso] Item ${itemId} forçado para PAGA na tabela financeiro_comissoes.`); 
+            } 
+        } catch (errMarra) { 
+            console.error('Erro crítico na marra:', errMarra); 
+        }
+
         // A pedido do usuário: chamada tryCloseBudgetFromItems removida
         // O status do orçamento mudará apenas se o trigger do banco de dados (que ouve a finalização do item) atuar.
         const closeRes = { closed: false, budget: b };

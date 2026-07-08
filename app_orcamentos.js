@@ -2643,6 +2643,37 @@ window.finalizeBudgetItem = async function (budgetId, itemId) {
 
         await window.generateCommissionForItem(budgetId, itemId, true);
 
+        // --- GATILHO DE ATUALIZAÇÃO PARA COMISSÕES ANTECIPADAS ---
+        try {
+            console.log('Tentando atualizar comissão do item:', itemId);
+            const { data: commToUpdate, error: selectErr } = await db.from('financeiro_comissoes')
+                .select('id, status, recibo_id')
+                .eq('item_id', itemId)
+                .eq('status', 'ANTECIPADA');
+            
+            if (selectErr) {
+                console.error('ERRO CRÍTICO NO SELECT:', selectErr);
+                alert('Erro no banco ao buscar comissão: ' + selectErr.message);
+            } else if (commToUpdate && commToUpdate.length > 0) {
+                const commIds = commToUpdate.map(c => c.id);
+                const { error: updErr } = await db.from('financeiro_comissoes')
+                    .update({ status: 'PAGA' })
+                    .in('id', commIds);
+                
+                if (updErr) {
+                    console.error('ERRO CRÍTICO NO UPDATE:', updErr);
+                    alert('Erro no banco: ' + updErr.message);
+                } else {
+                    console.log(`[Orcamentos] Comissões antecipadas marcadas como PAGA: ${commIds.join(', ')}`);
+                }
+            } else {
+                console.log('Nenhuma comissão ANTECIPADA encontrada para este item.');
+            }
+        } catch (err) {
+            console.error('ERRO CRÍTICO NO UPDATE:', err);
+            alert('Erro inesperado: ' + err.message);
+        }
+
         // 1. Atualizar o item para Finalizado no banco
         const { error: itErr } = await db.from('orcamento_itens')
             .update({ status: 'Finalizado' })
@@ -3009,19 +3040,25 @@ if (budgetForm) {
                         }
 
                         const valueChanged = Number(existingComm.valor_comissao) !== Number(novoValor);
+                        const isFinished = item.status && ['finalizado', 'executado', 'atendido'].includes(String(item.status).toLowerCase());
+                        const statusNeedsUpdate = isFinished && existingComm.status === 'ANTECIPADA';
 
-                        if (profChanged || valueChanged) {
-                            if (['PAGA', 'ANTECIPADA', 'TRANSFERIDA', 'ESTORNADA'].includes(existingComm.status)) {
+                        if (profChanged || valueChanged || statusNeedsUpdate) {
+                            if (['PAGA', 'TRANSFERIDA', 'ESTORNADA'].includes(existingComm.status) && !statusNeedsUpdate) {
                                 if (profChanged) {
                                     showToast(`Atenção: A comissão de um item editado já foi processada (paga/transferida) e não será alterada para o novo profissional.`, true);
                                 }
+                            } else if (existingComm.status === 'ANTECIPADA' && !statusNeedsUpdate && profChanged) {
+                                showToast(`Atenção: A comissão antecipada não terá o profissional alterado.`, true);
                             } else {
                                 await db.from('financeiro_comissoes').update({
-                                    profissional_id: item.profissional_id,
-                                    valor_comissao: novoValor
+                                    // Só atualiza profissional e valor se não for ANTECIPADA (ou se permitir alterar ANTECIPADA)
+                                    // Mas se for só statusNeedsUpdate, atualizamos o status.
+                                    ...( ['PAGA', 'ANTECIPADA', 'TRANSFERIDA', 'ESTORNADA'].includes(existingComm.status) ? {} : { profissional_id: item.profissional_id, valor_comissao: novoValor } ),
+                                    ...(statusNeedsUpdate ? { status: 'PAGA' } : {})
                                 }).eq('id', existingComm.id);
                                 
-                                if (profChanged) {
+                                if (profChanged && !['PAGA', 'ANTECIPADA', 'TRANSFERIDA', 'ESTORNADA'].includes(existingComm.status)) {
                                     showToast(`Comissão atualizada para o novo profissional.`, false);
                                 }
                             }

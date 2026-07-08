@@ -20380,7 +20380,10 @@ async function enrichCommissionsItems(rows) {
 
 async function fetchCommissionsFromUI() {
     const statusVal = commStatus ? commStatus.value : 'A_PAGAR';
-    const statuses = getCommissionStatusesForFilter(statusVal);
+    let statuses = getCommissionStatusesForFilter(statusVal);
+    if (statusVal === 'ANTECIPADAS_PAGAS') {
+        statuses = ['ANTECIPADAS_PAGAS'];
+    }
     const start = commStart ? commStart.value : '';
     const end = commEnd ? commEnd.value : '';
     const profId = commProfessional ? commProfessional.value : '';
@@ -20392,15 +20395,41 @@ async function fetchCommissions({ statuses, start, end, profId, statusVal }) {
         if (commissionsEmptyState) commissionsEmptyState.classList.add('hidden');
         if (commissionsTable) commissionsTable.style.display = 'table';
 
-        let query = db.from('financeiro_comissoes').select('*').order('data_geracao', { ascending: false });
+        let query;
+
+        // Forçar o isolamento limpando o array genérico se for um dos nossos filtros personalizados
+        if (statusVal === 'ANTECIPADAS' || statusVal === 'ANTECIPADAS_PAGAS') {
+            statuses = [];
+        }
+
+        if (statusVal === 'ANTECIPADAS') {
+            // 1. PARA O FILTRO: "Comissões Antecipadas" 
+            query = db 
+                .from('financeiro_comissoes') 
+                .select('*') 
+                .eq('status', 'ANTECIPADA') 
+                .not('recibo_id', 'is', null); 
+        } else if (statusVal === 'ANTECIPADAS_PAGAS') {
+            // 2. PARA O FILTRO NOVO: "Comissões Antecipadas e Pagas" 
+            query = db 
+                .from('financeiro_comissoes') 
+                .select('*') 
+                .eq('status', 'PAGA') 
+                .not('recibo_id', 'is', null); 
+        } else if (statuses && statuses.length) {
+            query = db.from('financeiro_comissoes').select('*').in('status', statuses);
+        } else {
+            // Fallback caso não caia em nenhuma condição
+            query = db.from('financeiro_comissoes').select('*');
+        }
+
+        // Aplica os filtros genéricos (ordenação, empresa, profissional) sobre a query limpa
+        query = query.order('data_geracao', { ascending: false });
         if (currentEmpresaId) {
             query = query.eq('empresa_id', currentEmpresaId);
         }
         if (profId) {
             query = query.eq('profissional_id', Number(profId));
-        }
-        if (statuses && statuses.length) {
-            query = query.in('status', statuses);
         }
 
         const { data, error } = await withTimeout(query, 15000, 'financeiro_comissoes');
@@ -20475,6 +20504,24 @@ function renderCommissionsTable(rows, statusVal) {
         const val = Number(r.valor_comissao || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         const status = String(r.status || '-');
         const checked = selectedCommissionIds.has(id) ? 'checked' : '';
+        let finalStatus = String(r.status || '-');
+        let obsHtml = '';
+        
+        if (statusVal === 'ANTECIPADAS') {
+            finalStatus = 'À Pagar / Antecipada';
+            if (r.observacoes) {
+                obsHtml = `<div style="font-size: 10px; color: #666; margin-top: 4px;">${escapeHtml(r.observacoes)}</div>`;
+            }
+        } else if (statusVal === 'ANTECIPADAS_PAGAS') {
+            finalStatus = 'PAGA / ANTECIPADA';
+            if (r.observacoes) {
+                obsHtml = `<div style="font-size: 10px; color: #666; margin-top: 4px;">${escapeHtml(r.observacoes)}</div>`;
+            }
+        } else {
+            if (r.observacoes) {
+                obsHtml = `<div style="font-size: 10px; color: #666; margin-top: 4px;">${escapeHtml(r.observacoes)}</div>`;
+            }
+        }
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -20486,8 +20533,15 @@ function renderCommissionsTable(rows, statusVal) {
             <td style="text-align:center; font-weight:700;">${orcSeq ? `#${orcSeq}` : '-'}</td>
             <td>${item}</td>
             <td style="text-align:right; font-weight:700;">${val}</td>
-            <td><span class="badge badge-info">${status}</span></td>
+            <td>
+                <span class="badge badge-info">${finalStatus}</span>
+                ${statusVal === 'ANTECIPADAS_PAGAS' ? obsHtml : ''}
+            </td>
         `;
+        // Adiciona observação no item se não for o novo filtro, para não quebrar outros layouts
+        if (statusVal !== 'ANTECIPADAS_PAGAS' && obsHtml) {
+            tr.children[4].innerHTML += obsHtml;
+        }
         commissionsTableBody.appendChild(tr);
     });
 
@@ -21264,7 +21318,7 @@ async function printCommissionsReportFromUI() {
                             <th style="width: 120px; text-align:right;">Valor Item</th>
                             <th style="width: 120px; text-align:right;">Vlr Protetico</th>
                             <th style="width: 95px; text-align:right;">% Comissao</th>
-                            <th style="width: 95px; text-align:right;">% Imposto</th>
+                            <th style="width: 95px; text-align:right;">% Taxa</th>
                             <th style="width: 120px;">Status</th>
                             <th style="width: 140px; text-align:right;">Valor</th>
                         </tr>

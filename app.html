@@ -10,7 +10,7 @@
     <title>OCC - Odonto Connect Cloud</title>
     <link rel="icon" href="data:,">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260515_mobile_fix">
+    <link rel="stylesheet" href="styles.css?v=20260706_STATUS_ANTECIPADO_CONCAT">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
         #bootLoader {
@@ -1253,7 +1253,7 @@
                                 </div>
 
                                 <div class="form-group span-2">
-                                    <label for="comissionImp">Imp (Imposto deduzido em Cartão ou PIX)</label>
+                                    <label for="comissionImp">Taxa (Taxa deduzida em Cartão ou PIX)</label>
                                     <div class="input-with-icon">
                                         <input type="number" id="comissionImp" min="0" max="100" step="0.01"
                                             placeholder="0.00">
@@ -3746,6 +3746,7 @@
                             <select id="commStatus" class="form-control">
                                 <option value="A_PAGAR">Comissões à Pagar</option>
                                 <option value="ANTECIPADAS">Comissões Antecipadas</option>
+                                <option value="ANTECIPADAS_PAGAS">Comissões Antecipadas e Pagas</option>
                                 <option value="PAGAS">Comissões Pagas</option>
                                 <option value="TRANSFERIDAS">Transferidas / Estornadas</option>
                                 <option value="TODAS">Todas</option>
@@ -6157,7 +6158,8 @@
     <!-- App Script Loader (Robust) -->
     <script src="modulo_financeiro.js?v=20260630_SUB_MENU_FISCAL_TAB_MOVIMENTATION"></script>
     <script src="modulo_atendimento.js?v=20260630_SUB_MENU_FISCAL_TAB_MOVIMENTATION"></script>
-    <script src="app_v22.js?v=20260704_USABILIDADE_ESTOQUE_FIX"></script>
+    <script src="app_v22.js?v=20260707_STATUS_VISUAL_PERFEITO"></script>
+    <script src="app_config_usuarios.js?v=20260704_MENU_URL_PARAM_FIX"></script>
     <script>
         // Wait for Supabase to be available (handles async document.write fallbacks)
         var supabaseCheckAttempts = 0;

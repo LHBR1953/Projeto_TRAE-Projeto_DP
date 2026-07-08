@@ -29943,6 +29943,37 @@ window.finalizeBudgetItem = async function (budgetId, itemId) {
 
         await window.generateCommissionForItem(budgetId, itemId, true);
 
+        // --- GATILHO DE ATUALIZAÇÃO PARA COMISSÕES ANTECIPADAS ---
+        try {
+            console.log('Tentando atualizar comissão do item:', itemId);
+            const { data: commToUpdate, error: selectErr } = await db.from('financeiro_comissoes')
+                .select('id, status, recibo_id')
+                .eq('item_id', itemId)
+                .eq('status', 'ANTECIPADA');
+            
+            if (selectErr) {
+                console.error('ERRO CRÍTICO NO SELECT:', selectErr);
+                alert('Erro no banco ao buscar comissão: ' + selectErr.message);
+            } else if (commToUpdate && commToUpdate.length > 0) {
+                const commIds = commToUpdate.map(c => c.id);
+                const { error: updErr } = await db.from('financeiro_comissoes')
+                    .update({ status: 'PAGA' })
+                    .in('id', commIds);
+                
+                if (updErr) {
+                    console.error('ERRO CRÍTICO NO UPDATE:', updErr);
+                    alert('Erro no banco: ' + updErr.message);
+                } else {
+                    console.log(`[Orcamentos] Comissões antecipadas marcadas como PAGA: ${commIds.join(', ')}`);
+                }
+            } else {
+                console.log('Nenhuma comissão ANTECIPADA encontrada para este item.');
+            }
+        } catch (err) {
+            console.error('ERRO CRÍTICO NO UPDATE:', err);
+            alert('Erro inesperado: ' + err.message);
+        }
+
         // 1. Atualizar o item para Finalizado no banco
         const { error: itErr } = await db.from('orcamento_itens')
             .update({ status: 'Finalizado' })
