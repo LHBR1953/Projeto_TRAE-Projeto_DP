@@ -250,10 +250,6 @@ async function confirmAtendimentoItem({ budgetId, itemId, agendamentoId }, { sup
         }
 
         const checkout = await processStockOut({ budgetId, itemId, agendamentoId });
-        if (!checkout || checkout.ok !== true) {
-            if (!suppressRefresh) showToast('Conclusão cancelada no check-out de estoque.', true);
-            return { ok: false, reason: 'checkout_cancelled' };
-        }
 
         // Prepara os dados do Laudo e do Profissional
         const b = (budgets || []).find(x => String(x.id) === String(budgetId || checkItem?.orcamento_id));

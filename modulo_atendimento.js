@@ -63,6 +63,26 @@ window.finalizeBudgetItem = async function(budgetId, itemId, event) {
             return; 
         }
 
+        // 1. REINTEGRE A TELA DE BAIXA DE INSUMOS ANTES DO FATURAMENTO
+        const fnEstoque = window.modalCheckOutEstoque || (typeof modalCheckOutEstoque !== 'undefined' ? modalCheckOutEstoque : null);
+        if (typeof fnEstoque === 'function') {
+            console.log("MÓDULO ATENDIMENTO - Aguardando validação do estoque...");
+            const resultEstoque = await fnEstoque({ budgetId, itemId });
+
+            // Se o usuário fechar, cancelar ou o retorno não for de sucesso, aborte imediatamente!
+            if (!resultEstoque || !resultEstoque.ok) {
+                console.log("MÓDULO ATENDIMENTO - Checkout cancelado pelo usuário. Abortando faturamento.");
+                if (btn) {
+                    btn.disabled = false;
+                    btn.removeAttribute('data-loading');
+                    btn.innerHTML = '<i class="ri-check-double-line"></i> Finalizar';
+                }
+                return false;
+            }
+        } else {
+            console.warn("MÓDULO ATENDIMENTO - Função 'modalCheckOutEstoque' não encontrada no escopo global.");
+        }
+
         // a) Update do status do item para 'Finalizado' (padrão de conclusão de item)
         const { error: itErr } = await db.from('orcamento_itens')
             .update({ status: 'Finalizado' })
@@ -152,16 +172,6 @@ window.finalizeBudgetItem = async function(budgetId, itemId, event) {
         }
         if (typeof window.fetchAtendimentoForUI === 'function') {
             window.fetchAtendimentoForUI();
-        }
-
-        // 1. REINTEGRE A TELA DE BAIXA DE INSUMOS
-        const fnEstoque = window.modalCheckOutEstoque || (typeof modalCheckOutEstoque !== 'undefined' ? modalCheckOutEstoque : null);
-        if (typeof fnEstoque === 'function') {
-            console.log("MÓDULO ATENDIMENTO - Chamando tela nativa de baixa de insumos...");
-            // Executa a função do monólito passando o ID do orçamento e do item para abrir o Modal de Consumo
-            fnEstoque({ budgetId, itemId }).catch(e => console.error("MÓDULO ATENDIMENTO - Erro na rotina de estoque:", e));
-        } else {
-            console.warn("MÓDULO ATENDIMENTO - Função 'modalCheckOutEstoque' não encontrada no escopo global.");
         }
 
     } catch (err) {

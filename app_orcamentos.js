@@ -283,11 +283,14 @@ async function syncProteseOrcamentoItens() {
 
 async function fetchBudgetsListRowsFromDb() {
     if (!db || !currentEmpresaId) return [];
+    
+    // Otimização N+1: Trazendo orçamentos e suas dependências num único Join nativo do Supabase
     let q = db.from('orcamentos')
-        .select('*')
+        .select('*, pacientes(nome), orcamento_itens(*), orcamento_pagamentos(*)')
         .eq('empresa_id', currentEmpresaId)
         .not('status', 'ilike', '%avalia%')
-        .order('seqid', { ascending: false });
+        .order('seqid', { ascending: false })
+        .range(0, 49); // Paginação inicial
         
     // Regra Single Ownership: Dentistas e usuários comuns só vêem seus próprios orçamentos
     if (typeof isSuperAdmin !== 'undefined' && !isSuperAdmin && typeof isAdminRole !== 'undefined' && !isAdminRole()) {
@@ -303,66 +306,18 @@ async function fetchBudgetsListRowsFromDb() {
     const { data, error } = await withTimeout(q, 20000, 'orcamentos:list');
     if (error) throw error;
     const rows = Array.isArray(data) ? data : [];
-    if (!rows.length) return [];
-
-    const ids = rows.map(r => String(r && r.id || '').trim()).filter(Boolean);
-    const seqids = rows.map(r => r && r.seqid != null ? Number(r.seqid) : null).filter(n => Number.isFinite(n));
-
-    try {
-        const byBudgetId = new Map();
-        const chunks = splitIntoChunks(ids, 200);
-        for (const chunk of chunks) {
-            let iq = db.from('orcamento_itens')
-                .select('*')
-                .eq('empresa_id', currentEmpresaId)
-                .in('orcamento_id', chunk);
-            const { data: itData, error: itErr } = await withTimeout(iq, 20000, 'orcamento_itens:list');
-            if (itErr) throw itErr;
-            (itData || []).forEach(it => {
-                const k = String(it && it.orcamento_id || '').trim();
-                if (!k) return;
-                if (!byBudgetId.has(k)) byBudgetId.set(k, []);
-                byBudgetId.get(k).push(it);
-            });
+    
+    // Formatando os dados aninhados para manter compatibilidade com a renderização
+    rows.forEach(r => {
+        if (!r.orcamento_itens) r.orcamento_itens = [];
+        r.pagamentos = r.orcamento_pagamentos || [];
+        r.total_pago = r.pagamentos.reduce((acc, curr) => acc + (parseFloat(curr && (curr.valor_pago || curr.valor)) || 0), 0);
+        
+        // Garante a leitura do nome do paciente a partir do Join
+        if (r.pacientes && r.pacientes.nome && !r.pacientenome) {
+            r.pacientenome = r.pacientes.nome;
         }
-        rows.forEach(r => {
-            const k = String(r && r.id || '').trim();
-            r.orcamento_itens = byBudgetId.get(k) || [];
-        });
-    } catch (e) {
-        rows.forEach(r => { r.orcamento_itens = []; });
-    }
-
-    try {
-        const byUuid = new Map();
-        const bySeqId = new Map();
-        const chunks = splitIntoChunks(ids, 500);
-        for (const chunk of chunks) {
-            let pq = db.from('orcamento_pagamentos')
-                .select('*')
-                .eq('empresa_id', currentEmpresaId)
-                .in('orcamento_id', chunk);
-            const { data: pData, error: pErr } = await withTimeout(pq, 20000, 'orcamento_pagamentos:list');
-            if (pErr) throw pErr;
-            (pData || []).forEach(p => {
-                const k = String(p.orcamento_id || '').trim();
-                if (!k) return;
-                if (!byUuid.has(k)) byUuid.set(k, []);
-                byUuid.get(k).push(p);
-            });
-        }
-        rows.forEach(r => {
-            const k = String(r && r.id || '').trim();
-            const pays = byUuid.get(k) || [];
-            r.pagamentos = pays;
-            r.total_pago = pays.reduce((acc, curr) => acc + (parseFloat(curr && (curr.valor_pago || curr.valor)) || 0), 0);
-        });
-    } catch (e) {
-        rows.forEach(r => {
-            r.pagamentos = [];
-            r.total_pago = 0;
-        });
-    }
+    });
 
     return rows;
 }

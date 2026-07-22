@@ -957,6 +957,242 @@ function can(mod, action) {
     return false;
 }
 
+function installStockReportsRbacMonkeyPatch() {
+    if (window.__occStockReportsRbacPatchInstalled) return;
+    window.__occStockReportsRbacPatchInstalled = true;
+
+    const stockPermAliases = {
+        estoque: [
+            'estoque',
+            'Estoque',
+            'estoque_inventario',
+            'Estoque: Inventário',
+            'estoque_modelos',
+            'Estoque: Modelos de Uso',
+            'estoque_vinculos',
+            'Estoque: Vínculo de Serviços',
+            'estoque_movimentacoes',
+            'Estoque: Movimentações',
+            'estoque_relatorios',
+            'Estoque: Relatórios'
+        ],
+        estoque_relatorios: ['estoque_relatorios', 'Estoque: Relatórios']
+    };
+
+    const hasPermValue = (value, actionName = 'select') => {
+        if (typeof value === 'boolean') return value;
+        if (value && typeof value === 'object') {
+            return !!(value[actionName] || value.select || value.insert || value.update || value.delete);
+        }
+        return false;
+    };
+
+    const hasAnyAliasPermission = (keys, actionName = 'select') => {
+        const list = Array.isArray(keys) ? keys : [keys];
+        for (const rawKey of list) {
+            const k = String(rawKey || '').trim();
+            if (!k || !currentUserPerms) continue;
+            if (hasPermValue(currentUserPerms[k], actionName)) return true;
+        }
+        return false;
+    };
+
+    const nativeHasPermission = hasPermission;
+    const nativeCan = can;
+    const nativeCanAccessStockTab = canAccessStockTab;
+    const nativeUpdateSidebarVisibility = updateSidebarVisibility;
+    const nativeSetActiveTab = setActiveTab;
+
+    window.__occNativeHasPermission = nativeHasPermission;
+    window.__occNativeCan = nativeCan;
+    window.__occNativeCanAccessStockTab = nativeCanAccessStockTab;
+    window.__occNativeUpdateSidebarVisibility = nativeUpdateSidebarVisibility;
+    window.__occNativeSetActiveTab = nativeSetActiveTab;
+
+    const getInjectedSidebarRefs = () => ({
+        root: document.getElementById('occInjectedNavEstoqueToggle'),
+        icon: document.getElementById('occInjectedNavEstoqueToggleIcon'),
+        submenu: document.getElementById('occInjectedNavEstoqueSubmenu'),
+        reports: document.getElementById('occInjectedNavInventoryReports')
+    });
+
+    const syncInjectedStockSidebarState = (activeTab = '') => {
+        const refs = getInjectedSidebarRefs();
+        if (!refs.root || !refs.submenu || !refs.reports) return;
+        const isReportsActive = String(activeTab || '') === 'stockReports';
+        refs.root.classList.toggle('expanded', isReportsActive);
+        refs.reports.classList.toggle('active', isReportsActive);
+        refs.submenu.style.display = isReportsActive ? 'block' : (refs.submenu.dataset.forceOpen === 'true' ? 'block' : 'none');
+        if (refs.icon) refs.icon.className = isReportsActive || refs.submenu.style.display !== 'none'
+            ? 'ri-arrow-up-s-line nav-toggle-icon'
+            : 'ri-arrow-down-s-line nav-toggle-icon';
+    };
+
+    const openInjectedStockReports = async () => {
+        const ok = await validateAssinaturaStatusGate({ reason: 'menu:stockReports' }).catch(() => true);
+        if (!ok) return;
+        try {
+            const currentTab = String(sessionStorage.getItem('lastTab') || '');
+            if (currentTab !== 'stockReports') {
+                try { sessionStorage.setItem('lastTab', 'stockReports'); } catch { }
+                bootPreferredTab = 'stockReports';
+                await loadGlobalData();
+                await loadTabData('stockReports');
+            }
+        } catch (e) {
+            console.error('Erro ao abrir menu injetado de estoque:', e);
+        }
+        setActiveTab('stockReports');
+    };
+
+    const ensureInjectedStockSidebar = () => {
+        const hasAnyStock = !!(
+            canAccessStockTab('stockInventory') ||
+            canAccessStockTab('stockModels') ||
+            canAccessStockTab('stockMapping') ||
+            canAccessStockTab('stockLogs') ||
+            canAccessStockTab('stockReports')
+        );
+        const reportsAllowed = canAccessStockTab('stockReports');
+        if (!hasAnyStock || !reportsAllowed) return getInjectedSidebarRefs();
+
+        const nativeToggle = document.getElementById('navEstoqueToggle');
+        const nativeReports = document.getElementById('navInventoryReports');
+        if (nativeToggle || nativeReports) return getInjectedSidebarRefs();
+
+        const navRoot = document.querySelector('.sidebar-nav');
+        if (!navRoot) return getInjectedSidebarRefs();
+
+        let root = document.getElementById('occInjectedNavEstoqueToggle');
+        let submenu = document.getElementById('occInjectedNavEstoqueSubmenu');
+        if (!root || !submenu) {
+            root = document.createElement('button');
+            root.id = 'occInjectedNavEstoqueToggle';
+            root.className = 'nav-item nav-item-stock';
+            root.type = 'button';
+            root.innerHTML = `
+                <i class="ri-box-3-line"></i>
+                <span class="nav-item-label">Estoque</span>
+                <i id="occInjectedNavEstoqueToggleIcon" class="ri-arrow-down-s-line nav-toggle-icon"></i>
+            `;
+
+            submenu = document.createElement('div');
+            submenu.id = 'occInjectedNavEstoqueSubmenu';
+            submenu.className = 'stock-submenu';
+            submenu.style.display = 'none';
+            submenu.innerHTML = `
+                <button id="occInjectedNavInventoryReports" class="nav-item nav-subitem" type="button">
+                    <i class="ri-file-chart-line"></i> <span>Relatórios</span>
+                </button>
+            `;
+
+            const anchor = document.getElementById('navBudgets')
+                || document.getElementById('navFinanceiro')
+                || document.getElementById('navConfigSection');
+            if (anchor && anchor.parentNode === navRoot) {
+                navRoot.insertBefore(root, anchor);
+                navRoot.insertBefore(submenu, anchor);
+            } else {
+                navRoot.appendChild(root);
+                navRoot.appendChild(submenu);
+            }
+        }
+
+        const refs = getInjectedSidebarRefs();
+        if (refs.root && !refs.root.__occBound) {
+            refs.root.__occBound = true;
+            refs.root.onclick = () => {
+                const nextOpen = !(refs.submenu && refs.submenu.style.display !== 'none');
+                if (refs.submenu) {
+                    refs.submenu.dataset.forceOpen = nextOpen ? 'true' : 'false';
+                    refs.submenu.style.display = nextOpen ? 'block' : 'none';
+                }
+                if (refs.icon) refs.icon.className = nextOpen
+                    ? 'ri-arrow-up-s-line nav-toggle-icon'
+                    : 'ri-arrow-down-s-line nav-toggle-icon';
+                refs.root.classList.toggle('expanded', nextOpen);
+            };
+        }
+        if (refs.reports && !refs.reports.__occBound) {
+            refs.reports.__occBound = true;
+            refs.reports.onclick = async (e) => {
+                if (e) e.preventDefault();
+                if (refs.submenu) refs.submenu.dataset.forceOpen = 'true';
+                await openInjectedStockReports();
+            };
+        }
+        return refs;
+    };
+
+    hasPermission = function patchedHasPermission(key) {
+        if (nativeHasPermission(key)) return true;
+        const normalizedKey = String(key || '').trim();
+        if (!normalizedKey) return false;
+        const aliases = stockPermAliases[normalizedKey] || [normalizedKey];
+        return hasAnyAliasPermission(aliases, 'select');
+    };
+
+    can = function patchedCan(mod, action) {
+        if (nativeCan(mod, action)) return true;
+        const modKey = String(mod || '').trim();
+        const actionKey = String(action || 'select').trim() || 'select';
+        if (modKey === 'estoque') {
+            return hasAnyAliasPermission(stockPermAliases.estoque, actionKey);
+        }
+        if (modKey === 'estoque_relatorios') {
+            return hasAnyAliasPermission(stockPermAliases.estoque_relatorios, actionKey);
+        }
+        return false;
+    };
+
+    canAccessStockTab = function patchedCanAccessStockTab(tab) {
+        const tabKey = String(tab || '').trim();
+        if (tabKey === 'stockReports' && hasAnyAliasPermission(stockPermAliases.estoque_relatorios, 'select')) {
+            return true;
+        }
+        return nativeCanAccessStockTab(tab);
+    };
+
+    updateSidebarVisibility = function patchedUpdateSidebarVisibility() {
+        nativeUpdateSidebarVisibility();
+        const reportsAllowed = canAccessStockTab('stockReports');
+        const hasAnyStock = !!(
+            canAccessStockTab('stockInventory') ||
+            canAccessStockTab('stockModels') ||
+            canAccessStockTab('stockMapping') ||
+            canAccessStockTab('stockLogs') ||
+            reportsAllowed
+        );
+        const injected = ensureInjectedStockSidebar();
+        if (navInventoryReports) navInventoryReports.style.display = reportsAllowed ? 'flex' : 'none';
+        if (navEstoqueToggle) navEstoqueToggle.style.display = hasAnyStock ? 'flex' : 'none';
+        if (injected.root) injected.root.style.display = hasAnyStock ? 'flex' : 'none';
+        if (injected.reports) injected.reports.style.display = reportsAllowed ? 'flex' : 'none';
+        if (!hasAnyStock) {
+            if (navEstoqueSubmenu) navEstoqueSubmenu.style.display = 'none';
+            if (navEstoqueToggleIcon) navEstoqueToggleIcon.className = 'ri-arrow-down-s-line';
+            if (injected.submenu) injected.submenu.style.display = 'none';
+            if (injected.icon) injected.icon.className = 'ri-arrow-down-s-line nav-toggle-icon';
+        }
+        syncInjectedStockSidebarState(String(sessionStorage.getItem('lastTab') || ''));
+    };
+
+    setActiveTab = function patchedSetActiveTab(tab) {
+        const result = nativeSetActiveTab(tab);
+        ensureInjectedStockSidebar();
+        syncInjectedStockSidebarState(tab);
+        return result;
+    };
+
+    window.hasPermission = hasPermission;
+    window.can = can;
+    window.canAccessStockTab = canAccessStockTab;
+    window.updateSidebarVisibility = updateSidebarVisibility;
+    window.setActiveTab = setActiveTab;
+}
+
+installStockReportsRbacMonkeyPatch();
+
 function isPasswordChangeEnforced() {
     return !!requirePasswordChange && !isSuperAdmin;
 }
@@ -4088,6 +4324,7 @@ function setActiveTab(tab) {
         if (navEstoqueSubmenu) navEstoqueSubmenu.style.display = 'block';
         if (navEstoqueToggleIcon) navEstoqueToggleIcon.className = 'ri-arrow-up-s-line';
         showList('stockReports');
+        ensureInventoryReportDateDefaults();
     } else if (tab === 'professionals_fallback_removed') {
         if (navProfessionals) navProfessionals.classList.add('active');
         showList('professionals');
@@ -5419,13 +5656,14 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
                 let payload = {
                     empresa_id: getEstoqueEmpresaScopeId(),
                     inventory_id: invId,
-                    atendimento_id: atendimentoRef,
-                    orcamento_item_id: itemIdStr || null,
                     tipo: consumivel ? 'SAIDA' : 'USO',
                     quantidade: toDec(row.qtd, 0),
-                    motivo,
-                    responsavel_id: currentUser && currentUser.id ? currentUser.id : null
+                    motivo: motivo
                 };
+                const actualUserId = typeof currentUser !== 'undefined' && currentUser?.id ? currentUser.id : (typeof window !== 'undefined' && window.currentUserId ? window.currentUserId : null);
+                if (actualUserId) {
+                    payload.responsavel_id = actualUserId;
+                }
                 let ins = await db.from('inventory_logs').insert(payload);
                 if (ins && ins.error && isMotivoSchemaError(ins.error)) {
                     const { motivo, ...rest } = payload;
@@ -5541,8 +5779,22 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
             resolve(result);
         };
         window.__occCheckoutModalFinish = finish;
-        btnCancel.onclick = () => { if (!isSaving) finish({ ok: false, reason: 'cancelled' }); };
-        btnClose.onclick = () => { if (!isSaving) finish({ ok: false, reason: 'cancelled' }); };
+
+        const handleCancel = async (e) => { 
+            if (e && typeof e.preventDefault === 'function') { 
+                e.preventDefault(); 
+                e.stopPropagation(); 
+            } 
+            
+            if (isSaving) return;
+            
+            if (typeof finish === 'function') {
+                finish({ ok: false, reason: 'cancelled' });
+            }
+        };
+
+        btnCancel.onclick = handleCancel;
+        btnClose.onclick = handleCancel;
         btnConfirm.onclick = async () => {
             setSavingUi(true);
             try {
@@ -5595,56 +5847,60 @@ async function modalCheckOutEstoque({ budgetId, itemId, agendamentoId }) {
                 let processedCount = 0;
                 const totalCount = selected.length;
                 
+                const invUpdates = [];
+                const logPayloads = [];
+
                 for (const row of selected) {
                     const invId = String(row && row.mi && row.mi.inventory_id || '');
                     const inv = invById.get(invId) || getInventoryById(invId);
-                    if (!inv) {
-                        processedCount++;
-                        if (progressBar) progressBar.style.width = `${(processedCount / totalCount) * 100}%`;
-                        continue;
-                    }
+                    if (!inv) continue;
+                    
                     const consumivel = isInventoryConsumable(inv);
                     if (consumivel) {
                         const novo = toDec(inv && inv.estoque_atual, 0) - toDec(row.qtd, 0);
-                        const { error: updErr } = await db.from(getDbTable('inventory')).update({ estoque_atual: novo }).eq('id', invId);
-                        if (updErr) throw updErr;
-                        try {
-                            const nextInv = { ...inv, estoque_atual: novo };
-                            invById.set(invId, nextInv);
-                            const local = (inventoryItems || []).find(i => String(i && i.id || '') === String(invId));
-                            if (local) local.estoque_atual = novo;
-                        } catch { }
+                        invUpdates.push({ id: invId, estoque_atual: novo, invRef: inv });
                     }
-                    let payload = {
+                    const logItem = {
                         empresa_id: getEstoqueEmpresaScopeId(),
                         inventory_id: invId,
-                        atendimento_id: atendimentoRef,
-                        orcamento_item_id: itemIdStr || null,
                         tipo: consumivel ? 'SAIDA' : 'USO',
                         quantidade: toDec(row.qtd, 0),
-                        motivo,
-                        responsavel_id: currentUser && currentUser.id ? currentUser.id : null
+                        motivo: motivo
                     };
-                    console.log('Gravando Log:', itemIdStr || null, payload);
-                    let ins = await db.from('inventory_logs').insert(payload);
+
+                    const actualUserId = typeof currentUser !== 'undefined' && currentUser?.id ? currentUser.id : (typeof window !== 'undefined' && window.currentUserId ? window.currentUserId : null);
+                    if (actualUserId) {
+                        logItem.responsavel_id = actualUserId;
+                    }
+
+                    logPayloads.push(logItem);
+                }
+
+                // Atualização assíncrona em lote usando Promise.all (Evita N+1 bloqueante)
+                if (invUpdates.length > 0) {
+                    await Promise.all(invUpdates.map(async (u) => {
+                        const { error: updErr } = await db.from(getDbTable('inventory')).update({ estoque_atual: u.estoque_atual }).eq('id', u.id);
+                        if (updErr) console.error('Erro ao atualizar estoque:', updErr);
+                        try {
+                            const nextInv = { ...u.invRef, estoque_atual: u.estoque_atual };
+                            invById.set(u.id, nextInv);
+                            const local = (inventoryItems || []).find(i => String(i && i.id || '') === String(u.id));
+                            if (local) local.estoque_atual = u.estoque_atual;
+                        } catch { }
+                    }));
+                }
+
+                // Inserção em lote única no Supabase para logs
+                if (logPayloads.length > 0) {
+                    let ins = await db.from('inventory_logs').insert(logPayloads);
                     if (ins && ins.error && isMotivoSchemaError(ins.error)) {
-                        const { motivo, ...rest } = payload;
-                        payload = rest;
-                        ins = await db.from('inventory_logs').insert(payload);
+                        logPayloads.forEach(p => delete p.motivo);
+                        ins = await db.from('inventory_logs').insert(logPayloads);
                     }
                     if (ins && ins.error && isOrcamentoItemIdSchemaError(ins.error)) {
-                        throw new Error("Schema cache desatualizado para inventory_logs.orcamento_item_id. Recarregue o schema do PostgREST (NOTIFY pgrst, 'reload schema') e tente novamente.");
-                    }
-                    if (ins && ins.error && isMotivoSchemaError(ins.error)) {
-                        const { motivo, ...rest } = payload;
-                        payload = rest;
-                        ins = await db.from('inventory_logs').insert(payload);
+                        throw new Error("Schema cache desatualizado para inventory_logs.orcamento_item_id.");
                     }
                     if (ins && ins.error) throw ins.error;
-                    console.log('Log gravado com sucesso:', { inventory_id: invId, atendimento_id: atendimentoRef, orcamento_item_id: itemIdStr || null });
-                    
-                    processedCount++;
-                    if (progressBar) progressBar.style.width = `${(processedCount / totalCount) * 100}%`;
                 }
                 
                 // Força visualização do final antes de fechar (opcional, pode fechar rápido)
@@ -7614,6 +7870,26 @@ function openInventoryNfEntryModal(item) {
     });
 }
 
+function ensureInventoryReportDateDefaults(attempt = 0) {
+    const hoje = new Date();
+    const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const formatarData = (d) => d.toISOString().split('T')[0];
+    const inputDataInicio = document.getElementById('inventoryReportStartDate') || document.querySelector('#dataInicial') || document.querySelector('[name="dataInicial"]');
+    const inputDataFim = document.getElementById('inventoryReportEndDate') || document.querySelector('#dataFinal') || document.querySelector('[name="dataFinal"]');
+    if (!inputDataInicio || !inputDataFim) {
+        if (attempt < 5) setTimeout(() => ensureInventoryReportDateDefaults(attempt + 1), 120);
+        return;
+    }
+    if (!inputDataInicio.value) {
+        inputDataInicio.value = formatarData(primeiroDiaMes);
+    }
+    if (!inputDataFim.value) {
+        inputDataFim.value = formatarData(hoje);
+    }
+    inventoryReportStartDate = String(inputDataInicio.value || inventoryReportStartDate || '');
+    inventoryReportEndDate = String(inputDataFim.value || inventoryReportEndDate || '');
+}
+
 function bindEstoqueModule() {
     if (estoqueBindingsReady) return;
     estoqueBindingsReady = true;
@@ -7766,6 +8042,7 @@ function bindEstoqueModule() {
             renderInventoryTable();
         });
     }
+    ensureInventoryReportDateDefaults();
     if (reportStartDateInput) {
         if (inventoryReportStartDate) reportStartDateInput.value = inventoryReportStartDate;
         reportStartDateInput.addEventListener('change', () => {

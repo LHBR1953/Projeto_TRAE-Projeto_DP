@@ -6904,6 +6904,19 @@ function formatDateInput(date) {
     return `${y}-${m}-${day}`;
 }
 
+function applyInventoryReportDefaultDates(force = false) {
+    const now = new Date();
+    const firstCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const defaultStart = formatDateInput(firstCurrentMonth);
+    const defaultEnd = formatDateInput(now);
+    const startInput = document.getElementById('inventoryReportStartDate');
+    const endInput = document.getElementById('inventoryReportEndDate');
+    if (force || !String(inventoryReportStartDate || '').trim()) inventoryReportStartDate = defaultStart;
+    if (force || !String(inventoryReportEndDate || '').trim()) inventoryReportEndDate = defaultEnd;
+    if (startInput && (force || !startInput.value)) startInput.value = inventoryReportStartDate || defaultStart;
+    if (endInput && (force || !endInput.value)) endInput.value = inventoryReportEndDate || defaultEnd;
+}
+
 function applyInventoryReportDatePreset(preset) {
     const startInput = document.getElementById('inventoryReportStartDate');
     const endInput = document.getElementById('inventoryReportEndDate');
@@ -9380,6 +9393,7 @@ function exportStockReportActiveExcel() {
 }
 
 function renderStockReports() {
+    applyInventoryReportDefaultDates(false);
     const startInput = document.getElementById('inventoryReportStartDate');
     const endInput = document.getElementById('inventoryReportEndDate');
     if (startInput && !startInput.value && inventoryReportStartDate) startInput.value = inventoryReportStartDate;
@@ -9997,7 +10011,10 @@ function bindEstoqueModule() {
     if (btnStockReportReplenishment) btnStockReportReplenishment.addEventListener('click', () => setStockReportsActive('replenishment'));
     if (btnStockReportCosts) btnStockReportCosts.addEventListener('click', () => setStockReportsActive('costs'));
     if (btnStockReportCostBySubdivision) btnStockReportCostBySubdivision.addEventListener('click', () => setStockReportsActive('cost_by_subdivision'));
-    if (btnStockReportConsumption) btnStockReportConsumption.addEventListener('click', () => setStockReportsActive('consumption'));
+    if (btnStockReportConsumption) btnStockReportConsumption.addEventListener('click', () => {
+        applyInventoryReportDefaultDates(true);
+        setStockReportsActive('consumption');
+    });
     if (btnStockReportInventory) btnStockReportInventory.addEventListener('click', () => setStockReportsActive('inventory'));
     if (btnStockReportKits) btnStockReportKits.addEventListener('click', () => setStockReportsActive('kits'));
     if (btnStockReportApuracao) btnStockReportApuracao.addEventListener('click', () => { setStockReportsActive('financial_apportion'); });
@@ -12413,6 +12430,7 @@ function showList(type = 'patients', isMasterMode = false) {
         if (!canAccessStockTab('stockReports')) return;
         if (inventoryReportsView) inventoryReportsView.classList.remove('hidden');
         bindEstoqueModule();
+        applyInventoryReportDefaultDates(true);
         renderStockReports();
         loadEstoqueData(true).then(() => {
             renderStockReports();
