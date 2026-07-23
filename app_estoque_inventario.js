@@ -1824,6 +1824,203 @@
         window[functionName] = wrapped;
     }
 
+    function getFinancialParamsField(id) {
+        return document.getElementById(String(id || '').trim());
+    }
+
+    function notifyFinancialFieldValidation(message) {
+        var text = String(message || '').trim();
+        if (!text) return;
+        try {
+            if (typeof window.showToast === 'function') {
+                window.showToast(text, true);
+                return;
+            }
+        } catch { }
+        try { alert(text); } catch { }
+    }
+
+    function setFinancialFieldErrorState(el, message) {
+        if (!el) return false;
+        var msg = String(message || '').trim();
+        try {
+            el.dataset.occInvalid = msg ? 'true' : 'false';
+            el.setAttribute('aria-invalid', msg ? 'true' : 'false');
+            el.setCustomValidity(msg);
+        } catch { }
+        try {
+            if (msg) {
+                el.style.borderColor = '#dc2626';
+                el.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.15)';
+            } else {
+                el.style.removeProperty('border-color');
+                el.style.removeProperty('box-shadow');
+            }
+        } catch { }
+        return !msg;
+    }
+
+    function normalizeFinancialCnpjDigits(value) {
+        return String(value || '').replace(/\D/g, '').slice(0, 14);
+    }
+
+    function maskFinancialCnpj(value) {
+        var digits = normalizeFinancialCnpjDigits(value);
+        if (digits.length <= 2) return digits;
+        if (digits.length <= 5) return digits.replace(/^(\d{2})(\d+)/, '$1.$2');
+        if (digits.length <= 8) return digits.replace(/^(\d{2})(\d{3})(\d+)/, '$1.$2.$3');
+        if (digits.length <= 12) return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d+)/, '$1.$2.$3/$4');
+        return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*$/, '$1.$2.$3/$4-$5');
+    }
+
+    function isKnownInvalidRepeatedDigits(value) {
+        return /^(\d)\1{13}$/.test(String(value || ''));
+    }
+
+    function isValidCnpjDigits(value) {
+        var cnpj = normalizeFinancialCnpjDigits(value);
+        if (cnpj.length !== 14) return false;
+        if (isKnownInvalidRepeatedDigits(cnpj)) return false;
+
+        var length = 12;
+        var numbers = cnpj.substring(0, length);
+        var digits = cnpj.substring(length);
+        var sum = 0;
+        var pos = length - 7;
+
+        for (var i = length; i >= 1; i -= 1) {
+            sum += Number(numbers.charAt(length - i)) * pos;
+            pos -= 1;
+            if (pos < 2) pos = 9;
+        }
+
+        var result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+        if (result !== Number(digits.charAt(0))) return false;
+
+        length = 13;
+        numbers = cnpj.substring(0, length);
+        sum = 0;
+        pos = length - 7;
+
+        for (var j = length; j >= 1; j -= 1) {
+            sum += Number(numbers.charAt(length - j)) * pos;
+            pos -= 1;
+            if (pos < 2) pos = 9;
+        }
+
+        result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+        return result === Number(digits.charAt(1));
+    }
+
+    function sanitizeMunicipalRegistration(value) {
+        return String(value || '')
+            .trim()
+            .replace(/\s+/g, '')
+            .replace(/[^0-9-]/g, '')
+            .replace(/-+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
+    function validateFinancialCnpjField(options) {
+        var opts = options || {};
+        var el = getFinancialParamsField('fpFiscalCnpj');
+        if (!el) return true;
+
+        var masked = maskFinancialCnpj(el.value);
+        if (el.value !== masked) el.value = masked;
+
+        var digits = normalizeFinancialCnpjDigits(masked);
+        if (!digits) return setFinancialFieldErrorState(el, '');
+
+        if (!isValidCnpjDigits(digits)) {
+            if (opts.notify) notifyFinancialFieldValidation('CNPJ inválido, por favor verifique os números digitados.');
+            return setFinancialFieldErrorState(el, 'CNPJ inválido, por favor verifique os números digitados.');
+        }
+
+        return setFinancialFieldErrorState(el, '');
+    }
+
+    function validateFinancialMunicipalRegistrationField(options) {
+        var opts = options || {};
+        var el = getFinancialParamsField('fpFiscalInscricaoMunicipal');
+        if (!el) return true;
+
+        var sanitized = sanitizeMunicipalRegistration(el.value);
+        if (el.value !== sanitized) el.value = sanitized;
+
+        if (!sanitized) return setFinancialFieldErrorState(el, '');
+
+        if (sanitized.length < 3) {
+            if (opts.notify) notifyFinancialFieldValidation('Inscrição Municipal inválida, verifique o formato informado.');
+            return setFinancialFieldErrorState(el, 'Inscrição Municipal inválida, verifique o formato informado.');
+        }
+
+        return setFinancialFieldErrorState(el, '');
+    }
+
+    function bindFinancialParamsFiscalFieldValidation() {
+        var cnpjEl = getFinancialParamsField('fpFiscalCnpj');
+        var municipalEl = getFinancialParamsField('fpFiscalInscricaoMunicipal');
+        var form = getFinancialParamsField('financialParamsForm');
+
+        if (cnpjEl && !cnpjEl.__occFiscalValidationBound) {
+            cnpjEl.__occFiscalValidationBound = true;
+            cnpjEl.addEventListener('input', function () {
+                cnpjEl.value = maskFinancialCnpj(cnpjEl.value);
+                setFinancialFieldErrorState(cnpjEl, '');
+            });
+            cnpjEl.addEventListener('blur', function () {
+                validateFinancialCnpjField({ notify: true });
+            });
+        }
+
+        if (municipalEl && !municipalEl.__occFiscalValidationBound) {
+            municipalEl.__occFiscalValidationBound = true;
+            municipalEl.addEventListener('input', function () {
+                municipalEl.value = sanitizeMunicipalRegistration(municipalEl.value);
+                setFinancialFieldErrorState(municipalEl, '');
+            });
+            municipalEl.addEventListener('blur', function () {
+                validateFinancialMunicipalRegistrationField({ notify: true });
+            });
+        }
+
+        if (form && !form.__occFiscalValidationSubmitBound) {
+            form.__occFiscalValidationSubmitBound = true;
+            form.addEventListener('submit', function (event) {
+                var cnpjOk = validateFinancialCnpjField({ notify: true });
+                var municipalOk = validateFinancialMunicipalRegistrationField({ notify: true });
+                if (cnpjOk && municipalOk) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                try {
+                    var invalidEl = !cnpjOk ? cnpjEl : municipalEl;
+                    if (invalidEl && typeof invalidEl.focus === 'function') invalidEl.focus();
+                } catch { }
+            }, true);
+        }
+
+        try { validateFinancialCnpjField({ notify: false }); } catch { }
+        try { validateFinancialMunicipalRegistrationField({ notify: false }); } catch { }
+    }
+
+    function hookFinancialParamsFieldValidation() {
+        wrapGlobalFunction('initFinancialParamsForm', '__occFinancialParamsFiscalValidationWrapped', function (base) {
+            return function () {
+                var result = base.apply(this, arguments);
+                setTimeout(function () {
+                    try { bindFinancialParamsFiscalFieldValidation(); } catch (err) {
+                        console.warn('Erro isolado ao vincular validação fiscal:', err);
+                    }
+                }, 0);
+                setTimeout(function () {
+                    try { bindFinancialParamsFiscalFieldValidation(); } catch { }
+                }, 200);
+                return result;
+            };
+        });
+    }
+
     function hookCrudPermissionGuards() {
         wrapGlobalFunction('saveAgendaFromModal', '__occCrudGuardWrapped', function (base) {
             return async function () {
@@ -2925,6 +3122,11 @@
             console.warn('Erro isolado no patch de Tabelas Padrão:', err);
         }
         try {
+            hookFinancialParamsFieldValidation();
+        } catch (err) {
+            console.warn('Erro isolado no patch de validacao fiscal:', err);
+        }
+        try {
             hookRenderInventoryLogsTable();
         } catch (err) {
             console.warn('Erro isolado no patch de estoque:', err);
@@ -2948,6 +3150,11 @@
             bindMasterTablesTemplateTabHandlers();
         } catch (err) {
             console.warn('Erro isolado ao vincular abas das Tabelas Padrão:', err);
+        }
+        try {
+            bindFinancialParamsFiscalFieldValidation();
+        } catch (err) {
+            console.warn('Erro isolado ao vincular campos fiscais:', err);
         }
         try {
             installSidebarSingleActiveHandler();
