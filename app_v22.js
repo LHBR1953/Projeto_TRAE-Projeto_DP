@@ -2459,16 +2459,13 @@ function initSuperAdminCleanupUI() {
         // Auth users purge (always for ZERAR)
         if (scope === 'ZERAR') {
             try {
-                const { data: { session } } = await db.auth.getSession();
-                if (!session) throw new Error('Sessão expirada.');
+                const session = await getValidSupabaseSession(db);
+                if (!session) throw new Error('Sessão expirada. Faça login novamente.');
                 const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
+                const headers = buildEdgeFunctionHeaders(db, session);
                 const resp = await fetch(`${baseUrl}/functions/v1/purge-tenant-users`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
-                        'apikey': supabaseKey
-                    },
+                    headers,
                     body: JSON.stringify({ empresa_id: empresaId, only_exclusive: false })
                 });
                 const j = await resp.json();
@@ -3066,6 +3063,7 @@ const systemModules = [
     { id: 'agenda', label: 'Agenda' },
     { id: 'atendimento', label: 'Atendimento' },
     { id: 'audit_cancelados', label: 'Audit Cancelados' },
+    { id: 'auditoria', label: 'Auditoria' },
     { id: 'comissoes', label: 'Comissões' },
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'especialidades', label: 'Especialidades' },
@@ -3075,21 +3073,145 @@ const systemModules = [
     { id: 'estoque_relatorios', label: 'Estoque: Relatórios' },
     { id: 'estoque_vinculos', label: 'Estoque: Vínculo de Serviços' },
     { id: 'financeiro', label: 'Financeiro' },
+    { id: 'nfse', label: 'Emitir NFS-e' },
     { id: 'ia', label: 'Inteligência OCC' },
     { id: 'marketing', label: 'Marketing' },
     { id: 'orcamentos', label: 'Orçamentos' },
     { id: 'pacientes', label: 'Pacientes' },
     { id: 'protese', label: 'Produção Protética' },
     { id: 'profissionais', label: 'Profissionais' },
-    { id: 'servicos', label: 'Serviços/Estoque' }
+    { id: 'servicos', label: 'Serviços/Estoque' },
+    { id: 'tickets', label: 'Suporte: Tickets' },
+    { id: 'chat_portal', label: 'Suporte: Chat do Portal' },
+    { id: 'suporte', label: 'Suporte' }
 ];
+
+const modulePermissionAliasMap = {
+    nfse: ['emissao_nfse', 'navNfse'],
+    tickets: ['suporte_tickets', 'suporteTickets', 'navSuporteTickets'],
+    chat_portal: ['portal_chat', 'portalChat', 'navPortalChat'],
+    suporte: ['support', 'navSupport'],
+    auditoria: ['audit', 'navAudit']
+};
+
+function clonePermissionEntry(entry) {
+    return {
+        select: !!(entry && entry.select),
+        insert: !!(entry && entry.insert),
+        update: !!(entry && entry.update),
+        delete: !!(entry && entry.delete)
+    };
+}
+
+function expandModulePermissionAliases(permissionMap) {
+    const expanded = permissionMap && typeof permissionMap === 'object' ? permissionMap : {};
+    Object.keys(modulePermissionAliasMap).forEach((canonicalKey) => {
+        if (!expanded[canonicalKey]) return;
+        modulePermissionAliasMap[canonicalKey].forEach(aliasKey => {
+            expanded[aliasKey] = clonePermissionEntry(expanded[canonicalKey]);
+        });
+    });
+    return expanded;
+}
+
+function expandActiveModuleIds(moduleIds) {
+    const collector = new Set(Array.isArray(moduleIds) ? moduleIds : []);
+    Object.keys(modulePermissionAliasMap).forEach((canonicalKey) => {
+        if (!collector.has(canonicalKey)) return;
+        modulePermissionAliasMap[canonicalKey].forEach(aliasKey => collector.add(aliasKey));
+    });
+    return Array.from(collector);
+}
+
+async function getValidSupabaseSession(client) {
+    const sb = (client && client.auth) ? client : (window.supabase && window.supabase.auth ? window.supabase : null);
+    if (!sb || !sb.auth) return null;
+    let session = null;
+    try {
+        const { data } = await sb.auth.getSession();
+        session = data && data.session ? data.session : null;
+    } catch { }
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expAt = session && session.expires_at ? Number(session.expires_at) : 0;
+    if (!session || (expAt && (expAt - nowSec) < 90)) {
+        try {
+            const { data } = await sb.auth.refreshSession();
+            if (data && data.session) session = data.session;
+        } catch { }
+    }
+    if (session && session.access_token && session.refresh_token && typeof sb.auth.setSession === 'function') {
+        try {
+            await sb.auth.setSession({
+                access_token: session.access_token,
+                refresh_token: session.refresh_token
+            });
+        } catch { }
+    }
+    return session;
+}
+
+function getSupabaseAnonKey(client) {
+    return String(
+        (client && client.supabaseKey)
+        || window.SUPABASE_KEY
+        || window.supabaseKey
+        || supabaseKey
+        || ''
+    ).trim();
+}
+
+function buildEdgeFunctionHeaders(client, session) {
+    const token = session && session.access_token ? String(session.access_token) : '';
+    const anonKey = getSupabaseAnonKey(client);
+    return {
+        'Content-Type': 'application/json',
+        'apikey': anonKey,
+        'Authorization': `Bearer ${token}`
+    };
+}
+
+function buildBooleanPermissionMap(permissions) {
+    const source = permissions && typeof permissions === 'object' ? permissions : {};
+    const result = {};
+    Object.keys(source).forEach((key) => {
+        const value = source[key];
+        if (value && typeof value === 'object') {
+            result[key] = !!(value.select || value.insert || value.update || value.delete || value.active || value.enabled || value.allow || value.value);
+            return;
+        }
+        result[key] = !!value;
+    });
+    return result;
+}
+
+async function logEdgeInvokeErrorDetails(error, payload) {
+    console.error('Payload sendo enviado para Edge Function:', payload);
+    if (!error) return;
+    try {
+        if (error.context && typeof error.context.json === 'function') {
+            const errResponse = await error.context.json();
+            console.error('Detalhe do erro da Edge Function:', errResponse);
+            return;
+        }
+    } catch (detailErr) {
+        console.error('Falha ao ler o detalhe do erro da Edge Function:', detailErr);
+    }
+    console.error('Erro na Edge Function:', error);
+}
+
+function buildInvokeAuthHeaders(session) {
+    const token = session && session.access_token ? String(session.access_token) : '';
+    return {
+        Authorization: `Bearer ${token}`
+    };
+}
 
 function buildFullPermissions() {
     const perms = {};
     (systemModules || []).forEach(mod => {
         perms[mod.id] = { select: true, insert: true, update: true, delete: true };
     });
-    return perms;
+    return expandModulePermissionAliases(perms);
 }
 
 function applyAdminFullPermissionsToGrid() {
@@ -3275,6 +3397,16 @@ function renderPermissionsGrid(existingPerms = null, targetEmpresaId = null) {
             // Regra específica para o Financeiro/NFS-e
             if (modIdClean === 'nfse' || modLabelClean.includes('nfs-e')) {
                 if (allowedModules.some(m => m.includes('nfs-e') || m.includes('nfse'))) {
+                    isAllowed = true;
+                }
+            }
+            if (modIdClean === 'suporte' || modLabelClean.includes('suporte')) {
+                if (allowedModules.some(m => m.includes('suporte') || m.includes('support') || m.includes('navsupport'))) {
+                    isAllowed = true;
+                }
+            }
+            if (modIdClean === 'auditoria' || modLabelClean.includes('auditoria')) {
+                if (allowedModules.some(m => m === 'audit' || m.includes('auditoria') || m.includes('navaudit'))) {
                     isAllowed = true;
                 }
             }
@@ -13092,8 +13224,13 @@ function initMarketingModule() {
         const dryRun = Boolean(opts && typeof opts === 'object' ? opts.dryRun : false);
 
         try {
+            const session = await getValidSupabaseSession(db);
+            if (!session) throw new Error('Sessão expirada. Faça login novamente.');
             const invoke = db.functions && typeof db.functions.invoke === 'function'
-                ? db.functions.invoke('run-marketing-campaign', { body: { empresa_id: currentEmpresaId, campaign_id: campaignId || undefined, status_key: statusKey || undefined, dry_run: dryRun } })
+                ? db.functions.invoke('run-marketing-campaign', {
+                    body: { empresa_id: currentEmpresaId, campaign_id: campaignId || undefined, status_key: statusKey || undefined, dry_run: dryRun },
+                    headers: buildInvokeAuthHeaders(session)
+                })
                 : Promise.reject(new Error('Supabase Functions não disponível neste build.'));
             const { data, error } = await withTimeout(invoke, 120000, 'marketing:run-marketing-campaign');
             if (error) throw error;
@@ -21441,16 +21578,13 @@ window.removeTenantUser = async function (usuario_id) {
             if (error) throw error;
             if (Number(count || 0) === 0) {
                 try {
-                    const { data: { session } } = await db.auth.getSession();
-                    if (!session) throw new Error("Sessão expirada.");
+                        const session = await getValidSupabaseSession(db);
+                    if (!session) throw new Error("Sessão expirada. Faça login novamente.");
                     const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
+                    const headers = buildEdgeFunctionHeaders(db, session);
                     const resp = await fetch(`${baseUrl}/functions/v1/delete-tenant-user`, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${session.access_token}`,
-                            'apikey': supabaseKey
-                        },
+                        headers,
                         body: JSON.stringify({
                             usuario_id: usuario_id,
                             empresa_id: targetEmpresaId
@@ -27749,7 +27883,15 @@ if (userAdminForm) {
         const email = document.getElementById('adminUserEmail').value.trim();
         const password = document.getElementById('adminUserPassword').value;
         const role = normalizeRole(document.getElementById('adminUserRole').value);
+        const nameInput = document.getElementById('adminUserName');
+        const userName = String(nameInput && nameInput.value || '').trim() || (email ? String(email).split('@')[0] : '');
         const btnSave = document.getElementById('btnSaveUserAdmin');
+        const editEmpresaId = document.getElementById('editAdminEmpresaId') ? document.getElementById('editAdminEmpresaId').value : '';
+        let targetEmpresaId = editEmpresaId || currentEmpresaId;
+        if (!id && isSuperAdmin) {
+            const selectedCompany = document.getElementById('adminUserCompany').value;
+            if (selectedCompany) targetEmpresaId = selectedCompany;
+        }
 
         if (!email || (!id && !password) || !role) {
             showToast("Preencha todos os campos obrigatórios.", true);
@@ -27793,6 +27935,17 @@ if (userAdminForm) {
                     };
                 });
             }
+            permissions = expandModulePermissionAliases(permissions);
+            let allowedModules = null;
+            if (typeof window.getAllowedModuleSetForUserCompany === 'function') {
+                allowedModules = await window.getAllowedModuleSetForUserCompany(targetEmpresaId, true);
+            }
+            if (typeof window.filterPermissionsByAllowedModules === 'function') {
+                permissions = window.filterPermissionsByAllowedModules(permissions, allowedModules);
+            }
+            if (typeof window.enforceSupportHierarchyPermissions === 'function') {
+                permissions = window.enforceSupportHierarchyPermissions(permissions);
+            }
 
             const activeModuleIds = [];
             systemModules.forEach(mod => {
@@ -27800,10 +27953,10 @@ if (userAdminForm) {
                     activeModuleIds.push(mod.id);
                 }
             });
+            const expandedActiveModuleIds = expandActiveModuleIds(activeModuleIds);
+            void expandedActiveModuleIds;
 
             if (id) {
-                const empresaId = document.getElementById('editAdminEmpresaId') ? document.getElementById('editAdminEmpresaId').value : '';
-                const targetEmpresaId = empresaId || currentEmpresaId;
                 // Update existing user permissions/role in our mapping table
                 const { error: updateError, count } = await db.from('usuario_empresas')
                     .update({
@@ -27815,26 +27968,22 @@ if (userAdminForm) {
                 if (updateError) throw updateError;
                 if (Number(count || 0) === 0) {
                     try {
-                        const { data: { session } } = await db.auth.getSession();
-                        if (!session) throw new Error("Sessão expirada.");
-                        const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
-                        const resp = await fetch(`${baseUrl}/functions/v1/update-tenant-user`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${session.access_token}`,
-                                'apikey': supabaseKey
-                            },
-                            body: JSON.stringify({
-                                usuario_id: id,
-                                empresa_id: targetEmpresaId,
-                                role,
-                                permissoes: permissions
-                            })
+                        const session = await getValidSupabaseSession(db);
+                        if (!session) throw new Error("Sessão expirada. Faça login novamente.");
+                        const payload = {
+                            usuario_id: id,
+                            empresa_id: targetEmpresaId,
+                            role,
+                            permissoes: permissions
+                        };
+                        console.log('Payload sendo enviado para Edge Function:', payload);
+                        const { data: result, error: invokeError } = await db.functions.invoke('update-tenant-user', {
+                            body: payload,
+                            headers: buildInvokeAuthHeaders(session)
                         });
-                        const result = await resp.json();
-                        if (!resp.ok) {
-                            const errorMsg = result.error || result.message || 'Erro desconhecido na nuvem.';
+                        if (invokeError) {
+                            await logEdgeInvokeErrorDetails(invokeError, payload);
+                            const errorMsg = invokeError.message || 'Erro desconhecido na nuvem.';
                             throw new Error(`Erro na nuvem: ${errorMsg}`);
                         }
 
@@ -27847,39 +27996,25 @@ if (userAdminForm) {
 
                 showToast("Permissões do usuário atualizadas com sucesso!");
             } else {
-                const { data: { session } } = await db.auth.getSession();
-                if (!session) throw new Error("Sessão expirada.");
+                const session = await getValidSupabaseSession(db);
+                if (!session) throw new Error("Sessão expirada. Faça login novamente.");
 
-                // Call Edge Function for new user creation
-                const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
+                const payload = {
+                    email: email,
+                    password: password,
+                    role: role,
+                    empresa_id: targetEmpresaId,
+                    permissoes: permissions
+                };
+                console.log('Payload sendo enviado para Edge Function:', payload);
 
-                // Determine which company ID to use
-                let targetEmpresaId = currentEmpresaId;
-                if (isSuperAdmin) {
-                    const selectedCompany = document.getElementById('adminUserCompany').value;
-                    if (selectedCompany) targetEmpresaId = selectedCompany;
-                }
-
-                const response = await fetch(`${baseUrl}/functions/v1/create-tenant-user`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
-                        'apikey': supabaseKey
-                    },
-                    body: JSON.stringify({
-                        email: email,
-                        password: password,
-                        role: role,
-                        empresa_id: targetEmpresaId,
-                        permissoes: permissions
-                    })
+                const { data: result, error: invokeError } = await db.functions.invoke('create-tenant-user', {
+                    body: payload,
+                    headers: buildInvokeAuthHeaders(session)
                 });
-
-                const result = await response.json();
-
-                if (!response.ok) {
-                    const errorMsg = result.error || result.message || "Erro desconhecido na nuvem.";
+                if (invokeError) {
+                    await logEdgeInvokeErrorDetails(invokeError, payload);
+                    const errorMsg = invokeError.message || "Erro desconhecido na nuvem.";
                     throw new Error(`Erro na nuvem: ${errorMsg}`);
                 }
 
@@ -28137,16 +28272,13 @@ if (empresaForm) {
                     btnSave.innerHTML = '<i class="ri-save-3-line"></i> Salvar Empresa';
                     return;
                 }
-                const { data: { session } } = await db.auth.getSession();
-                if (!session) throw new Error("Sessão expirada.");
+                const session = await getValidSupabaseSession(db);
+                if (!session) throw new Error("Sessão expirada. Faça login novamente.");
                 const baseUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl;
+                const headers = buildEdgeFunctionHeaders(db, session);
                 const resp = await fetch(`${baseUrl}/functions/v1/create-tenant-company`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
-                        'apikey': supabaseKey
-                    },
+                    headers,
                     body: JSON.stringify({
                         empresa_id: newId,
                         identificador: newId,
@@ -28272,10 +28404,12 @@ if (empresaForm) {
                                         activeModuleIds.push(mod.id);
                                     }
                                 });
+                                const expandedActiveModuleIds = expandActiveModuleIds(activeModuleIds);
+                                void expandedActiveModuleIds;
 
                                 // Atualiza a tabela JSON de permissões
                                 const { error: permError } = await db.from('usuario_empresas')
-                                    .update({ permissoes: newAdminPerms })
+                                    .update({ permissoes: expandModulePermissionAliases(newAdminPerms) })
                                     .eq('empresa_id', oldId)
                                     .in('usuario_id', adminIds);
                                 
@@ -30637,13 +30771,16 @@ const OCC_NFE_ADAPTERS = {
 
         try {
             // Em vez de usar supabase.functions.invoke, vamos usar o db.functions.invoke que já está inicializado no escopo global
+            const session = await getValidSupabaseSession(db);
+            if (!session) throw new Error("Sessão expirada. Faça login novamente.");
             const { data, error } = await db.functions.invoke('focus-nfe-api', {
                 body: {
                     token: token,
                     modo: modo,
                     ref: ref,
                     nfeData: nfeData
-                }
+                },
+                headers: buildInvokeAuthHeaders(session)
             });
 
             if (error) {

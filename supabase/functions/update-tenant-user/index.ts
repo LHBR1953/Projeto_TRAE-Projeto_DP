@@ -17,7 +17,7 @@ function normalizeRole(input: unknown): string {
 }
 
 function buildFullPermissions() {
-  return {
+  const perms = {
     dashboard: { select: true, insert: true, update: true, delete: true },
     pacientes: { select: true, insert: true, update: true, delete: true },
     profissionais: { select: true, insert: true, update: true, delete: true },
@@ -30,7 +30,17 @@ function buildFullPermissions() {
     atendimento: { select: true, insert: true, update: true, delete: true },
     agenda: { select: true, insert: true, update: true, delete: true },
     protese: { select: true, insert: true, update: true, delete: true },
+    nfse: { select: true, insert: true, update: true, delete: true },
+    emissao_nfse: { select: true, insert: true, update: true, delete: true },
+    navNfse: { select: true, insert: true, update: true, delete: true },
+    suporte: { select: true, insert: true, update: true, delete: true },
+    support: { select: true, insert: true, update: true, delete: true },
+    navSupport: { select: true, insert: true, update: true, delete: true },
+    auditoria: { select: true, insert: true, update: true, delete: true },
+    audit: { select: true, insert: true, update: true, delete: true },
+    navAudit: { select: true, insert: true, update: true, delete: true },
   };
+  return perms;
 }
 
 Deno.serve(async (req) => {
