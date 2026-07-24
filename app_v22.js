@@ -28113,8 +28113,14 @@ function openPlanoConfigModal(item) {
     const checkboxesContainer = document.getElementById('planoModulosCheckboxContainer');
     if (checkboxesContainer) {
         const selectedMods = modulosTxt.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        const planoModuleAliases = {
+            auditoria: ['auditoria', 'audit', 'navaudit']
+        };
         checkboxesContainer.querySelectorAll('input[type="checkbox"]').forEach(chk => {
-            chk.checked = selectedMods.includes(chk.value.toLowerCase()) || selectedMods.includes(chk.parentElement.textContent.trim().toLowerCase());
+            const checkboxValue = String(chk.value || '').trim().toLowerCase();
+            const checkboxLabel = String(chk.parentElement && chk.parentElement.textContent || '').trim().toLowerCase();
+            const aliases = planoModuleAliases[checkboxValue] || [checkboxValue, checkboxLabel];
+            chk.checked = selectedMods.some(sel => aliases.includes(sel) || sel === checkboxLabel);
         });
         
         const updateHiddenInput = () => {
