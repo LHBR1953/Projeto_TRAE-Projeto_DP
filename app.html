@@ -2831,12 +2831,12 @@
                     </button>
                 </div>
 
-                <form id="empresaForm" class="patient-form">
+                <form id="empresaForm" class="patient-form" style="gap:10px;">
                     <input type="hidden" id="editEmpresaOldId">
 
-                    <div class="form-card">
+                    <div class="form-card" style="padding:14px 14px 10px;">
                         <h3 class="card-title">Informações da Empresa</h3>
-                        <div class="form-grid">
+                        <div class="form-grid" style="gap:10px 14px;">
                             <div class="form-group">
                                 <label for="empresaId">Identificador (ID) *</label>
                                 <input type="text" id="empresaId" required placeholder="ex: emp_clinica_01">
@@ -2884,9 +2884,9 @@
                                 </select>
                             </div>
 
-                            <div class="form-group span-2" style="border: 1px dashed var(--border-color); padding: 15px; border-radius: var(--border-radius); background-color: #f8fafc;">
+                            <div class="form-group span-2" style="border: 1px dashed var(--border-color); padding: 10px 12px; border-radius: var(--border-radius); background-color: #f8fafc;">
                                 <label style="display: block; font-weight: bold; margin-bottom: 10px; color: var(--text-main);">Módulos Contratados (Herdado do Plano)</label>
-                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 15px;">Ao selecionar um plano acima, os módulos padrões serão marcados automaticamente. Você pode marcar ou desmarcar itens para fazer vendas avulsas.</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">Ao selecionar um plano acima, os módulos padrões serão marcados automaticamente. Você pode marcar ou desmarcar itens para fazer vendas avulsas.</div>
                                 <div id="empresaModulosCheckboxes" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                                     <!-- Populated dynamically via JS -->
                                 </div>
@@ -2897,11 +2897,11 @@
                                 <input type="date" id="empresaDataVencimento">
                             </div>
 
-                            <div class="form-group span-2" style="border: 1px dashed var(--border-color); padding: 15px; border-radius: var(--border-radius); background-color: #f8fafc; margin-top: 10px;">
-                                <h4 style="margin: 0 0 15px 0; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
+                            <div class="form-group span-2" style="border: 1px dashed var(--border-color); padding: 10px 12px; border-radius: var(--border-radius); background-color: #f8fafc; margin-top: 6px;">
+                                <h4 style="margin: 0 0 10px 0; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
                                     <i class="ri-calendar-event-line"></i> Configurações da Agenda
                                 </h4>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;">
                                     <div class="form-group">
                                         <label for="empresaTempoConsulta">Tempo de Consulta Padrão (minutos) *</label>
                                         <input type="number" id="empresaTempoConsulta" min="5" step="5" value="30" required>
@@ -2947,11 +2947,16 @@
                         </div>
                     </div>
 
-                    <div class="form-actions">
+                    <div class="form-actions" style="margin-top:6px; padding-top:6px; flex-direction:column; align-items:stretch; gap:8px;">
+                        <div id="empresaEmailError" style="display:none; color:#dc2626; font-size:0.85rem; line-height:1.3; min-height:18px;">
+                            Seu usuário já está vinculado a uma clínica. Entre com outro usuário
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; gap:8px;">
                         <button type="button" id="btnCancelEmpresa" class="btn btn-secondary">Cancelar</button>
                         <button type="submit" id="btnSaveEmpresa" class="btn btn-primary">
                             <i class="ri-save-line"></i> Salvar Empresa
                         </button>
+                        </div>
                     </div>
                 </form>
             </section>

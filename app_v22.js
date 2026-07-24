@@ -28258,16 +28258,37 @@ function setEmpresaEmailValidationState(isInvalid) {
     }
 }
 
+function setEmpresaEmailErrorMessage(message) {
+    const errorEl = document.getElementById('empresaEmailError');
+    if (!errorEl) return;
+    const text = String(message || '').trim();
+    errorEl.textContent = text || 'Seu usuário já está vinculado a uma clínica. Entre com outro usuário';
+    errorEl.style.display = text ? 'block' : 'none';
+}
+
+function showEmpresaEmailDuplicateError() {
+    const emailInput = document.getElementById('empresaEmail');
+    if (emailInput) {
+        emailInput.value = '';
+    }
+    setEmpresaEmailValidationState(true);
+    setEmpresaEmailErrorMessage('Seu usuário já está vinculado a uma clínica. Entre com outro usuário');
+    setTimeout(() => {
+        try {
+            if (emailInput) emailInput.focus();
+        } catch { }
+    }, 50);
+}
+
 async function validateEmpresaEmailAvailability(options) {
     const opts = options && typeof options === 'object' ? options : {};
     const emailInput = document.getElementById('empresaEmail');
     const oldId = String((document.getElementById('editEmpresaOldId') || {}).value || '').trim();
     const email = String((emailInput || {}).value || '').trim().toLowerCase();
-    const shouldFocus = opts.focus === true;
-    const showFeedback = opts.showFeedback !== false;
 
     if (!emailInput || oldId || !email) {
         setEmpresaEmailValidationState(false);
+        setEmpresaEmailErrorMessage('');
         return true;
     }
 
@@ -28279,20 +28300,16 @@ async function validateEmpresaEmailAvailability(options) {
         if (error) throw error;
         const alreadyExists = Number(count || 0) > 0;
         if (alreadyExists) {
-            setEmpresaEmailValidationState(true);
-            if (showFeedback) {
-                showToast('Este e-mail já possui cadastro no sistema. Utilize outro e-mail ou faça login.', true);
-            }
-            if (shouldFocus) {
-                try { emailInput.focus(); } catch { }
-            }
+            showEmpresaEmailDuplicateError();
             return false;
         }
         setEmpresaEmailValidationState(false);
+        setEmpresaEmailErrorMessage('');
         return true;
     } catch (err) {
         console.warn('Falha ao validar e-mail da clínica:', err);
         setEmpresaEmailValidationState(false);
+        setEmpresaEmailErrorMessage('');
         return true;
     }
 }
@@ -28300,7 +28317,10 @@ async function validateEmpresaEmailAvailability(options) {
 const empresaEmailInput = document.getElementById('empresaEmail');
 if (empresaEmailInput && !empresaEmailInput.__occEmailAvailabilityBound) {
     empresaEmailInput.__occEmailAvailabilityBound = true;
-    empresaEmailInput.addEventListener('input', () => setEmpresaEmailValidationState(false));
+    empresaEmailInput.addEventListener('input', () => {
+        setEmpresaEmailValidationState(false);
+        setEmpresaEmailErrorMessage('');
+    });
     empresaEmailInput.addEventListener('blur', async () => {
         await validateEmpresaEmailAvailability({ focus: true, showFeedback: true });
     });
@@ -28390,17 +28410,14 @@ if (empresaForm) {
                 if (!resp.ok) {
                     const errorMsg = result.error || result.message || 'Erro desconhecido na nuvem.';
                     if (/já possui cadastro no sistema|already been registered|already registered|already exists/i.test(String(errorMsg || ''))) {
-                        setEmpresaEmailValidationState(true);
-                        try {
-                            const emailInput = document.getElementById('empresaEmail');
-                            if (emailInput) emailInput.focus();
-                        } catch { }
-                        throw new Error('Este e-mail já possui cadastro no sistema. Utilize outro e-mail ou faça login.');
+                        showEmpresaEmailDuplicateError();
+                        throw new Error('Seu usuário já está vinculado a uma clínica. Entre com outro usuário');
                     }
                     throw new Error(`Erro na nuvem: ${errorMsg}`);
                 }
                 const msg = result && (result.message || result.msg) ? String(result.message || result.msg) : `Clínica ${nome} cadastrada!`;
                 setEmpresaEmailValidationState(false);
+                setEmpresaEmailErrorMessage('');
                 showToast(msg);
                 showToast(`📧 Login: ${email} | 🔑 Senha Inicial: 123456 (Será solicitado que você crie uma nova senha no primeiro acesso).`);
             } else {
@@ -28540,7 +28557,12 @@ if (empresaForm) {
             }
         } catch (err) {
             console.error("Error saving empresa:", err);
-            showToast(err.message, true);
+            const errMessage = String(err && err.message || '');
+            if (errMessage === 'Seu usuário já está vinculado a uma clínica. Entre com outro usuário') {
+                setEmpresaEmailErrorMessage(errMessage);
+            } else {
+                showToast(errMessage || 'Erro ao salvar empresa.', true);
+            }
         } finally {
             btnSave.disabled = false;
             btnSave.innerHTML = '<i class="ri-save-line"></i> Salvar Empresa';
