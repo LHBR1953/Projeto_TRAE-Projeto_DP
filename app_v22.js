@@ -42,6 +42,21 @@ function isTruthy(v) {
     return s === 'true' || s === 't' || s === '1' || s === 'sim' || s === 'yes' || s === 'y' || s === 'on';
 }
 
+function sanitizeCommercialPlanModules(modulesInput) {
+    return String(modulesInput || '')
+        .split(',')
+        .map(s => String(s || '').trim())
+        .filter(Boolean)
+        .filter(s => {
+            const normalized = s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+            return normalized !== 'destacar no site'
+                && normalized !== 'destacar_no_site'
+                && normalized !== 'destaque'
+                && normalized !== 'highlight';
+        })
+        .join(', ');
+}
+
 // CPF validation algorithm
 function isValidCPF(cpf) {
     cpf = cpf.replace(/[^\d]+/g, '');
@@ -664,7 +679,7 @@ async function checkEmpresaHasNfseModule() {
         if (empErr) throw empErr;
         if (!empData) return false;
 
-        let modulosStr = empData.modulos_contratados;
+        let modulosStr = sanitizeCommercialPlanModules(empData.modulos_contratados);
 
         // Fallback: se a empresa não tiver o snapshot gravado (ex: não rodou o backfill), busca do plano
         if (!modulosStr && empData.plano_tipo) {
@@ -677,7 +692,7 @@ async function checkEmpresaHasNfseModule() {
                 const { data } = await db.from('config_planos').select('modulos_texto').ilike('tipo_assinatura', empData.plano_tipo).maybeSingle();
                 planData = data;
             }
-            if (planData) modulosStr = planData.modulos_texto;
+            if (planData) modulosStr = sanitizeCommercialPlanModules(planData.modulos_texto);
         }
 
         if (modulosStr) {
@@ -3371,12 +3386,12 @@ function renderPermissionsGrid(existingPerms = null, targetEmpresaId = null) {
         const emp = activeEmpresasList.find(e => e.id === empId);
         if (emp) {
             if (emp.modulos_contratados) {
-                allowedModules = emp.modulos_contratados.toLowerCase().split(',').map(s => s.trim());
+                allowedModules = sanitizeCommercialPlanModules(emp.modulos_contratados).toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
             } else if (emp.plano_tipo && configPlanosList && typeof resolvePlanDisplayName === 'function') {
                 const planName = resolvePlanDisplayName(emp.plano_tipo);
                 const planCfg = configPlanosList.find(p => p.tipo_assinatura === planName || p.id === emp.plano_tipo || p.tipo_assinatura === emp.plano_tipo);
                 if (planCfg && planCfg.modulos_texto) {
-                    allowedModules = planCfg.modulos_texto.toLowerCase().split(',').map(s => s.trim());
+                    allowedModules = sanitizeCommercialPlanModules(planCfg.modulos_texto).toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
                 }
             }
         }
@@ -11450,7 +11465,7 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
         const allSystemModules = [
             'Dashboard', 'Profissionais', 'Serviços', 'Estoque: Modelo de Uso', 
             'Estoque: Movimentações', 'Orçamentos', 'Marketing', 'Atendimento', 
-            'Produção Protética', 'Destacar no Site', 'Pacientes', 'Especialidades', 
+            'Produção Protética', 'Pacientes', 'Especialidades',
             'Estoque: Inventário', 'Estoque: Vínculo de Serviços', 'Estoque: Relatórios', 
             'Financeiro', 'Comissões', 'Agenda', 'Emitir NFS-e', 'Auditoria', 'Suporte'
         ];
@@ -11460,7 +11475,7 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             containerModulos.innerHTML = '';
             
             // Remove espaços, quebras de linha e vírgulas inúteis, garantindo que " Orçamentos " seja reconhecido
-            const cleanStr = (currentModulesStr || '').replace(/\r?\n|\r/g, ' ').toLowerCase();
+            const cleanStr = sanitizeCommercialPlanModules(currentModulesStr).replace(/\r?\n|\r/g, ' ').toLowerCase();
             const currentArr = cleanStr.split(',').map(s => s.trim()).filter(Boolean);
             
             allSystemModules.forEach(mod => {
@@ -28117,6 +28132,7 @@ function openPlanoConfigModal(item) {
             auditoria: ['auditoria', 'audit', 'navaudit']
         };
         checkboxesContainer.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+            if (chk.id === 'planoConfigDestaque') return;
             const checkboxValue = String(chk.value || '').trim().toLowerCase();
             const checkboxLabel = String(chk.parentElement && chk.parentElement.textContent || '').trim().toLowerCase();
             const aliases = planoModuleAliases[checkboxValue] || [checkboxValue, checkboxLabel];
@@ -28124,7 +28140,7 @@ function openPlanoConfigModal(item) {
         });
         
         const updateHiddenInput = () => {
-            const checkedVals = Array.from(checkboxesContainer.querySelectorAll('input[type="checkbox"]:checked')).map(c => c.value);
+            const checkedVals = Array.from(checkboxesContainer.querySelectorAll('input[type="checkbox"]:checked')).filter(c => c.id !== 'planoConfigDestaque').map(c => c.value);
             if (planoConfigModulosHidden) planoConfigModulosHidden.value = checkedVals.join(', ');
         };
         
@@ -28230,6 +28246,66 @@ if (empresaLogoFile) {
     });
 }
 
+function setEmpresaEmailValidationState(isInvalid) {
+    const emailInput = document.getElementById('empresaEmail');
+    if (!emailInput) return;
+    if (isInvalid) {
+        emailInput.style.borderColor = '#dc2626';
+        emailInput.style.boxShadow = '0 0 0 1px rgba(220, 38, 38, 0.35)';
+    } else {
+        emailInput.style.borderColor = '';
+        emailInput.style.boxShadow = '';
+    }
+}
+
+async function validateEmpresaEmailAvailability(options) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const emailInput = document.getElementById('empresaEmail');
+    const oldId = String((document.getElementById('editEmpresaOldId') || {}).value || '').trim();
+    const email = String((emailInput || {}).value || '').trim().toLowerCase();
+    const shouldFocus = opts.focus === true;
+    const showFeedback = opts.showFeedback !== false;
+
+    if (!emailInput || oldId || !email) {
+        setEmpresaEmailValidationState(false);
+        return true;
+    }
+
+    try {
+        const { count, error } = await db
+            .from('usuario_empresas')
+            .select('usuario_id', { count: 'exact', head: true })
+            .eq('user_email', email);
+        if (error) throw error;
+        const alreadyExists = Number(count || 0) > 0;
+        if (alreadyExists) {
+            setEmpresaEmailValidationState(true);
+            if (showFeedback) {
+                showToast('Este e-mail já possui cadastro no sistema. Utilize outro e-mail ou faça login.', true);
+            }
+            if (shouldFocus) {
+                try { emailInput.focus(); } catch { }
+            }
+            return false;
+        }
+        setEmpresaEmailValidationState(false);
+        return true;
+    } catch (err) {
+        console.warn('Falha ao validar e-mail da clínica:', err);
+        setEmpresaEmailValidationState(false);
+        return true;
+    }
+}
+
+const empresaEmailInput = document.getElementById('empresaEmail');
+if (empresaEmailInput && !empresaEmailInput.__occEmailAvailabilityBound) {
+    empresaEmailInput.__occEmailAvailabilityBound = true;
+    empresaEmailInput.addEventListener('input', () => setEmpresaEmailValidationState(false));
+    empresaEmailInput.addEventListener('blur', async () => {
+        await validateEmpresaEmailAvailability({ focus: true, showFeedback: true });
+    });
+}
+
 if (empresaForm) {
     empresaForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -28256,10 +28332,15 @@ if (empresaForm) {
             
             // Coleta os módulos marcados na interface
             const cbs = document.querySelectorAll('.empresa-modulo-cb:checked');
-            const modulosContratados = Array.from(cbs).map(cb => cb.value).join(', ');
+            const modulosContratados = sanitizeCommercialPlanModules(Array.from(cbs).map(cb => cb.value).join(', '));
 
             if (!email) {
                 showToast("E-mail da empresa é obrigatório.", true);
+                return;
+            }
+
+            const isEmailAvailable = await validateEmpresaEmailAvailability({ focus: true, showFeedback: true });
+            if (!isEmailAvailable) {
                 return;
             }
 
@@ -28308,9 +28389,18 @@ if (empresaForm) {
                 const result = await resp.json();
                 if (!resp.ok) {
                     const errorMsg = result.error || result.message || 'Erro desconhecido na nuvem.';
+                    if (/já possui cadastro no sistema|already been registered|already registered|already exists/i.test(String(errorMsg || ''))) {
+                        setEmpresaEmailValidationState(true);
+                        try {
+                            const emailInput = document.getElementById('empresaEmail');
+                            if (emailInput) emailInput.focus();
+                        } catch { }
+                        throw new Error('Este e-mail já possui cadastro no sistema. Utilize outro e-mail ou faça login.');
+                    }
                     throw new Error(`Erro na nuvem: ${errorMsg}`);
                 }
                 const msg = result && (result.message || result.msg) ? String(result.message || result.msg) : `Clínica ${nome} cadastrada!`;
+                setEmpresaEmailValidationState(false);
                 showToast(msg);
                 showToast(`📧 Login: ${email} | 🔑 Senha Inicial: 123456 (Será solicitado que você crie uma nova senha no primeiro acesso).`);
             } else {
@@ -28350,7 +28440,7 @@ if (empresaForm) {
                 try {
                     let allowedModules = null;
                     if (empresaData.modulos_contratados) {
-                        allowedModules = empresaData.modulos_contratados.toLowerCase().split(',').map(s => s.trim());
+                        allowedModules = sanitizeCommercialPlanModules(empresaData.modulos_contratados).toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
                     } else if (empresaData.plano_tipo) {
                         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empresaData.plano_tipo);
                         let planData = null;
@@ -28363,7 +28453,7 @@ if (empresaForm) {
                         }
 
                         if (planData && planData.modulos_texto) {
-                            allowedModules = planData.modulos_texto.toLowerCase().split(',').map(s => s.trim());
+                            allowedModules = sanitizeCommercialPlanModules(planData.modulos_texto).toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
                         }
                     }
 

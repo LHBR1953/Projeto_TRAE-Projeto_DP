@@ -61,6 +61,10 @@ function isEmailAlreadyRegisteredError(err: unknown): boolean {
   return /already been registered/i.test(msg) || /already registered/i.test(msg) || /already exists/i.test(msg);
 }
 
+function buildEmailAlreadyExistsMessage(): string {
+  return "Este e-mail já possui cadastro no sistema. Utilize outro e-mail ou faça login.";
+}
+
 async function findAuthUserIdByEmail(
   supabaseAdmin: ReturnType<typeof createClient>,
   email: string,
@@ -232,19 +236,10 @@ Deno.serve(async (req) => {
     if (empChkErr) throw empChkErr;
     if (existingEmpresa) throw new Error(`Empresa '${empresaId}' já existe.`);
 
-    const { error: empInsErr } = await supabaseAdmin.from("empresas").insert({
-      id: empresaId,
-      identificador,
-      nome,
-      email,
-      assinatura_status: assinaturaStatus,
-      plano_tipo: planoTipo,
-      supervisor_pin: supervisorPin || null,
-      telefone,
-      celular,
-      logotipo,
-    });
-    if (empInsErr) throw empInsErr;
+    const existingAuthUserId = await findAuthUserIdByEmail(supabaseAdmin, email);
+    if (existingAuthUserId) {
+      throw new Error(buildEmailAlreadyExistsMessage());
+    }
 
     let authUserId: string | null = null;
     let createdNewAuthUser = false;
@@ -255,18 +250,13 @@ Deno.serve(async (req) => {
         email_confirm: true,
       });
       if (createErr) {
-        if (!isEmailAlreadyRegisteredError(createErr)) throw createErr;
-        authUserId = await findAuthUserIdByEmail(supabaseAdmin, email);
-        if (!authUserId) throw new Error(`Usuário já existe no Auth, mas não foi possível localizar pelo email (${email}).`);
-        const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(authUserId, {
-          password: initialPassword,
-          email_confirm: true,
-        });
-        if (updErr) throw updErr;
-      } else {
-        authUserId = newUserObj.user.id;
-        createdNewAuthUser = true;
+        if (isEmailAlreadyRegisteredError(createErr)) {
+          throw new Error(buildEmailAlreadyExistsMessage());
+        }
+        throw createErr;
       }
+      authUserId = newUserObj.user.id;
+      createdNewAuthUser = true;
 
       let modulosTextoDoPlano = null;
       if (planoTipo) {
@@ -295,6 +285,20 @@ Deno.serve(async (req) => {
           modulosTextoDoPlano = planData.modulos_texto;
         }
       }
+
+      const { error: empInsErr } = await supabaseAdmin.from("empresas").insert({
+        id: empresaId,
+        identificador,
+        nome,
+        email,
+        assinatura_status: assinaturaStatus,
+        plano_tipo: planoTipo,
+        supervisor_pin: supervisorPin || null,
+        telefone,
+        celular,
+        logotipo,
+      });
+      if (empInsErr) throw empInsErr;
 
       const permissoes = buildFullPermissions(modulosTextoDoPlano);
       const { error: linkError } = await supabaseAdmin.from("usuario_empresas").upsert(

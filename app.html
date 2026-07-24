@@ -6083,36 +6083,35 @@
                 </div>
                 <div class="form-group">
                     <label>Módulos Permitidos</label>
-                    <div id="planoModulosCheckboxContainer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; font-size: 0.85rem;">
-                        <label class="checkbox-label"><input type="checkbox" value="agenda"> Agenda</label>
-                        <label class="checkbox-label"><input type="checkbox" value="atendimento"> Atendimento</label>
-                        <label class="checkbox-label"><input type="checkbox" value="auditoria"> Auditoria</label>
-                        <label class="checkbox-label"><input type="checkbox" value="comissoes"> Comissões</label>
-                        <label class="checkbox-label"><input type="checkbox" value="dashboard"> Dashboard</label>
-                        <label class="checkbox-label"><input type="checkbox" value="especialidades"> Especialidades</label>
-                        <label class="checkbox-label"><input type="checkbox" value="estoque_inventario"> Estoque: Inventário</label>
-                        <label class="checkbox-label"><input type="checkbox" value="estoque_modelos"> Estoque: Modelo de Uso</label>
-                        <label class="checkbox-label"><input type="checkbox" value="estoque_movimentacoes"> Estoque: Movimentações</label>
-                        <label class="checkbox-label"><input type="checkbox" value="estoque_relatorios"> Estoque: Relatórios</label>
-                        <label class="checkbox-label"><input type="checkbox" value="estoque_vinculos"> Estoque: Vínculo de Serviços</label>
-                        <label class="checkbox-label"><input type="checkbox" value="nfse"> Emitir NFS-e</label>
-                        <label class="checkbox-label"><input type="checkbox" value="financeiro"> Financeiro</label>
-                        <label class="checkbox-label"><input type="checkbox" value="marketing"> Marketing</label>
-                        <label class="checkbox-label"><input type="checkbox" value="orcamentos"> Orçamentos</label>
-                        <label class="checkbox-label"><input type="checkbox" value="pacientes"> Pacientes</label>
-                        <label class="checkbox-label"><input type="checkbox" value="profissionais"> Profissionais</label>
-                        <label class="checkbox-label"><input type="checkbox" value="protese"> Produção Protética</label>
-                        <label class="checkbox-label"><input type="checkbox" value="servicos"> Serviços</label>
+                    <div id="planoModulosCheckboxContainer" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:10px; font-size:0.85rem;">
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <label class="checkbox-label"><input type="checkbox" value="agenda"> Agenda</label>
+                            <label class="checkbox-label"><input type="checkbox" value="atendimento"> Atendimento</label>
+                            <label class="checkbox-label"><input type="checkbox" value="auditoria"> Auditoria</label>
+                            <label class="checkbox-label"><input type="checkbox" value="comissoes"> Comissões</label>
+                            <label class="checkbox-label"><input type="checkbox" value="dashboard"> Dashboard</label>
+                            <label class="checkbox-label"><input type="checkbox" id="planoConfigDestaque" value=""> Destacar no Site</label>
+                            <label class="checkbox-label"><input type="checkbox" value="especialidades"> Especialidades</label>
+                            <label class="checkbox-label"><input type="checkbox" value="nfse"> Emitir NFS-e</label>
+                            <label class="checkbox-label"><input type="checkbox" value="estoque_inventario"> Estoque: Inventário</label>
+                            <label class="checkbox-label"><input type="checkbox" value="estoque_modelos"> Estoque: Modelo de Uso</label>
+                            <label class="checkbox-label"><input type="checkbox" value="estoque_movimentacoes"> Estoque: Movimentações</label>
+                            <label class="checkbox-label"><input type="checkbox" value="estoque_relatorios"> Estoque: Relatórios</label>
+                            <label class="checkbox-label"><input type="checkbox" value="estoque_vinculos"> Estoque: Vínculo de Serviços</label>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <label class="checkbox-label"><input type="checkbox" value="financeiro"> Financeiro</label>
+                            <label class="checkbox-label"><input type="checkbox" value="marketing"> Marketing</label>
+                            <label class="checkbox-label"><input type="checkbox" value="orcamentos"> Orçamentos</label>
+                            <label class="checkbox-label"><input type="checkbox" value="pacientes"> Pacientes</label>
+                            <label class="checkbox-label"><input type="checkbox" value="protese"> Produção Protética</label>
+                            <label class="checkbox-label"><input type="checkbox" value="profissionais"> Profissionais</label>
+                            <label class="checkbox-label"><input type="checkbox" value="servicos"> Serviços</label>
+                        </div>
                     </div>
                 </div>
                 <div class="form-group" style="display:none;">
                     <input type="hidden" id="planoConfigModulos">
-                </div>
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="planoConfigDestaque">
-                        Destacar no Site
-                    </label>
                 </div>
             </div>
             <div class="modal-footer">
