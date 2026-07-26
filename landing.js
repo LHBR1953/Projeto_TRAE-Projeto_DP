@@ -182,6 +182,7 @@ function initTrialModal() {
   const termsBox = document.getElementById('occTermosBox');
   const chkTerms = document.getElementById('chk_termos_occ');
   let progressTimer = null;
+  const REQUIRED_FIELDS_ERROR = 'Por favor, preencha todos os campos obrigatórios para continuar.';
 
   if (!backdrop || !btnOpen || !btnClose || !form) return;
 
@@ -193,6 +194,66 @@ function initTrialModal() {
     });
   }
 
+  const normalizePlanValue = (value) => String(value || '').trim().toLowerCase();
+  const getDefaultTrialPlanValue = () => {
+    const preferred = (cachedPlanos || []).find(p => {
+      const tipo = normalizePlanValue(p && p.tipo_assinatura);
+      return tipo === 'trial' || tipo === 'trail';
+    });
+    return String(preferred && preferred.tipo_assinatura || '');
+  };
+  const resolveTrialPlanOptionValue = (selectedPlan = '') => {
+    const planEl = document.getElementById('trialPlan');
+    if (!planEl) return '';
+    const target = normalizePlanValue(selectedPlan);
+    if (!target) return '';
+    const options = Array.from(planEl.options || []);
+    const exact = options.find(opt => normalizePlanValue(opt.value) === target);
+    if (exact) return exact.value;
+    const fuzzy = options.find(opt => normalizePlanValue(opt.textContent) === target);
+    return fuzzy ? fuzzy.value : '';
+  };
+  const clearFieldInvalidState = (field) => {
+    if (!field) return;
+    field.style.border = '';
+    field.style.outline = '';
+    field.style.boxShadow = '';
+  };
+  const markFieldInvalid = (field) => {
+    if (!field) return;
+    field.style.border = '2px solid #ef4444';
+    field.style.outline = 'none';
+    field.style.boxShadow = '0 0 0 1px rgba(239, 68, 68, 0.2)';
+  };
+  const focusInvalidField = (field) => {
+    if (!field) return;
+    setTimeout(() => {
+      try { field.focus(); } catch { }
+    }, 100);
+  };
+  const validateRequiredTrialFields = () => {
+    const requiredFields = [
+      document.getElementById('trialClinicName'),
+      document.getElementById('trialEmail'),
+      document.getElementById('trialCell'),
+      document.getElementById('trialPlan'),
+      document.getElementById('trialPassword'),
+      document.getElementById('chk_termos_occ')
+    ];
+    requiredFields.forEach(clearFieldInvalidState);
+
+    const firstInvalid = requiredFields.find(field => {
+      if (!field) return false;
+      if (field.type === 'checkbox') return !field.checked;
+      return !String(field.value || '').trim();
+    });
+
+    if (!firstInvalid) return true;
+    markFieldInvalid(firstInvalid);
+    setErr(REQUIRED_FIELDS_ERROR);
+    focusInvalidField(firstInvalid);
+    return false;
+  };
   const open = (selectedPlan = '') => {
     backdrop.style.display = 'flex';
     if (boxErr) boxErr.style.display = 'none';
@@ -207,11 +268,15 @@ function initTrialModal() {
     }
 
     const planEl = document.getElementById('trialPlan');
-    if (planEl && selectedPlan) planEl.value = String(selectedPlan);
+    if (planEl) {
+      const resolvedPlan = resolveTrialPlanOptionValue(selectedPlan || getDefaultTrialPlanValue());
+      if (resolvedPlan) planEl.value = resolvedPlan;
+    }
     
     const modalTitle = document.getElementById('trialModalTitle');
     if (modalTitle) {
-      const isTrial = selectedPlan.toUpperCase() === 'TRIAL' || selectedPlan.toUpperCase() === 'TRAIL';
+      const activePlan = String((planEl && planEl.value) || selectedPlan || '').trim();
+      const isTrial = activePlan.toUpperCase() === 'TRIAL' || activePlan.toUpperCase() === 'TRAIL';
       modalTitle.textContent = isTrial ? 'Criar clínica e testar por 30 dias' : 'Criar clínica';
     }
 
@@ -220,8 +285,8 @@ function initTrialModal() {
   };
   const close = () => { backdrop.style.display = 'none'; };
 
-  btnOpen.addEventListener('click', () => open(''));
-  if (btnOpen2) btnOpen2.addEventListener('click', () => open(''));
+  btnOpen.addEventListener('click', () => open(getDefaultTrialPlanValue()));
+  if (btnOpen2) btnOpen2.addEventListener('click', () => open(getDefaultTrialPlanValue()));
   btnClose.addEventListener('click', close);
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
   document.addEventListener('keydown', (e) => {
@@ -231,14 +296,78 @@ function initTrialModal() {
   if (inputCell) {
     inputCell.addEventListener('input', (e) => {
       e.target.value = maskCell(e.target.value);
+      clearFieldInvalidState(e.target);
+      if (boxErr && boxErr.textContent === REQUIRED_FIELDS_ERROR) {
+        boxErr.textContent = '';
+        boxErr.style.display = 'none';
+      }
     });
   }
+  const trialEmailInput = document.querySelector('#trialEmail') || document.querySelector('input[name="email"]');
+  if (trialEmailInput && !trialEmailInput.__occDuplicateEmailBound) {
+    trialEmailInput.__occDuplicateEmailBound = true;
+    trialEmailInput.addEventListener('input', () => {
+      clearTrialEmailErrorState();
+      if (boxErr && boxErr.textContent === REQUIRED_FIELDS_ERROR) {
+        boxErr.textContent = '';
+        boxErr.style.display = 'none';
+      }
+    });
+  }
+  ['trialClinicName', 'trialPlan', 'trialPassword', 'chk_termos_occ'].forEach((id) => {
+    const field = document.getElementById(id);
+    if (!field || field.__occRequiredFieldBound) return;
+    field.__occRequiredFieldBound = true;
+    const eventName = field.type === 'checkbox' || field.tagName === 'SELECT' ? 'change' : 'input';
+    field.addEventListener(eventName, () => {
+      clearFieldInvalidState(field);
+      if (boxErr && boxErr.textContent === REQUIRED_FIELDS_ERROR) {
+        boxErr.textContent = '';
+        boxErr.style.display = 'none';
+      }
+    });
+  });
 
   const setErr = (msg) => {
     if (!boxErr) return;
     boxErr.textContent = String(msg || 'Erro desconhecido');
     boxErr.style.display = 'block';
   };
+  const clearTrialEmailErrorState = () => {
+    const emailInput = document.querySelector('#trialEmail') || document.querySelector('input[name="email"]');
+    if (emailInput) {
+      emailInput.style.border = '';
+      emailInput.style.outline = '';
+      emailInput.style.boxShadow = '';
+    }
+  };
+  const isDuplicateLinkedEmailError = (msg) => {
+    const text = String(msg || '').toLowerCase();
+    return text.includes('já está vinculado a uma clínica')
+      || text.includes('já possui cadastro no sistema')
+      || text.includes('already been registered')
+      || text.includes('already registered')
+      || text.includes('already exists')
+      || text.includes('user already registered')
+      || text.includes('email rate limit exceeded');
+  };
+  function tratarErroEmailDuplicado() {
+    const emailInput = document.querySelector('#trialEmail') || document.querySelector('#empresaEmail') || document.querySelector('input[name="email"]');
+    const errorDiv = document.querySelector('#trialError') || document.querySelector('#empresaModalError') || document.querySelector('.error-message');
+
+    if (errorDiv) {
+      errorDiv.textContent = 'Seu usuário já está vinculado a uma clínica. Entre com outro usuário';
+      errorDiv.style.display = 'block';
+    }
+
+    if (emailInput) {
+      emailInput.value = '';
+      emailInput.style.border = '2px solid #ef4444';
+      emailInput.style.outline = 'none';
+      emailInput.style.boxShadow = '0 0 0 1px rgba(239, 68, 68, 0.2)';
+      setTimeout(() => emailInput.focus(), 100);
+    }
+  }
   const setOk = (msg) => {
     if (!boxOk) return;
     boxOk.textContent = String(msg || '');
@@ -253,12 +382,9 @@ function initTrialModal() {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!validateRequiredTrialFields()) return;
     if (!db) {
       setErr('Não foi possível conectar ao servidor. Verifique internet/bloqueio de CDN e tente novamente.');
-      return;
-    }
-    if (chkTerms && !chkTerms.checked) {
-      setErr('Você precisa rolar a caixa de texto até o final e concordar com os Termos de Assinatura.');
       return;
     }
     const prevBtnText = btnSubmit ? String(btnSubmit.textContent || '') : '';
@@ -282,8 +408,8 @@ function initTrialModal() {
     const planoTipo = String((document.getElementById('trialPlan') || {}).value || '').trim();
     const password = String((document.getElementById('trialPassword') || {}).value || '');
 
-    if (!nome || !email || !password || !planoTipo) {
-      setErr('Preencha os campos obrigatórios.');
+    if (!nome || !email || !celular || !password || !planoTipo || !(chkTerms && chkTerms.checked)) {
+      setErr(REQUIRED_FIELDS_ERROR);
       if (btnSubmit) btnSubmit.disabled = false;
       return;
     }
@@ -343,7 +469,11 @@ function initTrialModal() {
           }
         }
       } catch { }
-      setErr(msg);
+      if (isDuplicateLinkedEmailError(msg)) {
+        tratarErroEmailDuplicado();
+      } else {
+        setErr(msg);
+      }
     } finally {
       if (progressTimer) {
         clearInterval(progressTimer);
@@ -369,11 +499,19 @@ function splitModulesText(text) {
     .filter(Boolean);
 }
 
+function parsePlanDisplayValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return 0;
+  const normalized = raw.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function renderPlanosCards(planos) {
   const container = document.getElementById('plansContainer');
   const trialPlan = document.getElementById('trialPlan');
   if (!container || !trialPlan) return;
-  const list = Array.isArray(planos) ? planos : [];
+  const list = Array.isArray(planos) ? [...planos].sort((a, b) => parsePlanDisplayValue(a && a.valor_plano) - parsePlanDisplayValue(b && b.valor_plano)) : [];
   trialPlan.innerHTML = '<option value="">Selecione um plano</option>';
 
   if (!list.length) {

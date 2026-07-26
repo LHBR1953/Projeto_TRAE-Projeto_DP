@@ -6,6 +6,10 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="manifest.json" />
   <script>
     if (window.location.hash && window.location.hash.includes('type=recovery')) {
       window.location.replace('app.html' + window.location.hash);
@@ -71,21 +75,32 @@
     @media (max-width: 740px) { .lp-cta-block { grid-template-columns: 1fr; } }
     .lp-cta-text { margin: 0; color: var(--text-dark); font-weight: 900; letter-spacing: -0.02em; font-size: 18px; }
     .lp-cta-sub { margin: 8px 0 0; color: var(--text-muted); line-height: 1.7; }
-    .lp-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .lp-plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; align-items: stretch; }
     @media (max-width: 740px) { .lp-plans { grid-template-columns: 1fr; } }
-    .lp-plan { border: 1px solid var(--border-color); border-radius: 20px; background: rgba(255,255,255,0.92); padding: 20px; box-shadow: 0 18px 70px rgba(10, 15, 25, 0.08); }
+    .lp-plan { border: 1px solid var(--border-color); border-radius: 20px; background: rgba(255,255,255,0.92); padding: 20px; box-shadow: 0 18px 70px rgba(10, 15, 25, 0.08); display: flex; flex-direction: column; height: 100%; }
     .lp-plan h3 { margin: 0; font-size: 18px; color: var(--text-dark); font-weight: 900; letter-spacing: -0.02em; }
     .lp-price { margin-top: 8px; font-size: 36px; font-weight: 950; letter-spacing: -0.03em; color: var(--text-dark); }
-    .lp-plan ul { margin: 12px 0 0; padding-left: 18px; color: var(--text-muted); line-height: 1.6; }
+    .lp-plan ul { margin: 12px 0 0; padding-left: 18px; color: var(--text-muted); line-height: 1.6; flex: 1 1 auto; }
     .lp-footer { margin-top: auto; border-top: 1px solid var(--border-color); padding: 18px 20px; color: var(--text-muted); font-size: 12px; text-align: center; }
     .lp-modal-backdrop { position: fixed; inset: 0; background: rgba(10, 15, 25, 0.62); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 10000; }
     .lp-modal { width: 100%; max-width: 520px; border-radius: 16px; background: #fff; border: 1px solid var(--border-color); box-shadow: 0 24px 90px rgba(0,0,0,0.35); overflow: hidden; }
+    #trialModalBackdrop.lp-modal-backdrop { display: none; align-items: center; justify-content: center; position: fixed; inset: 0; z-index: 10000; padding: 1rem; }
+    #trialModalBackdrop .lp-modal { max-height: 90vh; display: flex; flex-direction: column; overflow-y: auto; }
     .lp-modal-header { padding: 16px 16px 0; }
     .lp-modal-title { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-dark); }
     .lp-modal-body { padding: 14px 16px 16px; }
     .lp-form { display: grid; grid-template-columns: 1fr; gap: 12px; }
     .lp-form .form-group { margin-bottom: 0; }
     .lp-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+    #trialModalBackdrop .lp-modal-header { padding: 12px 14px 0; }
+    #trialModalBackdrop .lp-modal-body { padding: 10px 14px 12px; }
+    #trialModalBackdrop .lp-form { gap: 0.5rem; }
+    #trialModalBackdrop .lp-form .form-group { margin-bottom: 0; }
+    #trialModalBackdrop .lp-modal-actions { margin-top: 0.5rem; gap: 0.5rem; }
+    #trialModalBackdrop #occTermosBox { max-height: 110px; margin-bottom: 0.5rem; }
+    #trialModalBackdrop .lp-error,
+    #trialModalBackdrop .lp-result,
+    #trialModalBackdrop .lp-progress-wrap { margin-top: 0.5rem; }
     .lp-modal .lp-btn-secondary { background: #f3f4f6; border-color: #d1d5db; color: #334155; }
     .lp-modal .lp-btn-secondary:hover { background: #e5e7eb; }
     .lp-result { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(16, 185, 129, 0.08); color: #065f46; border: 1px solid rgba(16, 185, 129, 0.20); display: none; white-space: pre-wrap; }
@@ -431,8 +446,8 @@
             <input id="trialEmail" type="email" required autocapitalize="none" spellcheck="false" placeholder="contato@clinica.com.br" />
           </div>
           <div class="form-group">
-            <label for="trialCell">Celular</label>
-            <input id="trialCell" type="text" placeholder="(00) 00000-0000" maxlength="15" />
+            <label for="trialCell">Celular *</label>
+            <input id="trialCell" type="text" required placeholder="(00) 00000-0000" maxlength="15" />
           </div>
           <div class="form-group">
             <label for="trialPlan">Plano escolhido *</label>
@@ -602,6 +617,7 @@
     <svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M12.031 0C5.383 0 0 5.383 0 12.031c0 2.124.553 4.195 1.604 6.01L.065 23.51l5.63-1.541a11.968 11.968 0 006.336 1.802h.005c6.646 0 12.03-5.383 12.03-12.03S18.678 0 12.03 0zM12.03 21.758c-1.796 0-3.555-.483-5.097-1.396l-.365-.216-3.784 1.035 1.055-3.69-.237-.377a9.962 9.962 0 01-1.523-5.326c0-5.503 4.478-9.982 9.985-9.982 5.506 0 9.983 4.479 9.983 9.982s-4.477 9.982-9.983 9.982zm5.474-7.48c-.3-.15-1.776-.88-2.052-.98-.276-.1-.476-.15-.676.15-.2.3-.776.98-.952 1.18-.176.2-.352.226-.652.076-1.503-.75-2.585-1.428-3.554-3.11-.176-.3-.018-.463.132-.613.134-.135.3-.3.45-.45.15-.15.2-.25.3-.413.1-.167.05-.317-.025-.467-.076-.15-.676-1.626-.926-2.226-.243-.585-.49-.505-.676-.515-.176-.01-.376-.01-.576-.01-.2 0-.526.076-.802.376-.276.3-1.052 1.026-1.052 2.502 0 1.476 1.077 2.903 1.227 3.103.15.2 2.115 3.228 5.12 4.453 2.053.837 2.85.918 3.863.774.774-.11 1.776-.726 2.027-1.428.25-.7.25-1.3.176-1.428-.076-.125-.276-.2-.576-.35z"/></svg>
   </a>
 
-  <script src="landing.js?v=20260331-0001"></script>
+  <script src="landing.js?v=20260724_PLAN_SORT_GRID_FIX"></script>
+  <script src="pwa-install.js?v=20260725_PWA_RESTORE_001"></script>
 </body>
 </html>

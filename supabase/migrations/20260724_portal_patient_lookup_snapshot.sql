@@ -1,0 +1,12 @@
+-- Snapshot / ponto de restauração da função de busca anônima do Portal do Paciente.
+-- Execute antes da migration principal se quiser salvar o estado atual.
+
+select
+  n.nspname as schema_name,
+  p.proname as function_name,
+  pg_get_function_identity_arguments(p.oid) as identity_args,
+  pg_get_functiondef(p.oid) as function_definition
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname = 'buscar_paciente_portal';

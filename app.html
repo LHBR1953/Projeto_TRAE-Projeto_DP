@@ -7,12 +7,27 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <meta name="theme-color" content="#0b1220">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>OCC - Odonto Connect Cloud</title>
     <link rel="icon" href="data:,">
+    <link rel="manifest" href="manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css?v=20260706_STATUS_ANTECIPADO_CONCAT">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
+        @media (max-width: 1023.98px) {
+            #buildBadge,
+            #systemVersionContainer,
+            .build-badge,
+            [id*="build"] {
+                display: none !important;
+                visibility: hidden !important;
+                pointer-events: none !important;
+            }
+        }
+
         #bootLoader {
             position: fixed;
             inset: 0;
@@ -127,9 +142,6 @@
 </head>
 
 <body>
-    <div id="buildBadge" style="position: fixed; right: 10px; bottom: 10px; z-index: 9999; background: rgba(0,0,0,0.75); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-family: Inter, sans-serif; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-        build 20260325-1125
-    </div>
     <div id="bootLoader">Carregando...</div>
     <!-- Patient Portal Login View -->
     <div id="patientLoginView" class="login-wrapper" style="display: none;">
@@ -409,10 +421,18 @@
                         <span class="role" id="userRoleDisplay">Aguarde</span>
                     </div>
                 </div>
-                <button id="btnLogout" class="btn-icon"
-                    style="margin-top: 1rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;">
-                    <i class="ri-logout-box-r-line"></i> <span>Sair</span>
-                </button>
+                <div style="margin-top: 1rem; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
+                    <button id="btnLogout" class="btn-icon"
+                        style="margin-top: 0; flex: 1 1 auto; width: auto; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;">
+                        <i class="ri-logout-box-r-line"></i> <span>Sair</span>
+                    </button>
+                    <div id="systemVersionContainer"
+                        title="build"
+                        aria-label="Versão do sistema"
+                        style="display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-hover); color: var(--text-muted); flex: 0 0 auto;">
+                        <i class="ri-price-tag-3-line" aria-hidden="true"></i>
+                    </div>
+                </div>
             </div>
         </aside>
 
@@ -6159,11 +6179,12 @@
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
     <!-- App Script Loader (Robust) -->
     <script src="modulo_financeiro.js?v=20260630_SUB_MENU_FISCAL_TAB_MOVIMENTATION"></script>
     <script src="modulo_atendimento.js?v=20260708_FLUXO_CORRETO"></script>
-    <script src="app_v22.js?v=20260708_WIPEOUT_PAYLOAD"></script>
+    <script src="app_v22.js?v=20260725_SIDEBAR_VERSION_ICON"></script>
     <script src="app_estoque_inventario.js"></script>
     <script src="app_config_usuarios.js?v=20260704_MENU_URL_PARAM_FIX"></script>
     <script>
@@ -6248,6 +6269,7 @@
             }, true);
         })();
     </script>
+    <script src="pwa-install.js?v=20260725_PWA_RESTORE_001"></script>
 </body>
 
 </html>

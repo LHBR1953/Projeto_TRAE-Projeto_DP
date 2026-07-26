@@ -92,7 +92,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260615-1000';
+const APP_BUILD = '20260725-0028';
 
 const AUTO_SEED_SPECIALTIES = false;
 
@@ -208,6 +208,12 @@ window.db = db;
 
 setInterval(() => {
     const el = document.getElementById('buildBadge');
+    const versionEl = document.getElementById('systemVersionContainer');
+    if (versionEl) {
+        const versionLabel = `build ${APP_BUILD}`;
+        versionEl.title = versionLabel;
+        versionEl.setAttribute('aria-label', versionLabel);
+    }
     if (!el) return;
     const d = window.__dpDebug || {};
     if (!d.enabled) {
@@ -2328,6 +2334,790 @@ function buildSaPlan(scopeRaw, empresaId, tableNameRaw, clearAuditFlag) {
     }).map(p => ({ ...p, empresaId }));
 }
 
+function getCompanyDataExportWhitelist() {
+    return {
+        empresas: { scopeColumn: 'id', label: 'Cadastro da empresa' },
+        occ_audit_log: { scopeColumn: 'empresa_id', label: 'Auditoria OCC' },
+        orcamento_itens: { scopeColumn: 'empresa_id', label: 'Itens de orcamento' },
+        financeiro_apuracao_servicos: {
+            strategy: 'chain_orcamentos_orcamento_itens',
+            label: 'Apuracao financeira de servicos',
+            relationColumn: 'orcamento_item_id',
+            sourceTable: 'orcamentos',
+            sourceIdColumn: 'id'
+        },
+        orcamento_pagamentos: { scopeColumn: 'empresa_id', label: 'Pagamentos de orcamento' },
+        orcamentos: { scopeColumn: 'empresa_id', label: 'Orcamentos' },
+        orcamento_cancelados: { scopeColumn: 'empresa_id', label: 'Orcamentos cancelados' },
+        financeiro_comissoes: { scopeColumn: 'empresa_id', label: 'Comissoes financeiras' },
+        financeiro_transacoes: { scopeColumn: 'empresa_id', label: 'Transacoes financeiras' },
+        financeiro_notas: { scopeColumn: 'empresa_id', label: 'Notas fiscais financeiras' },
+        agenda_agendamentos: { scopeColumn: 'empresa_id', label: 'Agendamentos' },
+        agenda_disponibilidade: { scopeColumn: 'empresa_id', label: 'Disponibilidade da agenda' },
+        paciente_documentos: { scopeColumn: 'empresa_id', label: 'Documentos de pacientes' },
+        paciente_evolucao: { scopeColumn: 'empresa_id', label: 'Evolucao de pacientes' },
+        pacientes: { scopeColumn: 'empresa_id', label: 'Pacientes' },
+        ordens_proteticas_anexos: { scopeColumn: 'empresa_id', label: 'Anexos de protese' },
+        ordens_proteticas_eventos: { scopeColumn: 'empresa_id', label: 'Eventos de protese' },
+        ordens_proteticas: { scopeColumn: 'empresa_id', label: 'Ordens protesicas' },
+        protese_contas_pagas: { scopeColumn: 'empresa_id', label: 'Contas pagas de protese' },
+        ordens_proteticas_custodia_eventos: { scopeColumn: 'empresa_id', label: 'Custodia de protese eventos' },
+        ordens_proteticas_custodia_tokens: { scopeColumn: 'empresa_id', label: 'Custodia de protese tokens' },
+        laboratorios_proteticos: { scopeColumn: 'empresa_id', label: 'Laboratorios protesicos' },
+        marketing_envios: { scopeColumn: 'empresa_id', label: 'Envios de marketing' },
+        marketing_campanhas: { scopeColumn: 'empresa_id', label: 'Campanhas de marketing' },
+        marketing_smtp_config: { scopeColumn: 'empresa_id', label: 'Configuracao SMTP' },
+        servicos: { scopeColumn: 'empresa_id', label: 'Servicos' },
+        especialidade_subdivisoes: { scopeColumn: 'empresa_id', label: 'Subdivisoes de especialidades' },
+        especialidades: { scopeColumn: 'empresa_id', label: 'Especialidades' },
+        profissionais: { scopeColumn: 'empresa_id', label: 'Profissionais' },
+        usuario_empresas: { scopeColumn: 'empresa_id', label: 'Usuarios da empresa' },
+        inventory_logs: { scopeColumn: 'empresa_id', label: 'Movimentacoes de estoque' },
+        inventory: { scopeColumn: 'empresa_id', label: 'Inventario' },
+        usage_models: { scopeColumn: 'empresa_id', label: 'Modelos de uso' },
+        model_items: {
+            strategy: 'related_ids',
+            label: 'Itens dos modelos de uso',
+            relationColumn: 'model_id',
+            sourceTable: 'usage_models',
+            sourceIdColumn: 'id'
+        },
+        service_mapping: {
+            strategy: 'direct',
+            label: 'Vinculos de servico',
+            scopeColumn: 'empresa_id',
+            queryTable: 'vw_export_service_mapping',
+            selectColumns: 'model_id, service_id',
+            csvHeaders: ['model_id', 'service_id']
+        },
+        portal_mensagens: { scopeColumn: 'empresa_id', label: 'Mensagens do portal' },
+        portal_anexos: { scopeColumn: 'empresa_id', label: 'Anexos do portal' },
+        suporte_tickets: { scopeColumn: 'emp_id', label: 'Tickets de suporte' }
+    };
+}
+
+function getCompanyDataExportBlockedTables() {
+    return {
+        model_items_template: 'Ignorada por nao possuir regra declarativa de escopo por empresa_id.',
+        usage_models_template: 'Ignorada por ser tabela template/global e nao dado da empresa.',
+        inventory_template: 'Ignorada por ser tabela template/global e nao dado da empresa.',
+        service_mapping_template: 'Ignorada por ser tabela template/global e nao dado da empresa.'
+    };
+}
+
+function getValidatedCompanyExportEmpresaId() {
+    const empresaId = String(currentEmpresaId || '').trim();
+    if (!empresaId) {
+        throw new Error('Falha de seguranca: empresa atual nao identificada para exportacao.');
+    }
+    return empresaId;
+}
+
+function buildCompanyDataExportPlan() {
+    return Object.entries(getCompanyDataExportWhitelist()).map(([table, rule]) => ({
+        table: String(table),
+        strategy: String(rule && rule.strategy || 'direct').trim(),
+        scopeColumn: String(rule && rule.scopeColumn || '').trim(),
+        label: String(rule && rule.label || table),
+        relationColumn: String(rule && rule.relationColumn || '').trim(),
+        sourceTable: String(rule && rule.sourceTable || '').trim(),
+        sourceIdColumn: String(rule && rule.sourceIdColumn || '').trim(),
+        queryTable: String(rule && rule.queryTable || table).trim(),
+        selectColumns: String(rule && rule.selectColumns || '*').trim(),
+        csvHeaders: Array.isArray(rule && rule.csvHeaders) ? rule.csvHeaders.map(item => String(item || '').trim()).filter(Boolean) : []
+    })).filter(item => {
+        if (!item.table) return false;
+        if (item.strategy === 'related_ids' || item.strategy === 'chain_orcamentos_orcamento_itens' || item.strategy === 'chain_inventory_model_items') {
+            return !!(item.relationColumn && item.sourceTable && item.sourceIdColumn);
+        }
+        return !!item.scopeColumn;
+    });
+}
+
+function getCompanyDataExportUiState() {
+    const btn = document.getElementById('btnExportCompanyDataZip');
+    const cancelBtn = document.getElementById('btnCancelCompanyDataExport');
+    const status = document.getElementById('companyDataExportStatus');
+    const card = document.getElementById('companyDataExportCard');
+    return { btn, cancelBtn, status, card };
+}
+
+function ensureCompanyDataExportUi() {
+    const form = document.getElementById('myCompanyForm');
+    if (!form) return getCompanyDataExportUiState();
+
+    let card = document.getElementById('companyDataExportCard');
+    if (!card) {
+        card = document.createElement('div');
+        card.id = 'companyDataExportCard';
+        card.className = 'form-card hidden';
+        card.innerHTML = `
+            <h3 class="card-title">Portabilidade / Backup</h3>
+            <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;">
+                <div style="font-size:0.92rem; color:var(--text-muted); line-height:1.5;">
+                    Exporte os dados da clínica atual em CSV, JSON e mídias em um único arquivo .ZIP.
+                </div>
+                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px; min-width:280px;">
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+                        <button type="button" id="btnExportCompanyDataZip" class="btn btn-secondary">
+                            <i class="ri-download-cloud-2-line"></i> Exportar Todos os Dados (.ZIP)
+                        </button>
+                        <button type="button" id="btnCancelCompanyDataExport" class="btn btn-light hidden">
+                            <i class="ri-close-circle-line"></i> Cancelar Exportação
+                        </button>
+                    </div>
+                    <div id="companyDataExportStatus" style="font-size:12px; color:var(--text-muted); text-align:right; min-height:18px;"></div>
+                </div>
+            </div>
+        `;
+        const actions = form.querySelector('.form-actions');
+        if (actions && actions.parentElement === form) {
+            form.insertBefore(card, actions);
+        } else {
+            form.appendChild(card);
+        }
+    }
+
+    const ui = getCompanyDataExportUiState();
+    if (ui.card) {
+        if (isSuperAdmin) ui.card.classList.remove('hidden');
+        else ui.card.classList.add('hidden');
+    }
+    return ui;
+}
+
+function setCompanyDataExportStatus(message, isError) {
+    const { status } = getCompanyDataExportUiState();
+    if (!status) return;
+    status.textContent = String(message || '');
+    status.style.color = isError ? 'var(--danger-color)' : 'var(--text-muted)';
+}
+
+function setCompanyDataExportBusy(isBusy, message) {
+    const { btn, cancelBtn } = getCompanyDataExportUiState();
+    if (!btn) return;
+    btn.disabled = !!isBusy;
+    btn.innerHTML = isBusy
+        ? '<i class="ri-loader-4-line ri-spin"></i> Gerando Exportação...'
+        : '<i class="ri-download-cloud-2-line"></i> Exportar Todos os Dados (.ZIP)';
+    if (cancelBtn) {
+        cancelBtn.disabled = !isBusy;
+        cancelBtn.classList.toggle('hidden', !isBusy);
+    }
+    if (typeof message !== 'undefined') {
+        setCompanyDataExportStatus(message, false);
+    }
+}
+
+function ensureJsZipAvailable() {
+    if (typeof window.JSZip === 'function') return window.JSZip;
+    throw new Error('A biblioteca JSZip não foi carregada.');
+}
+
+function getCompanyDataExportAbortSignal() {
+    return exportAbortController && exportAbortController.signal ? exportAbortController.signal : null;
+}
+
+function throwIfCompanyDataExportAborted() {
+    const signal = getCompanyDataExportAbortSignal();
+    if (signal && signal.aborted) {
+        const err = new Error('ExportacaoCancelada');
+        err.code = 'EXPORT_ABORTED';
+        throw err;
+    }
+}
+
+async function withCompanyExportControl(promiseLike, ms, label = '') {
+    throwIfCompanyDataExportAborted();
+    const signal = getCompanyDataExportAbortSignal();
+    let controlledPromise = promiseLike;
+    if (signal && controlledPromise && typeof controlledPromise.abortSignal === 'function') {
+        try {
+            controlledPromise = controlledPromise.abortSignal(signal);
+        } catch {
+        }
+    }
+    if (!signal) {
+        const result = await withTimeout(controlledPromise, ms, label);
+        throwIfCompanyDataExportAborted();
+        return result;
+    }
+    const abortPromise = new Promise((_, reject) => {
+        const onAbort = () => {
+            signal.removeEventListener('abort', onAbort);
+            const err = new Error('ExportacaoCancelada');
+            err.code = 'EXPORT_ABORTED';
+            reject(err);
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+    });
+    const result = await Promise.race([
+        withTimeout(controlledPromise, ms, label),
+        abortPromise
+    ]);
+    throwIfCompanyDataExportAborted();
+    return result;
+}
+
+function normalizeExportValue(value) {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') {
+        try {
+            return JSON.stringify(value);
+        } catch {
+            return String(value);
+        }
+    }
+    return String(value);
+}
+
+function escapeCsvCell(value) {
+    const normalized = normalizeExportValue(value);
+    if (!/[;"\r\n,]/.test(normalized)) return normalized;
+    return `"${normalized.replace(/"/g, '""')}"`;
+}
+
+function convertRowsToCsv(rows, forcedHeaders) {
+    const list = Array.isArray(rows) ? rows : [];
+    const headers = [];
+    const headerSeen = new Set();
+    (Array.isArray(forcedHeaders) ? forcedHeaders : []).forEach((header) => {
+        const normalized = String(header || '').trim();
+        if (!normalized || headerSeen.has(normalized)) return;
+        headerSeen.add(normalized);
+        headers.push(normalized);
+    });
+    list.forEach((row) => {
+        if (!row || typeof row !== 'object') return;
+        Object.keys(row).forEach((key) => {
+            if (headerSeen.has(key)) return;
+            headerSeen.add(key);
+            headers.push(key);
+        });
+    });
+    if (!headers.length) return '\uFEFF';
+    const lines = [
+        headers.map(escapeCsvCell).join(';')
+    ];
+    list.forEach((row) => {
+        lines.push(headers.map((key) => escapeCsvCell(row && Object.prototype.hasOwnProperty.call(row, key) ? row[key] : '')).join(';'));
+    });
+    return '\uFEFF' + lines.join('\r\n');
+}
+
+function chunkArray(list, size) {
+    const source = Array.isArray(list) ? list : [];
+    const chunkSize = Math.max(1, Number(size || 100));
+    const output = [];
+    for (let i = 0; i < source.length; i += chunkSize) {
+        output.push(source.slice(i, i + chunkSize));
+    }
+    return output;
+}
+
+async function runCompanyExportBatch(items, batchSize, taskFn, batchLabel) {
+    const source = Array.isArray(items) ? items : [];
+    const size = Math.max(1, Number(batchSize || 1));
+    const output = [];
+    for (let start = 0; start < source.length; start += size) {
+        throwIfCompanyDataExportAborted();
+        const batch = source.slice(start, start + size);
+        const label = batchLabel ? ` (${Math.floor(start / size) + 1}/${Math.ceil(source.length / size)})` : '';
+        if (batchLabel) {
+            setCompanyDataExportStatus(`${batchLabel}${label}...`, false);
+        }
+        const batchResults = await Promise.all(batch.map((item, index) => taskFn(item, start + index)));
+        output.push(...batchResults);
+    }
+    return output;
+}
+
+async function fetchCompanyExportRows(table, scopeColumn, empresaId, queryTable, selectColumns) {
+    if (!table) throw new Error('Tabela de exportacao nao informada.');
+    if (!scopeColumn) throw new Error(`Tabela ${table} sem coluna de escopo declarada.`);
+    if (!empresaId) throw new Error('Falha de seguranca: empresa atual nao identificada para exportacao.');
+
+    const sourceTable = String(queryTable || table || '').trim();
+    const projection = String(selectColumns || '*').trim() || '*';
+    const allRows = [];
+    const pageSize = 500;
+    let start = 0;
+    while (true) {
+        throwIfCompanyDataExportAborted();
+        const query = db.from(sourceTable).select(projection).eq(scopeColumn, empresaId).range(start, start + pageSize - 1);
+        const { data, error } = await withCompanyExportControl(query, 30000, `export:${table}:${sourceTable}:${start}`);
+        if (error) throw error;
+        const rows = Array.isArray(data) ? data : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+        start += pageSize;
+    }
+    return allRows;
+}
+
+async function processCompanyExportPlanEntry(entry, tableData, empresaId) {
+    const tableName = String(entry && entry.table || '').trim();
+    const strategy = String(entry && entry.strategy || 'direct').trim();
+    const scopeColumn = String(entry && entry.scopeColumn || '').trim();
+    const relationColumn = String(entry && entry.relationColumn || '').trim();
+    const sourceTable = String(entry && entry.sourceTable || '').trim();
+    const sourceIdColumn = String(entry && entry.sourceIdColumn || '').trim();
+    const queryTable = String(entry && entry.queryTable || tableName).trim();
+    const selectColumns = String(entry && entry.selectColumns || '*').trim();
+    const requiresRelatedChain = strategy === 'related_ids'
+        || strategy === 'chain_orcamentos_orcamento_itens'
+        || strategy === 'chain_inventory_model_items';
+
+    if (!tableName || (requiresRelatedChain ? !(relationColumn && sourceTable && sourceIdColumn) : !scopeColumn)) {
+        const reason = 'Ignorada por nao possuir regra declarativa de filtro por empresa.';
+        return {
+            tableName,
+            rowsData: [],
+            summary: {
+                table: tableName,
+                rows: 0,
+                ok: true,
+                skipped: true,
+                reason
+            },
+            warning: tableName ? `Tabela ${tableName}: ${reason}` : ''
+        };
+    }
+
+    try {
+        let rows = [];
+        if (strategy === 'chain_orcamentos_orcamento_itens') {
+            const orcamentosRows = Array.isArray(tableData.orcamentos) ? tableData.orcamentos : [];
+            const orcamentoIds = orcamentosRows.map(row => row && row.id).filter(Boolean);
+            if (!orcamentoIds.length) {
+                rows = [];
+            } else {
+                const orcamentoItemIds = await fetchDistinctColumnValuesByRelatedIds(
+                    'orcamento_itens',
+                    'orcamento_id',
+                    'id',
+                    orcamentoIds,
+                    empresaId
+                );
+                rows = orcamentoItemIds.length
+                    ? await fetchCompanyExportRowsByRelatedIds(tableName, relationColumn, orcamentoItemIds, empresaId)
+                    : [];
+            }
+        } else if (strategy === 'chain_inventory_model_items') {
+            const inventoryRows = Array.isArray(tableData.inventory) ? tableData.inventory : [];
+            const inventoryIds = inventoryRows.map(row => row && row.id).filter(Boolean);
+            if (!inventoryIds.length) {
+                rows = [];
+            } else {
+                const modelIds = await fetchDistinctColumnValuesByRelatedIds(
+                    'model_items',
+                    'inventory_id',
+                    'model_id',
+                    inventoryIds,
+                    empresaId
+                );
+                rows = modelIds.length
+                    ? await fetchCompanyExportRowsByRelatedIds(tableName, relationColumn, modelIds, empresaId)
+                    : [];
+            }
+        } else if (strategy === 'related_ids') {
+            const sourceRows = Array.isArray(tableData[sourceTable]) ? tableData[sourceTable] : [];
+            const sourceIds = sourceRows.map(row => row && row[sourceIdColumn]).filter(Boolean);
+            rows = sourceIds.length
+                ? await fetchCompanyExportRowsByRelatedIds(tableName, relationColumn, sourceIds, empresaId)
+                : [];
+        } else {
+            rows = await fetchCompanyExportRows(tableName, scopeColumn, empresaId, queryTable, selectColumns);
+        }
+
+        return {
+            tableName,
+            rowsData: rows,
+            summary: {
+                table: tableName,
+                rows: rows.length,
+                ok: true,
+                scopeColumn: scopeColumn || '',
+                relationColumn: relationColumn || '',
+                sourceTable: sourceTable || ''
+            }
+        };
+    } catch (err) {
+        if (err && (err.code === 'EXPORT_ABORTED' || err.message === 'ExportacaoCancelada')) {
+            throw err;
+        }
+        const reason = err && err.message ? String(err.message) : String(err);
+        return {
+            tableName,
+            rowsData: [],
+            summary: {
+                table: tableName,
+                rows: 0,
+                ok: false,
+                reason,
+                scopeColumn: scopeColumn || '',
+                relationColumn: relationColumn || '',
+                sourceTable: sourceTable || ''
+            },
+            warning: `Tabela ${tableName}: ${reason}`
+        };
+    }
+}
+
+async function fetchCompanyExportRowsByRelatedIds(table, relationColumn, ids, empresaId) {
+    if (!table) throw new Error('Tabela relacional de exportacao nao informada.');
+    if (!relationColumn) throw new Error(`Tabela ${table} sem coluna relacional declarada.`);
+    if (!empresaId) throw new Error('Falha de seguranca: empresa atual nao identificada para exportacao.');
+
+    const validIds = Array.from(new Set((Array.isArray(ids) ? ids : []).map(v => String(v || '').trim()).filter(Boolean)));
+    if (!validIds.length) return [];
+
+    const output = [];
+    for (const group of chunkArray(validIds, 100)) {
+        throwIfCompanyDataExportAborted();
+        const query = db.from(table).select('*').in(relationColumn, group);
+        const { data, error } = await withCompanyExportControl(query, 30000, `export:${table}:${relationColumn}`);
+        if (error) throw error;
+        if (Array.isArray(data) && data.length) output.push(...data);
+    }
+    return output;
+}
+
+async function fetchDistinctColumnValuesByRelatedIds(table, relationColumn, selectColumn, ids, empresaId) {
+    if (!table) throw new Error('Tabela relacional intermediaria nao informada.');
+    if (!relationColumn) throw new Error(`Tabela ${table} sem coluna relacional declarada.`);
+    if (!selectColumn) throw new Error(`Tabela ${table} sem coluna de selecao declarada.`);
+    if (!empresaId) throw new Error('Falha de seguranca: empresa atual nao identificada para exportacao.');
+
+    const validIds = Array.from(new Set((Array.isArray(ids) ? ids : []).map(v => String(v || '').trim()).filter(Boolean)));
+    if (!validIds.length) return [];
+
+    const values = [];
+    for (const group of chunkArray(validIds, 100)) {
+        throwIfCompanyDataExportAborted();
+        const query = db.from(table).select(selectColumn).in(relationColumn, group);
+        const { data, error } = await withCompanyExportControl(query, 30000, `export:${table}:${relationColumn}:${selectColumn}`);
+        if (error) throw error;
+        (Array.isArray(data) ? data : []).forEach((row) => {
+            const value = String(row && row[selectColumn] || '').trim();
+            if (value) values.push(value);
+        });
+    }
+    return Array.from(new Set(values));
+}
+
+function detectDataUrlExtension(dataUrl) {
+    const match = String(dataUrl || '').match(/^data:([^;,]+)[;,]/i);
+    const mime = match ? String(match[1] || '').toLowerCase() : '';
+    if (mime.includes('png')) return 'png';
+    if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
+    if (mime.includes('webp')) return 'webp';
+    if (mime.includes('gif')) return 'gif';
+    if (mime.includes('pdf')) return 'pdf';
+    if (mime.includes('svg')) return 'svg';
+    return 'bin';
+}
+
+function decodeDataUrlToUint8Array(dataUrl) {
+    const raw = String(dataUrl || '');
+    const commaIndex = raw.indexOf(',');
+    if (commaIndex < 0) return new Uint8Array();
+    const meta = raw.slice(0, commaIndex);
+    const body = raw.slice(commaIndex + 1);
+    if (/;base64/i.test(meta)) {
+        const binary = atob(body);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+    }
+    return new TextEncoder().encode(decodeURIComponent(body));
+}
+
+function sanitizeExportPathSegment(value) {
+    return String(value || '')
+        .replace(/[\\/:*?"<>|]+/g, '_')
+        .replace(/\s+/g, '_')
+        .slice(0, 120) || 'arquivo';
+}
+
+function deriveMediaNameFromRawUrl(rawUrl, fallback) {
+    const raw = String(rawUrl || '').trim();
+    if (!raw) return sanitizeExportPathSegment(fallback || 'arquivo');
+    try {
+        const url = new URL(raw);
+        const explicit = url.searchParams.get('nome');
+        if (explicit) return sanitizeExportPathSegment(explicit);
+        const last = url.pathname.split('/').filter(Boolean).pop();
+        if (last) return sanitizeExportPathSegment(last);
+    } catch {
+    }
+    return sanitizeExportPathSegment(fallback || 'arquivo');
+}
+
+function collectMediaEntriesFromValue(tableName, row, value, keyPath, collector, seen) {
+    if (value === null || value === undefined) return;
+    if (Array.isArray(value)) {
+        value.forEach((item, index) => collectMediaEntriesFromValue(tableName, row, item, `${keyPath}[${index}]`, collector, seen));
+        return;
+    }
+    if (typeof value === 'object') {
+        Object.keys(value).forEach((key) => {
+            collectMediaEntriesFromValue(tableName, row, value[key], keyPath ? `${keyPath}.${key}` : key, collector, seen);
+        });
+        return;
+    }
+    if (typeof value !== 'string') return;
+    const raw = String(value || '').trim();
+    if (!raw) return;
+
+    const rowId = sanitizeExportPathSegment(row && (row.id || row.seqid || row.paciente_id || row.ordem_id || 'sem_id'));
+    if (/^data:/i.test(raw)) {
+        const extension = detectDataUrlExtension(raw);
+        const entryKey = `dataurl:${tableName}:${rowId}:${keyPath}`;
+        if (seen.has(entryKey)) return;
+        seen.add(entryKey);
+        collector.push({
+            kind: 'dataurl',
+            dataUrl: raw,
+            zipPath: `midias/${sanitizeExportPathSegment(tableName)}/${rowId}/${sanitizeExportPathSegment(keyPath || 'arquivo')}.${extension}`
+        });
+        return;
+    }
+
+    const parsed = tryParseSupabaseStorageObjectUrl(raw);
+    if (!parsed || !parsed.bucket || !parsed.path) return;
+    const name = deriveMediaNameFromRawUrl(raw, parsed.path.split('/').pop() || 'arquivo');
+    const entryKey = `storage:${parsed.bucket}:${parsed.path}`;
+    if (seen.has(entryKey)) return;
+    seen.add(entryKey);
+    collector.push({
+        kind: 'storage',
+        bucket: String(parsed.bucket),
+        path: String(parsed.path),
+        zipPath: `midias/${sanitizeExportPathSegment(parsed.bucket)}/${sanitizeExportPathSegment(tableName)}/${rowId}/${name}`
+    });
+}
+
+function collectMediaEntriesFromTables(tableMap) {
+    const collector = [];
+    const seen = new Set();
+    Object.entries(tableMap || {}).forEach(([tableName, rows]) => {
+        (Array.isArray(rows) ? rows : []).forEach((row) => {
+            if (!row || typeof row !== 'object') return;
+            Object.keys(row).forEach((key) => {
+                collectMediaEntriesFromValue(tableName, row, row[key], key, collector, seen);
+            });
+        });
+    });
+    return collector;
+}
+
+async function appendMediaEntriesToZip(zip, mediaEntries, progressCb) {
+    const entries = Array.isArray(mediaEntries) ? mediaEntries : [];
+    const failures = [];
+    let completed = 0;
+    await runCompanyExportBatch(entries, 5, async (entry) => {
+        throwIfCompanyDataExportAborted();
+        try {
+            if (entry.kind === 'dataurl') {
+                zip.file(entry.zipPath, decodeDataUrlToUint8Array(entry.dataUrl));
+            } else if (entry.kind === 'storage') {
+                const { data, error } = await withCompanyExportControl(
+                    db.storage.from(entry.bucket).download(entry.path),
+                    30000,
+                    `export:storage:${entry.bucket}`
+                );
+                if (error) throw error;
+                const buffer = await data.arrayBuffer();
+                zip.file(entry.zipPath, buffer);
+            }
+        } catch (err) {
+            if (err && (err.code === 'EXPORT_ABORTED' || err.message === 'ExportacaoCancelada')) {
+                throw err;
+            }
+            failures.push({
+                zipPath: entry && entry.zipPath ? entry.zipPath : '',
+                reason: err && err.message ? String(err.message) : String(err)
+            });
+        } finally {
+            completed += 1;
+            if (typeof progressCb === 'function') {
+                progressCb(`Empacotando mídias (${completed}/${entries.length})...`);
+            }
+        }
+    }, 'Baixando mídias');
+    return failures;
+}
+
+function triggerZipDownload(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+function buildCompanyExportZipFileName(empresaRow) {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(now.getFullYear());
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const rawName = String(
+        (empresaRow && (empresaRow.nome || empresaRow.nome_fantasia)) || 'Empresa'
+    ).trim() || 'Empresa';
+    const sanitizedName = rawName
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]/g, '') || 'Empresa';
+    return `Exportacao_dados_OCC_${sanitizedName}_${dd}${mm}${yyyy}_${hh}${min}.zip`;
+}
+
+function cancelCompanyDataExport() {
+    if (!exportAbortController || !companyDataExportInProgress) return;
+    try {
+        exportAbortController.abort();
+    } catch {
+    }
+}
+
+async function exportCompanyDataZip() {
+    if (companyDataExportInProgress) return;
+    if (!isSuperAdmin) {
+        showToast('Apenas Super Admin pode exportar os dados em .ZIP.', true);
+        return;
+    }
+
+    const JSZipCtor = ensureJsZipAvailable();
+    exportAbortController = new AbortController();
+    companyDataExportInProgress = true;
+    setCompanyDataExportBusy(true, 'Preparando exportação...');
+
+    try {
+        const empresaId = getValidatedCompanyExportEmpresaId();
+        const exportPlan = buildCompanyDataExportPlan();
+        const blockedTables = getCompanyDataExportBlockedTables();
+        const tableData = {};
+        const tableSummary = [];
+        const warnings = [];
+        const zip = new JSZipCtor();
+        const exportResultsByTable = {};
+
+        Object.entries(blockedTables).forEach(([tableName, reason]) => {
+            tableSummary.push({ table: tableName, rows: 0, ok: true, skipped: true, reason });
+            warnings.push(`Tabela ${tableName}: ${reason}`);
+        });
+
+        const relatedStrategies = new Set(['related_ids', 'chain_orcamentos_orcamento_itens', 'chain_inventory_model_items']);
+        const directEntries = exportPlan.filter(entry => !relatedStrategies.has(String(entry && entry.strategy || 'direct').trim()));
+        const dependentEntries = exportPlan.filter(entry => relatedStrategies.has(String(entry && entry.strategy || 'direct').trim()));
+
+        const directResults = await runCompanyExportBatch(
+            directEntries,
+            6,
+            (entry) => processCompanyExportPlanEntry(entry, tableData, empresaId),
+            'Coletando lote de tabelas'
+        );
+        directResults.forEach((result) => {
+            if (!result || !result.tableName) return;
+            exportResultsByTable[result.tableName] = result;
+            tableData[result.tableName] = Array.isArray(result.rowsData) ? result.rowsData : [];
+        });
+
+        const dependentResults = await runCompanyExportBatch(
+            dependentEntries,
+            6,
+            (entry) => processCompanyExportPlanEntry(entry, tableData, empresaId),
+            'Coletando lote relacional'
+        );
+        dependentResults.forEach((result) => {
+            if (!result || !result.tableName) return;
+            exportResultsByTable[result.tableName] = result;
+            tableData[result.tableName] = Array.isArray(result.rowsData) ? result.rowsData : [];
+        });
+
+        exportPlan.forEach((entry) => {
+            const tableName = String(entry && entry.table || '').trim();
+            const result = exportResultsByTable[tableName];
+            if (!result) return;
+            tableSummary.push(result.summary);
+            if (result.warning) warnings.push(result.warning);
+        });
+
+        throwIfCompanyDataExportAborted();
+        Object.entries(tableData).forEach(([tableName, rows]) => {
+            const exportRule = getCompanyDataExportWhitelist()[tableName] || {};
+            const csvHeaders = Array.isArray(exportRule.csvHeaders) ? exportRule.csvHeaders : [];
+            zip.file(`csv/${tableName}.csv`, convertRowsToCsv(rows, csvHeaders));
+        });
+
+        const mediaEntries = collectMediaEntriesFromTables(tableData);
+        const mediaFailures = await appendMediaEntriesToZip(zip, mediaEntries, (message) => setCompanyDataExportStatus(message, false));
+        if (mediaFailures.length) {
+            warnings.push(...mediaFailures.map(item => `Mídia ${item.zipPath}: ${item.reason}`));
+        }
+
+        const unifiedJson = {
+            meta: {
+                empresa_id: empresaId,
+                exported_at: new Date().toISOString(),
+                app_build: APP_BUILD,
+                exported_by: currentUser && currentUser.email ? String(currentUser.email) : '',
+                media_count: mediaEntries.length,
+                warnings
+            },
+            summary: tableSummary,
+            tables: tableData
+        };
+
+        zip.file('dados_unificados.json', JSON.stringify(unifiedJson, null, 2));
+        zip.file('manifesto_exportacao.json', JSON.stringify({
+            empresa_id: empresaId,
+            generated_at: new Date().toISOString(),
+            tables: tableSummary,
+            media: mediaEntries.map(item => ({ kind: item.kind, zipPath: item.zipPath, bucket: item.bucket || '', path: item.path || '' })),
+            warnings
+        }, null, 2));
+
+        setCompanyDataExportStatus('Compactando arquivo .ZIP...', false);
+        throwIfCompanyDataExportAborted();
+        const blob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 1 }
+        }, () => {
+            throwIfCompanyDataExportAborted();
+        });
+
+        throwIfCompanyDataExportAborted();
+        const empresaExportRow = Array.isArray(tableData.empresas) && tableData.empresas.length ? tableData.empresas[0] : null;
+        const zipFileName = buildCompanyExportZipFileName(empresaExportRow);
+        triggerZipDownload(blob, zipFileName);
+        setCompanyDataExportStatus('Exportação concluída. O download foi iniciado.', false);
+        showToast('Exportação de dados concluída.');
+    } catch (err) {
+        if (err && (err.code === 'EXPORT_ABORTED' || err.message === 'ExportacaoCancelada')) {
+            setCompanyDataExportStatus('Exportação cancelada pelo usuário.', false);
+            showToast('Exportação de dados cancelada pelo usuário.');
+            return;
+        }
+        const message = err && err.message ? String(err.message) : 'Erro desconhecido';
+        setCompanyDataExportStatus(`Falha na exportação: ${message}`, true);
+        showToast(`Falha ao exportar dados: ${message}`, true);
+    } finally {
+        companyDataExportInProgress = false;
+        exportAbortController = null;
+        setCompanyDataExportBusy(false);
+    }
+}
+
 function renderSaPlan() {
     if (!saPlan) return;
     const empresaId = getSaEmpresaId();
@@ -3041,6 +3831,17 @@ const suporteTicketRespostaGroup = document.getElementById('suporteTicketRespost
 const suporteTicketResposta = document.getElementById('suporteTicketResposta');
 const suporteTicketStatus = document.getElementById('suporteTicketStatus');
 const btnSalvarTicket = document.getElementById('btnSalvarTicket');
+let suporteTicketConversationBox = null;
+let suporteTicketMensagemGroup = null;
+let suporteTicketNovaMensagem = null;
+let btnEnviarMensagemTicket = null;
+let suporteTicketPrimaryActionMode = 'new-ticket';
+let suporteTicketsRealtimeChannel = null;
+let suporteTicketsRealtimeScopeKey = '';
+let suporteTicketDetailRealtimeChannel = null;
+let suporteTicketDetailRealtimeId = '';
+let companyDataExportInProgress = false;
+let exportAbortController = null;
 const myCompanyView = document.getElementById('myCompanyView');
 const financialParamsView = document.getElementById('financialParamsView');
 const btnAddNewEmpresa = document.getElementById('btnAddNewEmpresa');
@@ -27474,47 +28275,22 @@ if (patientLoginForm) {
         btn.innerText = 'Validando...';
 
         try {
-            // Verifica se é CPF (apenas números após limpar máscara) ou Email
-            const cleanCpf = identifierInput.replace(/\D/g, '');
-            let isCpf = cleanCpf.length === 11 || cleanCpf.length === 14;
-            
-            let query = db.from('pacientes').select('*');
-            if (isCpf) {
-                query = query.eq('cpf_cnpj', cleanCpf);
-            } else {
-                query = query.eq('email', identifierInput);
-            }
+            const cleanIdentifier = String(identifierInput || '').trim();
+            const { data, error } = await db.rpc('buscar_paciente_portal', {
+                p_identificador: cleanIdentifier
+            });
 
-            let { data, error } = await query;
-            
             if (error) {
-                console.warn("Erro RLS ou Supabase na tabela pacientes:", error);
-                
-                // Fallback RPC function resgatado da lógica original
-                let rpcName = isCpf ? 'get_paciente_by_cpf' : 'get_paciente_by_email';
-                let rpcParams = isCpf ? { p_cpf: cleanCpf } : { p_email: identifierInput };
-                
-                const { data: rpcData, error: rpcError } = await db.rpc(rpcName, rpcParams);
-                if (!rpcError && rpcData) {
-                    data = Array.isArray(rpcData) ? rpcData : [rpcData];
-                    error = null;
-                } else {
-                    // Tenta uma verificação via login genérico caso as outras RPCs não existam
-                    const { data: rpcGenData, error: rpcGenError } = await db.rpc('login_portal_paciente', { p_identificador: identifierInput });
-                    if (!rpcGenError && rpcGenData) {
-                         data = Array.isArray(rpcGenData) ? rpcGenData : [rpcGenData];
-                         error = null;
-                    } else {
-                        throw new Error("Erro de permissão no banco de dados. Contate a clínica.");
-                    }
-                }
+                console.error('Erro ao buscar paciente do portal via RPC:', error);
+                throw new Error('Erro ao conectar ao servidor. Tente novamente em instantes.');
             }
 
-            if (!data || data.length === 0) {
-                throw new Error("Cadastro não encontrado com este dado.");
+            const rows = Array.isArray(data) ? data : (data ? [data] : []);
+            if (!rows.length) {
+                throw new Error('Paciente não encontrado. Verifique o CPF/E-mail informado.');
             }
 
-            const pacienteMatch = data[0]; // Pega o primeiro match seguro
+            const pacienteMatch = rows[0];
 
             // Validation successful! Set global variable and switch UI
             window.patientPortalCurrentPatient = pacienteMatch;
@@ -27539,7 +28315,7 @@ if (patientLoginForm) {
             renderPatientPortal(pacienteMatch);
 
         } catch (err) {
-            errorDiv.innerText = err.message || "Cadastro não encontrado.";
+            errorDiv.innerText = err.message || 'Erro ao conectar ao servidor. Tente novamente em instantes.';
             errorDiv.style.display = 'block';
         } finally {
             btn.disabled = false;
@@ -28247,13 +29023,15 @@ if (empresaLogoFile) {
 }
 
 function setEmpresaEmailValidationState(isInvalid) {
-    const emailInput = document.getElementById('empresaEmail');
+    const emailInput = document.querySelector('#empresaEmail');
     if (!emailInput) return;
     if (isInvalid) {
-        emailInput.style.borderColor = '#dc2626';
-        emailInput.style.boxShadow = '0 0 0 1px rgba(220, 38, 38, 0.35)';
+        emailInput.style.border = '2px solid #ef4444';
+        emailInput.style.outline = 'none';
+        emailInput.style.boxShadow = '0 0 0 1px rgba(239, 68, 68, 0.2)';
     } else {
-        emailInput.style.borderColor = '';
+        emailInput.style.border = '';
+        emailInput.style.outline = '';
         emailInput.style.boxShadow = '';
     }
 }
@@ -28267,17 +29045,23 @@ function setEmpresaEmailErrorMessage(message) {
 }
 
 function showEmpresaEmailDuplicateError() {
-    const emailInput = document.getElementById('empresaEmail');
+    const errorElement = document.getElementById('empresaEmailError');
+    const emailInput = document.querySelector('#empresaEmail');
+    if (errorElement) {
+        errorElement.textContent = 'Seu usuário já está vinculado a uma clínica. Entre com outro usuário';
+        errorElement.style.display = 'block';
+    }
     if (emailInput) {
         emailInput.value = '';
+        emailInput.style.border = '2px solid #ef4444';
+        emailInput.style.outline = 'none';
     }
     setEmpresaEmailValidationState(true);
-    setEmpresaEmailErrorMessage('Seu usuário já está vinculado a uma clínica. Entre com outro usuário');
     setTimeout(() => {
         try {
             if (emailInput) emailInput.focus();
         } catch { }
-    }, 50);
+    }, 100);
 }
 
 async function validateEmpresaEmailAvailability(options) {
@@ -28318,6 +29102,9 @@ const empresaEmailInput = document.getElementById('empresaEmail');
 if (empresaEmailInput && !empresaEmailInput.__occEmailAvailabilityBound) {
     empresaEmailInput.__occEmailAvailabilityBound = true;
     empresaEmailInput.addEventListener('input', () => {
+        empresaEmailInput.style.border = '';
+        empresaEmailInput.style.outline = '';
+        empresaEmailInput.style.boxShadow = '';
         setEmpresaEmailValidationState(false);
         setEmpresaEmailErrorMessage('');
     });
@@ -29502,6 +30289,20 @@ function initFinancialParamsForm() {
 function initMyCompanyForm() {
     const form = document.getElementById('myCompanyForm');
     if (!form) return;
+
+    const exportUi = ensureCompanyDataExportUi();
+    if (exportUi.btn && !exportUi.btn.__bound) {
+        exportUi.btn.__bound = true;
+        exportUi.btn.addEventListener('click', exportCompanyDataZip);
+    }
+    if (exportUi.cancelBtn && !exportUi.cancelBtn.__bound) {
+        exportUi.cancelBtn.__bound = true;
+        exportUi.cancelBtn.addEventListener('click', cancelCompanyDataExport);
+    }
+    if (exportUi.card) {
+        if (isSuperAdmin) exportUi.card.classList.remove('hidden');
+        else exportUi.card.classList.add('hidden');
+    }
 
     const idEl = document.getElementById('myCompanyId');
     const nomeEl = document.getElementById('myCompanyNome');
@@ -34172,6 +34973,7 @@ window.executePrintExtrato = async function(customStart, customEnd, customCat, i
 
 async function fetchTickets() {
     if (!suporteTicketsBody) return;
+    subscribeSuporteTicketsRealtime();
     
     suporteTicketsBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 2rem; color: var(--text-muted);">Carregando chamados...</td></tr>';
     if (suporteTicketsEmptyState) suporteTicketsEmptyState.classList.add('hidden');
@@ -34197,6 +34999,706 @@ async function fetchTickets() {
     }
 }
 
+function closeSuporteTicketsRealtimeChannel() {
+    if (!suporteTicketsRealtimeChannel || !db || typeof db.removeChannel !== 'function') return;
+    try {
+        db.removeChannel(suporteTicketsRealtimeChannel);
+    } catch (err) {
+        console.warn('Erro ao remover canal realtime da lista de tickets:', err);
+    }
+    suporteTicketsRealtimeChannel = null;
+    suporteTicketsRealtimeScopeKey = '';
+}
+
+function closeSuporteTicketDetailRealtimeChannel() {
+    if (!suporteTicketDetailRealtimeChannel || !db || typeof db.removeChannel !== 'function') return;
+    try {
+        db.removeChannel(suporteTicketDetailRealtimeChannel);
+    } catch (err) {
+        console.warn('Erro ao remover canal realtime do ticket:', err);
+    }
+    suporteTicketDetailRealtimeChannel = null;
+    suporteTicketDetailRealtimeId = '';
+}
+
+function closeSuporteTicketModalUi() {
+    closeSuporteTicketDetailRealtimeChannel();
+    window.ticketAbertoId = '';
+    window.currentTicketProtocolo = '';
+    if (suporteTicketNovaMensagem) suporteTicketNovaMensagem.value = '';
+    if (suporteTicketModal) suporteTicketModal.classList.add('hidden');
+}
+
+function formatTicketMessageTimestamp(dateValue) {
+    const date = dateValue ? new Date(dateValue) : new Date();
+    if (Number.isNaN(date.getTime())) return new Date().toLocaleString('pt-BR').slice(0, 16);
+    return date.toLocaleString('pt-BR').slice(0, 16);
+}
+
+function getSafeTicketShortId(ticketLike) {
+    return String(ticketLike && ticketLike.id || '').substring(0, 8).toUpperCase();
+}
+
+function getSafeTicketProtocol(ticketLike) {
+    const explicitProtocol = String(ticketLike && ticketLike.protocolo || '').trim();
+    if (explicitProtocol) return explicitProtocol;
+    const shortId = getSafeTicketShortId(ticketLike);
+    return shortId ? `TCK-${shortId}` : 'TCK-';
+}
+
+function getSafeTicketDateLabel(ticketLike) {
+    const rawDate = ticketLike && (ticketLike.data_criacao || ticketLike.created_at || ticketLike.updated_at);
+    if (!rawDate) return '-';
+    const dateObj = new Date(rawDate);
+    if (Number.isNaN(dateObj.getTime())) return String(rawDate || '').substring(0, 16) || '-';
+    return dateObj.toLocaleDateString('pt-BR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function getCurrentTicketAuthorName(ticket) {
+    if (isSuperAdmin) return 'Suporte OCC';
+    const fallbackUser = String(ticket && ticket.usuario_nome || '').trim();
+    if (fallbackUser) return fallbackUser;
+    if (typeof userProfile !== 'undefined' && userProfile && userProfile.nome) return String(userProfile.nome).trim();
+    if (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.nome) return String(currentUserProfile.nome).trim();
+    if (typeof currentUser !== 'undefined' && currentUser) {
+        return currentUser.user_metadata?.full_name || (currentUser.email ? currentUser.email.split('@')[0] : 'Usuário');
+    }
+    return 'Usuário';
+}
+
+function buildTicketMessageBlock(actorName, message, dateValue) {
+    return `[${formatTicketMessageTimestamp(dateValue)}] ${String(actorName || 'Usuário').trim()}:\n${String(message || '').trim()}`;
+}
+
+function appendTicketMessageToHistory(existingHistory, actorName, message, dateValue) {
+    const newBlock = buildTicketMessageBlock(actorName, message, dateValue);
+    const base = String(existingHistory || '').trim();
+    return base ? `${base}\n\n${newBlock}` : newBlock;
+}
+
+function buildTicketConversationHistory(ticket) {
+    if (!ticket) return '';
+    const blocks = [];
+    const descricaoInicial = String(ticket.descricao || '').trim();
+    if (descricaoInicial) {
+        blocks.push(buildTicketMessageBlock(ticket.usuario_nome || 'Usuário', descricaoInicial, ticket.data_criacao || ticket.created_at));
+    }
+    const history = String(ticket.resposta_admin || '').trim();
+    if (history) blocks.push(history);
+    return blocks.join('\n\n');
+}
+
+function ensureTicketChatResponsiveStyles() {
+    if (!document.head) return;
+    let styleEl = document.getElementById('occ-ticket-chat-mobile-style');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'occ-ticket-chat-mobile-style';
+        document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = `
+        @media (max-width: 768px) {
+            .build-badge, [id*="build"] {
+                display: none !important;
+                z-index: 0 !important;
+                pointer-events: none !important;
+            }
+        }
+        #suporteTicketModal .modal-dialog,
+        #suporteTicketModal .modal-content {
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #suporteTicketModal .modal-body {
+            overflow-y: auto !important;
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+        }
+        #suporteTicketModal .modal-footer {
+            flex-shrink: 0 !important;
+        }
+        @media (orientation: landscape), (max-height: 520px) {
+            #suporteTicketModal .modal-content {
+                max-height: 90vh !important;
+            }
+            #suporteTicketModal .modal-body {
+                overflow-y: auto !important;
+                min-height: 0 !important;
+            }
+            #suporteTicketModal .modal-footer {
+                flex-shrink: 0 !important;
+            }
+        }
+    `;
+}
+
+function normalizeTicketActorToken(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+function cleanTicketConversationText(message) {
+    return String(message || '')
+        .replace(/^\[[^\]]+\]\s*/g, '')
+        .replace(/^(cd|suporte\s*occ)\s*:\s*/i, '')
+        .trim();
+}
+
+function formatTicketConversationClock(timestamp) {
+    const raw = String(timestamp || '').trim();
+    if (!raw) return '';
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+    const hourMatch = raw.match(/(\d{2}):(\d{2})/);
+    if (hourMatch) return `${hourMatch[1]}:${hourMatch[2]}`;
+    return raw;
+}
+
+function parseTicketConversationHistory(historyText) {
+    const normalized = String(historyText || '')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+    if (!normalized) return [];
+
+    const marker = '@@OCC_TICKET_HEADER@@';
+    const prepared = normalized
+        .replace(/\uFEFF/g, '')
+        .replace(/\s*\[([^\]]+)\]\s*([^:\n\r]+):\s*/g, `\n${marker}$1||$2\n`)
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+    const lines = prepared
+        .split('\n')
+        .map(line => String(line || '').trim())
+        .filter(Boolean);
+
+    const entries = [];
+    let currentTimestamp = '';
+    let currentActor = 'Usuário';
+
+    function pushEntry(message) {
+        const cleanedMessage = cleanTicketConversationText(message);
+        if (!cleanedMessage) return;
+        entries.push({
+            timestamp: String(currentTimestamp || '').trim(),
+            actor: String(currentActor || 'Usuário').replace(/\s+/g, ' ').trim() || 'Usuário',
+            message: cleanedMessage
+        });
+    }
+
+    lines.forEach(line => {
+        if (line.indexOf(marker) === 0) {
+            const payload = line.slice(marker.length);
+            const separatorIndex = payload.indexOf('||');
+            currentTimestamp = separatorIndex >= 0 ? String(payload.slice(0, separatorIndex) || '').trim() : '';
+            currentActor = separatorIndex >= 0 ? String(payload.slice(separatorIndex + 2) || '').trim() : 'Usuário';
+            return;
+        }
+
+        const senderOnlyMatch = line.match(/^(cd|suporte\s*occ)\s*:\s*(.*)$/i);
+        if (senderOnlyMatch) {
+            currentTimestamp = '';
+            currentActor = String(senderOnlyMatch[1] || 'Usuário').trim();
+            pushEntry(senderOnlyMatch[2] || '');
+            return;
+        }
+
+        pushEntry(line);
+    });
+
+    return entries
+        .map(entry => {
+            const cleanedActor = String(entry.actor || 'Usuário').replace(/\s+/g, ' ').trim() || 'Usuário';
+            return {
+                timestamp: String(entry.timestamp || '').trim(),
+                actor: cleanedActor,
+                message: cleanTicketConversationText(entry.message)
+            };
+        })
+        .filter(entry => entry.message);
+}
+
+function isCurrentTicketOutgoingActor(actorName, ticket) {
+    const actor = normalizeTicketActorToken(actorName);
+    const currentActor = normalizeTicketActorToken(getCurrentTicketAuthorName(ticket));
+    const currentEmailAlias = normalizeTicketActorToken((typeof currentUser !== 'undefined' && currentUser && currentUser.email)
+        ? String(currentUser.email || '').split('@')[0]
+        : '');
+
+    if (!actor) return false;
+    if (currentActor && (actor === currentActor || actor.indexOf(currentActor) >= 0 || currentActor.indexOf(actor) >= 0)) return true;
+    if (currentEmailAlias && actor === currentEmailAlias) return true;
+    if (!isSuperAdmin && /^(cd|cliente|paciente|usuario|usuário)$/.test(actor)) return true;
+    if (isSuperAdmin && (actor.indexOf('suporte') >= 0 || actor.indexOf('occ') >= 0)) return true;
+    if (!isSuperAdmin && (actor.indexOf('suporte') >= 0 || actor.indexOf('occ') >= 0)) return false;
+    return false;
+}
+
+function renderTicketConversationUi(ticket) {
+    if (!suporteTicketConversationBox) return;
+
+    const entries = parseTicketConversationHistory(buildTicketConversationHistory(ticket));
+    suporteTicketConversationBox.innerHTML = '';
+
+    if (!entries.length) {
+        suporteTicketConversationBox.innerHTML = '<div style="text-align:center; color: var(--text-muted); font-size: 0.9rem; padding: 1rem 0;">Nenhuma mensagem registrada neste chamado.</div>';
+        return;
+    }
+
+    entries.forEach(entry => {
+        const bubble = document.createElement('div');
+        const header = document.createElement('div');
+        const text = document.createElement('div');
+        const footer = document.createElement('div');
+        const outgoing = isCurrentTicketOutgoingActor(entry.actor, ticket);
+        const actorLabel = /^cd$/i.test(String(entry.actor || '').trim())
+            ? String(ticket && ticket.usuario_nome || getCurrentTicketAuthorName(ticket) || 'Usuário').trim()
+            : String(entry.actor || 'Usuário').trim();
+
+        bubble.style.maxWidth = '82%';
+        bubble.style.alignSelf = outgoing ? 'flex-end' : 'flex-start';
+        bubble.style.padding = '0.65rem 0.8rem';
+        bubble.style.backgroundColor = outgoing ? '#dcf8c6' : '#ffffff';
+        bubble.style.color = '#333';
+        bubble.style.borderRadius = outgoing ? '12px 12px 0px 12px' : '12px 12px 12px 0px';
+        bubble.style.boxShadow = outgoing ? 'none' : '0 1px 2px rgba(0,0,0,0.1)';
+        bubble.style.display = 'flex';
+        bubble.style.flexDirection = 'column';
+        bubble.style.gap = '0.35rem';
+
+        header.style.fontSize = '0.75rem';
+        header.style.fontWeight = '700';
+        header.style.color = outgoing ? '#166534' : '#1f2937';
+        header.textContent = actorLabel || 'Usuário';
+
+        text.style.whiteSpace = 'pre-wrap';
+        text.style.wordBreak = 'break-word';
+        text.textContent = entry.message || '';
+
+        footer.style.fontSize = '0.7rem';
+        footer.style.color = '#6b7280';
+        footer.style.textAlign = 'right';
+        footer.textContent = formatTicketConversationClock(entry.timestamp);
+
+        bubble.appendChild(header);
+        bubble.appendChild(text);
+        bubble.appendChild(footer);
+        suporteTicketConversationBox.appendChild(bubble);
+    });
+
+    suporteTicketConversationBox.scrollTop = suporteTicketConversationBox.scrollHeight;
+}
+
+function getSuporteTicketModalFooter() {
+    return suporteTicketModal ? suporteTicketModal.querySelector('.modal-footer') : null;
+}
+
+function getSuporteTicketDescricaoGroup() {
+    return suporteTicketDescricao ? suporteTicketDescricao.closest('.form-group') : null;
+}
+
+function getSuporteTicketCancelButton() {
+    const modalFooter = getSuporteTicketModalFooter();
+    return modalFooter ? modalFooter.querySelector('.btn.btn-secondary') : null;
+}
+
+function getSuporteTicketClosedNotice() {
+    return document.getElementById('suporteTicketClosedNotice');
+}
+
+function isSuporteTicketClosedStatus(statusValue) {
+    const normalizedStatus = String(statusValue || '').trim().toLowerCase();
+    return normalizedStatus === 'concluído' || normalizedStatus === 'concluido' || normalizedStatus === 'fechado';
+}
+
+function setSuporteTicketDescricaoVisibility(visible) {
+    const descricaoGroup = getSuporteTicketDescricaoGroup();
+    if (!descricaoGroup) return;
+    descricaoGroup.style.display = visible ? '' : 'none';
+}
+
+function canManageSuporteTicketStatus() {
+    const roleLabel = String(currentUserRole || '').trim().toLowerCase();
+    return !!(
+        isSuperAdmin
+        || (typeof isAdminRole === 'function' && isAdminRole())
+        || roleLabel === 'admin'
+        || roleLabel === 'suporte'
+        || roleLabel === 'support'
+        || roleLabel.indexOf('suporte') >= 0
+        || roleLabel.indexOf('support') >= 0
+        || (typeof hasPermission === 'function' && (
+            hasPermission('suporte')
+            || hasPermission('tickets')
+            || hasPermission('suporte_tickets')
+        ))
+    );
+}
+
+function syncSuporteTicketComposerAvailability(statusValue) {
+    const isClosed = isSuporteTicketClosedStatus(statusValue);
+    const closedNotice = getSuporteTicketClosedNotice();
+
+    if (suporteTicketNovaMensagem) {
+        suporteTicketNovaMensagem.disabled = isClosed;
+        suporteTicketNovaMensagem.placeholder = isClosed
+            ? 'Este chamado foi concluído.'
+            : (isSuperAdmin ? 'Digite a resposta do suporte...' : 'Digite uma nova mensagem para este chamado...');
+    }
+
+    if (btnEnviarMensagemTicket) {
+        btnEnviarMensagemTicket.disabled = isClosed;
+        btnEnviarMensagemTicket.style.display = 'none';
+    }
+
+    if (closedNotice) {
+        closedNotice.style.display = isClosed ? 'block' : 'none';
+    }
+
+    if (btnSalvarTicket && (suporteTicketPrimaryActionMode === 'existing' || suporteTicketPrimaryActionMode === 'admin-existing')) {
+        btnSalvarTicket.disabled = isClosed;
+        btnSalvarTicket.style.display = isClosed ? 'none' : 'inline-flex';
+    }
+
+    if (suporteTicketStatus) {
+        suporteTicketStatus.disabled = !canManageSuporteTicketStatus();
+    }
+}
+
+async function updateSuporteTicketStatusImmediate(newStatus) {
+    const ticketId = suporteTicketId ? String(suporteTicketId.value || '').trim() : '';
+    const normalizedStatus = String(newStatus || '').trim();
+
+    if (!ticketId || !normalizedStatus || !canManageSuporteTicketStatus()) return;
+    if (!suporteTicketStatus) return;
+
+    const previousStatus = String(suporteTicketStatus.dataset.currentStatus || '').trim();
+    if (previousStatus === normalizedStatus) {
+        syncSuporteTicketComposerAvailability(normalizedStatus);
+        return;
+    }
+    if (suporteTicketStatus.dataset.updating === 'true') return;
+
+    suporteTicketStatus.dataset.updating = 'true';
+    suporteTicketStatus.disabled = true;
+
+    try {
+        const { error } = await db.from('suporte_tickets').update({
+            status: normalizedStatus
+        }).eq('id', ticketId);
+
+        if (error) throw error;
+
+        suporteTicketStatus.dataset.currentStatus = normalizedStatus;
+        syncSuporteTicketComposerAvailability(normalizedStatus);
+        showToast('Status do chamado atualizado.');
+    } catch (err) {
+        console.error('Erro ao atualizar status do ticket:', err);
+        suporteTicketStatus.value = previousStatus || 'Aberto';
+        syncSuporteTicketComposerAvailability(previousStatus || suporteTicketStatus.value);
+        showToast('Erro ao atualizar status do chamado.', true);
+    } finally {
+        suporteTicketStatus.disabled = false;
+        suporteTicketStatus.dataset.updating = 'false';
+    }
+}
+
+function getSuporteTicketAdminStatusRow() {
+    if (!suporteTicketAdminStatusGroup) return null;
+    let statusRow = document.getElementById('suporteTicketAdminStatusRow');
+    if (!statusRow) {
+        statusRow = document.createElement('div');
+        statusRow.id = 'suporteTicketAdminStatusRow';
+        statusRow.style.display = 'flex';
+        statusRow.style.alignItems = 'center';
+        statusRow.style.gap = '0.75rem';
+        statusRow.style.flexWrap = 'wrap';
+        suporteTicketAdminStatusGroup.appendChild(statusRow);
+    }
+    if (suporteTicketStatus && suporteTicketStatus.parentElement !== statusRow) {
+        statusRow.appendChild(suporteTicketStatus);
+        suporteTicketStatus.style.flex = '1 1 220px';
+        suporteTicketStatus.style.minWidth = '180px';
+    }
+    return statusRow;
+}
+
+function syncSuporteTicketActionButtons(mode) {
+    const modalFooter = getSuporteTicketModalFooter();
+    suporteTicketPrimaryActionMode = String(mode || 'new-ticket');
+
+    if (btnEnviarMensagemTicket) {
+        try {
+            btnEnviarMensagemTicket.remove();
+        } catch { }
+        btnEnviarMensagemTicket = null;
+    }
+
+    if (!btnSalvarTicket) return;
+
+    if (modalFooter) {
+        const cancelButton = getSuporteTicketCancelButton();
+        if (cancelButton) {
+            modalFooter.insertBefore(btnSalvarTicket, cancelButton);
+        } else if (btnSalvarTicket.parentElement !== modalFooter) {
+            modalFooter.appendChild(btnSalvarTicket);
+        }
+    }
+
+    btnSalvarTicket.className = 'btn btn-primary';
+    btnSalvarTicket.style.display = 'inline-flex';
+    btnSalvarTicket.innerHTML = 'Enviar';
+}
+
+function ensureSuporteTicketComposerUi() {
+    if (!suporteTicketModal) return;
+    ensureTicketChatResponsiveStyles();
+
+    const modalContent = suporteTicketModal.querySelector('.modal-content');
+    const modalBody = suporteTicketModal.querySelector('.modal-body');
+    const modalFooter = suporteTicketModal.querySelector('.modal-footer');
+    if (!modalBody || !modalFooter) return;
+
+    if (modalContent) {
+        modalContent.style.maxHeight = '90vh';
+        modalContent.style.display = 'flex';
+        modalContent.style.flexDirection = 'column';
+        modalContent.style.overflow = 'hidden';
+    }
+    modalBody.style.flex = '1 1 auto';
+    modalBody.style.overflowY = 'auto';
+    modalBody.style.minHeight = '0';
+    modalBody.style.paddingBottom = '0.75rem';
+    modalFooter.style.position = 'sticky';
+    modalFooter.style.bottom = '0';
+    modalFooter.style.zIndex = '1050';
+    modalFooter.style.background = '#fff';
+    modalFooter.style.paddingBottom = 'calc(1rem + env(safe-area-inset-bottom, 0px))';
+    modalFooter.style.flexWrap = 'wrap';
+    modalFooter.style.rowGap = '0.75rem';
+    modalFooter.style.alignItems = 'center';
+    modalFooter.style.flexShrink = '0';
+
+    if (suporteTicketCategoria && suporteTicketAdminStatusGroup && suporteTicketAdminStatusGroup.parentElement === modalBody) {
+        const categoriaGroup = suporteTicketCategoria.closest('.form-group');
+        if (categoriaGroup && categoriaGroup.nextSibling !== suporteTicketAdminStatusGroup) {
+            modalBody.insertBefore(suporteTicketAdminStatusGroup, categoriaGroup.nextSibling);
+        }
+    }
+
+    if (suporteTicketRespostaGroup) {
+        const historyLabel = suporteTicketRespostaGroup.querySelector('label');
+        if (historyLabel) historyLabel.textContent = 'Conversa';
+    }
+    if (suporteTicketResposta) {
+        suporteTicketResposta.readOnly = true;
+        suporteTicketResposta.rows = 8;
+        suporteTicketResposta.placeholder = 'Histórico das mensagens do chamado...';
+        suporteTicketResposta.style.display = 'none';
+    }
+    suporteTicketConversationBox = document.getElementById('suporteTicketConversationBox');
+    if (!suporteTicketConversationBox && suporteTicketRespostaGroup) {
+        suporteTicketConversationBox = document.createElement('div');
+        suporteTicketConversationBox.id = 'suporteTicketConversationBox';
+        suporteTicketConversationBox.style.maxHeight = '280px';
+        suporteTicketConversationBox.style.overflowY = 'auto';
+        suporteTicketConversationBox.style.backgroundColor = '#efeae2';
+        suporteTicketConversationBox.style.padding = '12px';
+        suporteTicketConversationBox.style.borderRadius = '8px';
+        suporteTicketConversationBox.style.border = '1px solid #e5e7eb';
+        suporteTicketConversationBox.style.display = 'flex';
+        suporteTicketConversationBox.style.flexDirection = 'column';
+        suporteTicketConversationBox.style.gap = '8px';
+        suporteTicketConversationBox.style.minHeight = '160px';
+        if (suporteTicketResposta.parentElement === suporteTicketRespostaGroup) {
+            suporteTicketRespostaGroup.appendChild(suporteTicketConversationBox);
+        } else {
+            suporteTicketRespostaGroup.appendChild(suporteTicketConversationBox);
+        }
+    }
+
+    suporteTicketMensagemGroup = document.getElementById('suporteTicketMensagemGroup');
+    suporteTicketNovaMensagem = document.getElementById('suporteTicketNovaMensagem');
+    btnEnviarMensagemTicket = document.getElementById('btnEnviarMensagemTicket');
+
+    if (btnEnviarMensagemTicket) {
+        try {
+            btnEnviarMensagemTicket.remove();
+        } catch { }
+        btnEnviarMensagemTicket = null;
+    }
+
+    if (!suporteTicketMensagemGroup) {
+        suporteTicketMensagemGroup = document.createElement('div');
+        suporteTicketMensagemGroup.id = 'suporteTicketMensagemGroup';
+        suporteTicketMensagemGroup.className = 'form-group hidden';
+        suporteTicketMensagemGroup.style.marginTop = '0.75rem';
+        suporteTicketMensagemGroup.style.width = '100%';
+        suporteTicketMensagemGroup.style.maxWidth = '100%';
+        suporteTicketMensagemGroup.innerHTML = `
+            <div id="suporteTicketClosedNotice" style="display:none; margin-bottom:0.75rem; padding:0.65rem 0.8rem; background:#f3f4f6; color:#6b7280; border:1px solid #d1d5db; border-radius:10px; font-size:0.85rem;">
+                Este chamado foi concluído e não aceita novas respostas.
+            </div>
+            <div id="suporteTicketComposerBar" style="display:flex; align-items:stretch; gap:0.75rem; width:100%; max-width:100%; background:#fff; border:1px solid #dbe2ea; border-radius:12px; padding:0.75rem; box-sizing:border-box;">
+                <textarea id="suporteTicketNovaMensagem" class="form-control" rows="5" placeholder="Digite uma nova mensagem para este chamado..." style="min-height:120px; resize:vertical; border:none; box-shadow:none; padding:0.25rem 0; width:100% !important; max-width:100% !important; box-sizing:border-box; display:block; flex:1 1 auto; align-self:stretch;"></textarea>
+            </div>
+        `;
+        if (suporteTicketRespostaGroup && suporteTicketRespostaGroup.parentElement === modalBody) {
+            modalBody.insertBefore(suporteTicketMensagemGroup, suporteTicketRespostaGroup.nextSibling);
+        } else {
+            modalBody.appendChild(suporteTicketMensagemGroup);
+        }
+        suporteTicketNovaMensagem = suporteTicketMensagemGroup.querySelector('#suporteTicketNovaMensagem');
+    }
+
+    if (btnSalvarTicket) {
+        btnSalvarTicket.className = 'btn btn-primary';
+    }
+
+    if (suporteTicketStatus && !suporteTicketStatus.__occTicketStatusLockBound) {
+        suporteTicketStatus.__occTicketStatusLockBound = true;
+        if (!suporteTicketStatus.id) {
+            suporteTicketStatus.id = 'suporteTicketStatusSelect';
+        }
+        suporteTicketStatus.addEventListener('change', () => {
+            syncSuporteTicketComposerAvailability(suporteTicketStatus.value);
+            updateSuporteTicketStatusImmediate(suporteTicketStatus.value);
+        });
+    }
+
+    const composerBar = document.getElementById('suporteTicketComposerBar');
+    if (composerBar) {
+        composerBar.style.width = '100%';
+        composerBar.style.maxWidth = '100%';
+        composerBar.style.boxSizing = 'border-box';
+    }
+    if (suporteTicketNovaMensagem) {
+        suporteTicketNovaMensagem.style.width = '100%';
+        suporteTicketNovaMensagem.style.maxWidth = '100%';
+        suporteTicketNovaMensagem.style.boxSizing = 'border-box';
+        suporteTicketNovaMensagem.style.display = 'block';
+        suporteTicketNovaMensagem.style.flex = '1 1 auto';
+        suporteTicketNovaMensagem.style.alignSelf = 'stretch';
+    }
+
+    getSuporteTicketAdminStatusRow();
+}
+
+async function fetchTicketById(ticketId) {
+    const normalizedId = String(ticketId || '').trim();
+    if (!normalizedId) return null;
+    const { data, error } = await db.from('suporte_tickets').select('*').eq('id', normalizedId).single();
+    if (error) throw error;
+    return data || null;
+}
+
+function subscribeSuporteTicketsRealtime() {
+    if (!db || typeof db.channel !== 'function') return;
+
+    const scopeKey = 'global';
+    if (suporteTicketsRealtimeChannel && suporteTicketsRealtimeScopeKey === scopeKey) return;
+
+    closeSuporteTicketsRealtimeChannel();
+
+    suporteTicketsRealtimeChannel = db
+        .channel('public:suporte_tickets')
+        .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'suporte_tickets'
+        }, (payload) => {
+            console.log('🔄 Novo evento de ticket detectado via Realtime:', payload);
+            if (typeof window.carregarTicketsSuporte === 'function') {
+                window.carregarTicketsSuporte(true);
+            } else {
+                fetchTickets();
+            }
+            const updatedTicket = payload && payload.new ? payload.new : null;
+            const ticketAtualId = String(window.ticketAbertoId || suporteTicketDetailRealtimeId || (suporteTicketId && suporteTicketId.value) || '').trim();
+            const ticketAtualProtocolo = String(window.currentTicketProtocolo || '').trim();
+            const ehMesmoTicket = !!(updatedTicket && (
+                (ticketAtualId && String(updatedTicket.id || '').trim() === ticketAtualId) ||
+                (ticketAtualProtocolo && String(updatedTicket.protocolo || '').trim() === ticketAtualProtocolo)
+            ));
+            if (ehMesmoTicket) {
+                console.log('🔄 Atualizando modal do ticket aberto em tempo real:', updatedTicket);
+                if (typeof window.atualizarModalTicketAberto === 'function') {
+                    window.atualizarModalTicketAberto(updatedTicket);
+                } else if (typeof window.recarregarDetalhesTicketAberto === 'function') {
+                    window.recarregarDetalhesTicketAberto(updatedTicket.id);
+                } else {
+                    openViewTicketModal(updatedTicket);
+                }
+            }
+            if (isSuperAdmin) fetchDashboardTicketKpis();
+        })
+        .subscribe((status, err) => {
+            console.log('Status da conexão Realtime Suporte:', status, err);
+        });
+
+    suporteTicketsRealtimeScopeKey = scopeKey;
+}
+
+function subscribeSuporteTicketDetailRealtime(ticketId) {
+    const normalizedTicketId = String(ticketId || '').trim();
+    if (!normalizedTicketId || !db || typeof db.channel !== 'function') return;
+    if (suporteTicketDetailRealtimeChannel && suporteTicketDetailRealtimeId === normalizedTicketId) return;
+
+    closeSuporteTicketDetailRealtimeChannel();
+
+    suporteTicketDetailRealtimeChannel = db
+        .channel(`suporte_ticket_${normalizedTicketId}`)
+        .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'suporte_tickets',
+            filter: `id=eq.${normalizedTicketId}`
+        }, (payload) => {
+            const updatedTicket = payload && payload.new ? payload.new : null;
+            if (!updatedTicket) return;
+            if (!suporteTicketModal || suporteTicketModal.classList.contains('hidden')) return;
+            openViewTicketModal(updatedTicket);
+            fetchTickets();
+            if (isSuperAdmin) fetchDashboardTicketKpis();
+        })
+        .subscribe();
+
+    suporteTicketDetailRealtimeId = normalizedTicketId;
+}
+
+window.carregarTicketsSuporte = function (silentReload) {
+    void silentReload;
+    fetchTickets();
+};
+
+window.atualizarModalTicketAberto = function (ticketData) {
+    if (!ticketData) return;
+    openViewTicketModal(ticketData);
+};
+
+window.recarregarDetalhesTicketAberto = function (ticketId) {
+    if (!ticketId) return;
+    fetchTicketById(ticketId).then((ticketData) => {
+        if (!ticketData) return;
+        openViewTicketModal(ticketData);
+    }).catch((err) => {
+        console.warn('Erro ao recarregar detalhes do ticket aberto:', err);
+    });
+};
+
 function renderTicketsTable(tickets) {
     if (!tickets || tickets.length === 0) {
         suporteTicketsBody.innerHTML = '';
@@ -34210,9 +35712,8 @@ function renderTicketsTable(tickets) {
     tickets.forEach(t => {
         const tr = document.createElement('tr');
         
-        const dateObj = new Date(t.data_criacao);
-        const dateStr = dateObj.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-        const shortId = t.id.substring(0, 8).toUpperCase();
+        const dateStr = getSafeTicketDateLabel(t);
+        const shortId = getSafeTicketShortId(t);
         
         let statusBadge = 'bg-secondary';
         if (t.status === 'Aberto') statusBadge = 'bg-primary';
@@ -34241,7 +35742,12 @@ function renderTicketsTable(tickets) {
 }
 
 function openNovoTicketModal() {
+    closeSuporteTicketDetailRealtimeChannel();
+    ensureSuporteTicketComposerUi();
+    setSuporteTicketDescricaoVisibility(true);
     if (suporteTicketId) suporteTicketId.value = '';
+    window.ticketAbertoId = '';
+    window.currentTicketProtocolo = '';
     if (suporteTicketTitulo) {
         suporteTicketTitulo.value = '';
         suporteTicketTitulo.readOnly = false;
@@ -34257,20 +35763,24 @@ function openNovoTicketModal() {
     if (suporteTicketResposta) {
         suporteTicketResposta.value = '';
     }
+    if (suporteTicketMensagemGroup) suporteTicketMensagemGroup.classList.add('hidden');
+    if (suporteTicketNovaMensagem) suporteTicketNovaMensagem.value = '';
+    syncSuporteTicketActionButtons('new-ticket');
+    syncSuporteTicketComposerAvailability('');
     
     if (suporteTicketModalTitle) suporteTicketModalTitle.textContent = 'Abrir Novo Chamado';
     if (suporteTicketAdminStatusGroup) suporteTicketAdminStatusGroup.classList.add('hidden');
     if (suporteTicketRespostaGroup) suporteTicketRespostaGroup.classList.add('hidden');
     
-    if (btnSalvarTicket) {
-        btnSalvarTicket.style.display = 'inline-flex';
-        btnSalvarTicket.innerHTML = 'Salvar';
-    }
-    
     if (suporteTicketModal) suporteTicketModal.classList.remove('hidden');
 }
 
 function openViewTicketModal(ticket) {
+    closeSuporteTicketDetailRealtimeChannel();
+    ensureSuporteTicketComposerUi();
+    setSuporteTicketDescricaoVisibility(false);
+    window.ticketAbertoId = String(ticket && ticket.id || '').trim();
+    window.currentTicketProtocolo = getSafeTicketProtocol(ticket);
     if (suporteTicketId) suporteTicketId.value = ticket.id;
     if (suporteTicketTitulo) {
         suporteTicketTitulo.value = ticket.titulo || '';
@@ -34285,48 +35795,112 @@ function openViewTicketModal(ticket) {
         suporteTicketDescricao.readOnly = true;
     }
     
-    if (suporteTicketModalTitle) suporteTicketModalTitle.textContent = `Chamado TCK-${ticket.id.substring(0,8).toUpperCase()}`;
+    if (suporteTicketModalTitle) suporteTicketModalTitle.textContent = `Chamado ${getSafeTicketProtocol(ticket)}`;
     
     if (suporteTicketRespostaGroup) {
-        if (isSuperAdmin || ticket.resposta_admin) {
-            suporteTicketRespostaGroup.classList.remove('hidden');
-        } else {
-            suporteTicketRespostaGroup.classList.add('hidden');
-        }
+        suporteTicketRespostaGroup.classList.remove('hidden');
     }
     
     if (suporteTicketResposta) {
-        let respostaText = ticket.resposta_admin || '';
-        
-        // Resposta Automática Inteligente (SuperAdmin)
-        if (isSuperAdmin && !respostaText) {
-            respostaText = `Olá, ${ticket.usuario_nome || 'Usuário'}!\n\n`;
-            
-            // Salva os dados no próprio elemento para ser usado no salvamento
-            suporteTicketResposta.dataset.nomeEmpresa = ticket.nome_empresa || 'Clínica';
-            suporteTicketResposta.dataset.autoResposta = "true";
-        } else {
-            delete suporteTicketResposta.dataset.autoResposta;
-            delete suporteTicketResposta.dataset.nomeEmpresa;
-        }
-        
-        suporteTicketResposta.value = respostaText;
-        suporteTicketResposta.readOnly = !isSuperAdmin;
+        suporteTicketResposta.value = buildTicketConversationHistory(ticket);
+        suporteTicketResposta.readOnly = true;
+    }
+    renderTicketConversationUi(ticket);
+    if (suporteTicketMensagemGroup) suporteTicketMensagemGroup.classList.remove('hidden');
+    if (suporteTicketNovaMensagem) {
+        suporteTicketNovaMensagem.value = '';
+        suporteTicketNovaMensagem.placeholder = isSuperAdmin
+            ? 'Digite a resposta do suporte...'
+            : 'Digite uma nova mensagem para este chamado...';
     }
     
     if (isSuperAdmin) {
         if (suporteTicketAdminStatusGroup) suporteTicketAdminStatusGroup.classList.remove('hidden');
-        if (suporteTicketStatus) suporteTicketStatus.value = ticket.status || 'Aberto';
-        if (btnSalvarTicket) {
-            btnSalvarTicket.style.display = 'inline-flex';
-            btnSalvarTicket.innerHTML = 'Atualizar Status';
+        if (suporteTicketStatus) {
+            suporteTicketStatus.value = ticket.status || 'Aberto';
+            suporteTicketStatus.dataset.currentStatus = String(ticket.status || 'Aberto').trim();
         }
+        syncSuporteTicketActionButtons('admin-existing');
     } else {
-        if (suporteTicketAdminStatusGroup) suporteTicketAdminStatusGroup.classList.add('hidden');
-        if (btnSalvarTicket) btnSalvarTicket.style.display = 'none';
+        if (canManageSuporteTicketStatus()) {
+            if (suporteTicketAdminStatusGroup) suporteTicketAdminStatusGroup.classList.remove('hidden');
+            if (suporteTicketStatus) {
+                suporteTicketStatus.value = ticket.status || 'Aberto';
+                suporteTicketStatus.dataset.currentStatus = String(ticket.status || 'Aberto').trim();
+            }
+            syncSuporteTicketActionButtons('admin-existing');
+        } else {
+            if (suporteTicketAdminStatusGroup) suporteTicketAdminStatusGroup.classList.add('hidden');
+            syncSuporteTicketActionButtons('existing');
+        }
     }
+    syncSuporteTicketComposerAvailability(ticket.status);
     
     if (suporteTicketModal) suporteTicketModal.classList.remove('hidden');
+    if (suporteTicketConversationBox) {
+        requestAnimationFrame(() => {
+            try {
+                suporteTicketConversationBox.scrollTop = suporteTicketConversationBox.scrollHeight;
+            } catch { }
+        });
+    }
+    subscribeSuporteTicketDetailRealtime(ticket.id);
+}
+
+async function sendTicketMessage() {
+    const id = suporteTicketId ? String(suporteTicketId.value || '').trim() : '';
+    const mensagem = suporteTicketNovaMensagem ? String(suporteTicketNovaMensagem.value || '').trim() : '';
+    const statusAtual = suporteTicketStatus ? String(suporteTicketStatus.value || '').trim() : '';
+
+    if (!id) {
+        showToast('Abra um chamado existente para responder.', true);
+        return;
+    }
+    if (!mensagem) {
+        showToast('Digite uma mensagem para enviar no chamado.', true);
+        return;
+    }
+
+    if (btnSalvarTicket) {
+        btnSalvarTicket.disabled = true;
+        btnSalvarTicket.textContent = 'Enviando...';
+    }
+
+    try {
+        const latestTicket = await fetchTicketById(id);
+        if (!latestTicket) throw new Error('Chamado não encontrado.');
+
+        const historyAtualizado = appendTicketMessageToHistory(
+            latestTicket.resposta_admin,
+            getCurrentTicketAuthorName(latestTicket),
+            mensagem,
+            new Date().toISOString()
+        );
+
+        const updatePayload = { resposta_admin: historyAtualizado };
+        if (isSuperAdmin && statusAtual) {
+            updatePayload.status = statusAtual;
+        }
+
+        const { error } = await db.from('suporte_tickets').update(updatePayload).eq('id', id);
+
+        if (error) throw error;
+
+        const updatedTicket = Object.assign({}, latestTicket, { resposta_admin: historyAtualizado });
+        if (suporteTicketNovaMensagem) suporteTicketNovaMensagem.value = '';
+        openViewTicketModal(updatedTicket);
+        fetchTickets();
+        if (isSuperAdmin) fetchDashboardTicketKpis();
+        showToast('Mensagem enviada no chamado!');
+    } catch (err) {
+        console.error('Erro ao enviar mensagem do ticket:', err);
+        showToast('Erro ao enviar mensagem: ' + err.message, true);
+    } finally {
+        if (btnSalvarTicket) {
+            btnSalvarTicket.disabled = false;
+            btnSalvarTicket.textContent = 'Enviar';
+        }
+    }
 }
 
 async function saveTicket() {
@@ -34342,25 +35916,15 @@ async function saveTicket() {
     
     if (btnSalvarTicket) {
         btnSalvarTicket.disabled = true;
-        btnSalvarTicket.innerHTML = 'Salvando...';
+        btnSalvarTicket.innerHTML = 'Enviando...';
     }
     
     try {
         if (id && isSuperAdmin) {
             const status = suporteTicketStatus ? suporteTicketStatus.value : 'Aberto';
-            let resposta = (suporteTicketResposta ? suporteTicketResposta.value : '').trim();
-            
-            // Adiciona a assinatura final automaticamente
-            if (suporteTicketResposta && suporteTicketResposta.dataset.autoResposta === "true") {
-                const nomeEmpresa = suporteTicketResposta.dataset.nomeEmpresa || 'Clínica';
-                if (!resposta.includes('Obrigado por nos acionar')) {
-                    resposta += "\n\nObrigado por nos acionar! Estamos à disposição para apoiar o sucesso da " + nomeEmpresa + ".";
-                }
-            }
             
             const { error } = await db.from('suporte_tickets').update({
-                status: status,
-                resposta_admin: resposta
+                status: status
             }).eq('id', id);
             
             if (error) throw error;
@@ -34397,7 +35961,7 @@ async function saveTicket() {
             showToast('Chamado aberto com sucesso!');
         }
         
-        if (suporteTicketModal) suporteTicketModal.classList.add('hidden');
+        closeSuporteTicketModalUi();
         fetchTickets();
         if (isSuperAdmin) fetchDashboardTicketKpis();
         
@@ -34407,13 +35971,33 @@ async function saveTicket() {
     } finally {
         if (btnSalvarTicket) {
             btnSalvarTicket.disabled = false;
-            btnSalvarTicket.innerHTML = id ? 'Atualizar Status' : 'Salvar';
+            btnSalvarTicket.innerHTML = 'Enviar';
         }
     }
 }
 
+function handleSuporteTicketPrimaryAction() {
+    if (suporteTicketPrimaryActionMode === 'existing' || suporteTicketPrimaryActionMode === 'admin-existing') {
+        return sendTicketMessage();
+    }
+    return saveTicket();
+}
+
 if (btnNovoTicket) {
     btnNovoTicket.addEventListener('click', openNovoTicketModal);
+}
+if (suporteTicketModal) {
+    suporteTicketModal.addEventListener('click', (e) => {
+        if (e.target === suporteTicketModal) {
+            closeSuporteTicketModalUi();
+        }
+    });
+
+    suporteTicketModal.querySelectorAll('.close-btn, .btn.btn-secondary').forEach(btn => {
+        btn.addEventListener('click', () => {
+            closeSuporteTicketModalUi();
+        });
+    });
 }
 if (btnRefreshTickets) {
     btnRefreshTickets.addEventListener('click', () => {
@@ -34575,7 +36159,7 @@ async function generateTicketReport() {
 }
 
 if (btnSalvarTicket) {
-    btnSalvarTicket.addEventListener('click', saveTicket);
+    btnSalvarTicket.addEventListener('click', handleSuporteTicketPrimaryAction);
 }
 
 // --- Conciliação Fiscal (Vínculo Manual) ---
