@@ -7,7 +7,7 @@
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#0b1220",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "icons": [
     {
       "src": "assets/image_cb64a0_192.png",
