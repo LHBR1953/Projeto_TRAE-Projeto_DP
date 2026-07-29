@@ -1397,7 +1397,7 @@ async function getPatientDeleteBlockers(patient) {
     const patSeq = patient && patient.seqid != null ? Number(patient.seqid) : NaN;
 
     if (patId) {
-        const hasBudget = (budgets || []).some(b => String(b && (b.pacienteid || b.paciente_id) || '') === patId);
+        const hasBudget = (budgets || []).some(b => String(b && (b.paciente_id || b.paciente_id) || '') === patId);
         if (hasBudget) blocks.push('Orçamentos');
         const hasProtese = (proteseOrders || []).some(o => String(o && o.paciente_id || '') === patId);
         if (hasProtese) blocks.push('Prótese');
@@ -7330,7 +7330,7 @@ function getServicoById(serviceId) {
 
 function resolveOrcamentoPacienteId(b) {
     if (!b) return '';
-    return String(b.paciente_id || b.pacienteid || b.pacienteId || '').trim();
+    return String(b.paciente_id || b.paciente_id || b.paciente_id || '').trim();
 }
 
 function resolveOrcamentoSeq(b) {
@@ -7389,8 +7389,8 @@ async function buildConsumptionReportRows({ startDate, endDate } = {}) {
         const it = itemById.get(aid) || null;
         const orc = it ? orcById.get(String(it && it.orcamento_id || '')) : null;
         const srv = it ? getServicoById(it.servico_id || it.servicoId) : null;
-        const pacienteId = resolveOrcamentoPacienteId(orc);
-        const pacienteNome = resolvePacienteNameById(pacienteId) || '—';
+        const paciente_id = resolveOrcamentoPacienteId(orc);
+        const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
         const procedimento = resolveItemDescricao(it, srv) || '—';
         const subdiv = resolveServicoSubdivision(srv) || '—';
         const dataHora = (() => {
@@ -7536,8 +7536,8 @@ async function buildFinancialApportionRows({ startDate, endDate } = {}) {
             const srv = getServicoById(it.servico_id || it.servicoId);
             const executorId = String(it && (it.profissional_id || it.profissionalId || it.executor_id || it.executorId) || '');
             const executorNome = getProfessionalNameBySeqId(executorId) || '—';
-            const pacienteId = resolveOrcamentoPacienteId(orc);
-            const pacienteNome = resolvePacienteNameById(pacienteId) || '—';
+            const paciente_id = resolveOrcamentoPacienteId(orc);
+            const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
             const dtRaw = String(it && (it.updated_at || it.created_at || '') || '');
             const dt = dtRaw ? new Date(dtRaw) : null;
             const dtTxt = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleDateString('pt-BR') : '—';
@@ -13817,7 +13817,7 @@ async function fetchConsultaAvaliacaoForUI() {
             if (pUuid) {
                 // Find if there's an 'Avaliação' budget
                 avaliacaoBudget = budgets.find(b => {
-                    const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                    const isSamePat = b.paciente_id === pUuid || String(b.paciente_id) === String(pUuid);
                     const statusNorm = String(b.status || '').trim().toLowerCase();
                     return isSamePat && (statusNorm === 'avaliação' || statusNorm === 'avaliacao');
                 });
@@ -13825,7 +13825,7 @@ async function fetchConsultaAvaliacaoForUI() {
                 // If no avaliacao budget, check if there's a 'Pendente' budget created today (meaning it was liberated)
                 if (!avaliacaoBudget) {
                     wasLiberated = budgets.some(b => {
-                        const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                        const isSamePat = b.paciente_id === pUuid || String(b.paciente_id) === String(pUuid);
                         const statusNorm = String(b.status || '').trim().toLowerCase();
                         return isSamePat && statusNorm === 'pendente' && (b.created_at || '').startsWith(dateStr);
                     });
@@ -13834,7 +13834,7 @@ async function fetchConsultaAvaliacaoForUI() {
                 // Check if patient already has a normal budget in progress (created via menu)
                 // that is not canceled and not concluded, which means they don't need a new evaluation today
                 hasNormalBudgetOpen = budgets.some(b => {
-                    const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                    const isSamePat = b.paciente_id === pUuid || String(b.paciente_id) === String(pUuid);
                     const statusNorm = normalizeKey(String(b.status || ''));
                     // Se tem qualquer orçamento normal que não seja 'AVALIACAO', 'CANCELADO', 'EXECUTADO', 'CONCLUIDO'
                     return isSamePat && 
@@ -13922,7 +13922,7 @@ window.iniciarConsultaAvaliacao = function(patientUuid, agendamentoId) {
     window._currentPatientDetailId = patient.id;
     
     // Check if there is an existing budget with status "Avaliação" for this patient
-    const existingAvaliacao = (budgets || []).find(b => b.pacienteid === patient.id && String(b.status || '').trim().toLowerCase() === 'avaliação');
+    const existingAvaliacao = (budgets || []).find(b => b.paciente_id === patient.id && String(b.status || '').trim().toLowerCase() === 'avaliação');
     
     if (existingAvaliacao) {
         window.editBudget(existingAvaliacao.id);
@@ -14278,7 +14278,7 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
     const seqidToPacienteUuid = new Map();
     seqids.forEach(s => {
         const b = budgetBySeqid.get(String(s));
-        const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
+        const pid = b ? String(b.paciente_id || b.paciente_id || '') : '';
         if (pid) seqidToPacienteUuid.set(String(s), pid);
     });
     const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
@@ -14286,7 +14286,7 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
         try {
             const { data: orcs, error: oErr } = await withTimeout(
                 db.from('orcamentos')
-                    .select('seqid,paciente_id,pacienteid,pacientenome')
+                    .select('seqid,paciente_id,paciente_id,pacientenome')
                     .eq('empresa_id', currentEmpresaId)
                     .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
                 15000,
@@ -14294,7 +14294,7 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
             );
             if (!oErr && Array.isArray(orcs)) {
                 orcs.forEach(o => {
-                    const pid = String(o.pacienteid || o.paciente_id || '');
+                    const pid = String(o.paciente_id || o.paciente_id || '');
                     if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
                 });
             }
@@ -14549,7 +14549,7 @@ async function printFaturamentoMensalPacienteCross(year) {
     const seqidToPacienteUuid = new Map();
     seqids.forEach(s => {
         const b = budgetBySeqid.get(String(s));
-        const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
+        const pid = b ? String(b.paciente_id || b.paciente_id || '') : '';
         if (pid) seqidToPacienteUuid.set(String(s), pid);
     });
     const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
@@ -14557,14 +14557,14 @@ async function printFaturamentoMensalPacienteCross(year) {
         try {
             const { data: orcs } = await withTimeout(
                 db.from('orcamentos')
-                    .select('seqid,paciente_id,pacienteid,pacientenome')
+                    .select('seqid,paciente_id,paciente_id,pacientenome')
                     .eq('empresa_id', currentEmpresaId)
                     .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
                 15000,
                 'cross_paciente:orcamentos'
             );
             (Array.isArray(orcs) ? orcs : []).forEach(o => {
-                const pid = String(o.pacienteid || o.paciente_id || '');
+                const pid = String(o.paciente_id || o.paciente_id || '');
                 if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
             });
         } catch { }
@@ -14700,7 +14700,7 @@ async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
         const seq = String(p.orcamento_id || '');
         const budget = budgetBySeqid.get(seq);
         const itens = budget ? (budget.orcamento_itens || budget.itens || []) : [];
-        const pacienteUuid = budget ? String(budget.pacienteid || budget.paciente_id || '') : '';
+        const pacienteUuid = budget ? String(budget.paciente_id || budget.paciente_id || '') : '';
         const paciente = pacienteUuid ? patientById.get(pacienteUuid) : null;
         const pacNome = paciente ? String(paciente.nome || '') : (seq ? `Orçamento #${seq}` : '—');
 
@@ -14864,7 +14864,7 @@ function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId, dateStr }) {
         const firstAg = arr[0];
         const hora = firstAg && firstAg.inicio ? formatTimeHHMM(new Date(firstAg.inicio)) : '--:--';
 
-        const patientBudgets = (budgets || []).filter(b => String(b.pacienteid || b.paciente_id || '') === String(pacienteUuid));
+        const patientBudgets = (budgets || []).filter(b => String(b.paciente_id || b.paciente_id || '') === String(pacienteUuid));
         patientBudgets.forEach(b => {
             const itens = (b.orcamento_itens || b.itens || []);
             const tipoKey = normalizeKey(String(b.tipo || 'Normal'));
@@ -15047,8 +15047,8 @@ async function printAgendaWeekAppointmentsFromUI() {
                 const mi = String(dt.getMinutes()).padStart(2, '0');
                 const ini = `${hh}:${mi}`;
                 const st = a.status || '—';
-                const pacienteId = a.paciente_id != null ? String(a.paciente_id) : '';
-                const pacienteNome = pacienteId ? getPacienteNameBySeqId(pacienteId) : '';
+                const paciente_id = a.paciente_id != null ? String(a.paciente_id) : '';
+                const pacienteNome = paciente_id ? getPacienteNameBySeqId(paciente_id) : '';
                 const tit = String(a.titulo || '').trim();
                 const label = pacienteNome
                     ? (tit && normalizeKey(tit) !== normalizeKey(pacienteNome) ? `${pacienteNome} — ${tit}` : pacienteNome)
@@ -15145,7 +15145,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
             const seqidToPacienteUuid = new Map();
             seqids.forEach(s => {
                 const b = budgetBySeqid.get(String(s));
-                const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
+                const pid = b ? String(b.paciente_id || b.paciente_id || '') : '';
                 if (pid) seqidToPacienteUuid.set(String(s), pid);
             });
             const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
@@ -15153,7 +15153,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
                 try {
                     const { data: orcs, error: oErr } = await withTimeout(
                         db.from('orcamentos')
-                            .select('seqid,paciente_id,pacienteid')
+                            .select('seqid,paciente_id,paciente_id')
                             .eq('empresa_id', currentEmpresaId)
                             .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
                         15000,
@@ -15161,7 +15161,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
                     );
                     if (!oErr && Array.isArray(orcs)) {
                         orcs.forEach(o => {
-                            const pid = String(o.pacienteid || o.paciente_id || '');
+                            const pid = String(o.paciente_id || o.paciente_id || '');
                             if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
                         });
                     }
@@ -15760,7 +15760,7 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
             // Verifica o orcamento no array global (para pegar paciente, etc)
             const b = (budgets || []).find(x => String(x.id) === String(it.orcamento_id || it.orcamentoid || ''));
             
-            const pacId = b ? String(b.paciente_id || b.pacienteid || '') : '';
+            const pacId = b ? String(b.paciente_id || b.paciente_id || '') : '';
             let paciente = null;
             if (pacId && pacId !== 'null' && pacId !== 'undefined') {
                 paciente = (patients || []).find(p => String(p.id) === pacId);
@@ -17755,7 +17755,7 @@ async function syncProteseOrcamentoItens() {
 
     const pacienteSel = document.getElementById('protesePaciente');
     if (pacienteSel) {
-        const raw = b ? (b.pacienteid || b.paciente_id) : null;
+        const raw = b ? (b.paciente_id || b.paciente_id) : null;
         let budgetPatientUuid = '';
         let budgetPatientName = b && b.pacientenome ? String(b.pacientenome) : '';
 
@@ -17929,7 +17929,7 @@ async function syncProteseUniqueOpGuard() {
     const btnSave = document.getElementById('btnProteseSave');
     if (!warn || !warnText || !btnView) return;
 
-    const pacienteId = String((document.getElementById('protesePaciente') || {}).value || '').trim();
+    const paciente_id = String((document.getElementById('protesePaciente') || {}).value || '').trim();
     const orcSeqRaw = String((document.getElementById('proteseOrcamentoSeqid') || {}).value || '').trim();
     const itemId = String((document.getElementById('proteseOrcamentoItemId') || {}).value || '').trim();
     const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
@@ -17943,7 +17943,7 @@ async function syncProteseUniqueOpGuard() {
         if (btnSave) btnSave.disabled = false;
     };
 
-    if (!pacienteId || !orcamentoId || !itemId) {
+    if (!paciente_id || !orcamentoId || !itemId) {
         clear();
         return;
     }
@@ -17959,7 +17959,7 @@ async function syncProteseUniqueOpGuard() {
             db.from('ordens_proteticas')
                 .select('id, seqid, status_geral, created_at')
                 .eq('empresa_id', currentEmpresaId)
-                .eq('paciente_id', pacienteId)
+                .eq('paciente_id', paciente_id)
                 .eq('orcamento_id', orcamentoId)
                 .eq('orcamento_item_id', itemId)
                 .neq('status_geral', 'CANCELADA')
@@ -18188,7 +18188,7 @@ async function saveProteseOrder() {
         return;
     }
 
-    const pacienteId = (document.getElementById('protesePaciente') || {}).value || '';
+    const paciente_id = (document.getElementById('protesePaciente') || {}).value || '';
     const exec = (document.getElementById('proteseTipoExecucao') || {}).value || 'EXTERNA';
     const statusGeral = (document.getElementById('proteseStatusGeral') || {}).value || 'EM_ANDAMENTO';
     const labId = (document.getElementById('proteseLaboratorio') || {}).value || '';
@@ -18208,7 +18208,7 @@ async function saveProteseOrder() {
         if (b) orcamentoId = b.id;
     }
 
-    if (!pacienteId) {
+    if (!paciente_id) {
         showToast('Selecione o paciente.', true);
         return;
     }
@@ -18225,7 +18225,7 @@ async function saveProteseOrder() {
         if (!currentProteseOrder) {
             const payload = {
                 empresa_id: currentEmpresaId,
-                paciente_id: pacienteId,
+                paciente_id: paciente_id,
                 orcamento_id: orcamentoId || '',
                 orcamento_item_id: orcItemId || '',
                 tipo_execucao: exec,
@@ -18279,7 +18279,7 @@ async function saveProteseOrder() {
             } catch { }
         } else {
             const upd = {
-                paciente_id: pacienteId,
+                paciente_id: paciente_id,
                 orcamento_id: orcamentoId,
                 orcamento_item_id: orcItemId || null,
                 tipo_execucao: exec,
@@ -18327,7 +18327,7 @@ async function saveProteseOrder() {
         const isDup = code === '23505' || /duplicate key/i.test(rawMsg) || /ordens_proteticas_uniq_ativa_item/i.test(rawMsg);
         if (isDup && !currentProteseOrder) {
             try {
-                const pacienteId = String((document.getElementById('protesePaciente') || {}).value || '').trim();
+                const paciente_id = String((document.getElementById('protesePaciente') || {}).value || '').trim();
                 const orcSeqRaw = String((document.getElementById('proteseOrcamentoSeqid') || {}).value || '').trim();
                 const itemId = String((document.getElementById('proteseOrcamentoItemId') || {}).value || '').trim();
                 const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
@@ -18337,7 +18337,7 @@ async function saveProteseOrder() {
                     db.from('ordens_proteticas')
                         .select('id, seqid')
                         .eq('empresa_id', currentEmpresaId)
-                        .eq('paciente_id', pacienteId)
+                        .eq('paciente_id', paciente_id)
                         .eq('orcamento_id', orcamentoId)
                         .eq('orcamento_item_id', itemId)
                         .neq('status_geral', 'CANCELADA')
@@ -22352,10 +22352,10 @@ async function saveAgendaFromModal() {
     const fimIso = new Date(`${dateVal}T${fimTime}:00`).toISOString();
     if (fimIso <= inicioIso) { showToast('Fim deve ser maior que início.', true); return; }
 
-    const pacienteIdVal = agendaPaciente && agendaPaciente.value ? Number(agendaPaciente.value) : null;
+    const paciente_idVal = agendaPaciente && agendaPaciente.value ? Number(agendaPaciente.value) : null;
     const tituloVal = agendaTitulo ? agendaTitulo.value : '';
 
-    if (!pacienteIdVal) {
+    if (!paciente_idVal) {
         showToast('É obrigatório selecionar ou cadastrar um paciente.', true);
         if (agendaPacienteBusca) agendaPacienteBusca.focus();
         return;
@@ -22370,7 +22370,7 @@ async function saveAgendaFromModal() {
     const payload = {
         empresa_id: currentEmpresaId,
         profissional_id: Number(profSeqId),
-        paciente_id: pacienteIdVal,
+        paciente_id: paciente_idVal,
         inicio: inicioIso,
         fim: fimIso,
         status: agendaStatus ? agendaStatus.value : 'MARCADO',
@@ -26161,7 +26161,7 @@ if (budgetForm) {
         }
 
         const budgetData = {
-            pacienteid: pat.id,
+            paciente_id: pat.id,
             pacientenome: pat.nome,
             pacientecelular: pat.celular || pat.telefone,
             pacienteemail: pat.email,
@@ -26488,7 +26488,7 @@ window.editBudget = function (id) {
     document.getElementById('editBudgetId').value = b.id;
 
     // Set Patient Autocomplete
-    const pat = patients.find(p => p.id === b.pacienteid);
+    const pat = patients.find(p => p.id === b.paciente_id);
     if (pat) {
         document.getElementById('budPacienteNome').value = `${pat.nome} (${pat.cpf})`;
         document.getElementById('budPacienteId').value = pat.id; // Set the hidden ID
@@ -26674,7 +26674,7 @@ window.printBudget = function (id) {
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
     // Get patient CPF for signature
-    const patData = patients.find(p => p.id === b.pacienteid);
+    const patData = patients.find(p => p.id === b.paciente_id);
     const patCpf = patData ? (patData.cpf || '') : '';
 
     // Get unique professionals (Responsible + Item Protothetics)
@@ -29892,7 +29892,7 @@ function renderPatientBudgets(patientId) {
         const statusKey = normalizeKey(b.status);
         if (statusKey.includes('AVALIACAO')) return false;
 
-        const bPacId = b.pacienteid || b.paciente_id || b.pacienteseqid;
+        const bPacId = b.paciente_id || b.paciente_id || b.pacienteseqid;
 
         // 1. Comparação Direta de ID (Robustas)
         if (bPacId && patientId && String(bPacId).trim() === String(patientId).trim()) return true;
@@ -30090,7 +30090,7 @@ async function printPatientDetailReport(saveAsPdf = false) {
 
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
     const a = patient.anamnese || {};
-    const patientBudgets = budgets.filter(b => b.pacienteid === patientId);
+    const patientBudgets = budgets.filter(b => b.paciente_id === patientId);
 
     // ---- Anamnese section ----
     // 4 boolean fields horizontal, 'Doenças preexistentes' full-width below
@@ -30908,7 +30908,7 @@ async function renderFinanceiroNotasGrid() {
         if (!budget || !isClosed) return null;
         const bruto = Math.max(0, toDec(calculateBudgetTotal(budget), 0));
         const paid = ordered.reduce((sum, x) => sum + toDec(x && x.valor, 0), 0);
-        const patientId = String(budget && (budget.paciente_id || budget.pacienteid) || sample && sample.paciente_id || '').trim();
+        const patientId = String(budget && (budget.paciente_id || budget.paciente_id) || sample && sample.paciente_id || '').trim();
         const patient = (patients || []).find(p => String(p.id) === patientId || String(p.seqid) === patientId) || null;
         const itens = Array.isArray(budget && budget.orcamento_itens) ? budget.orcamento_itens : [];
         return {
@@ -30991,7 +30991,7 @@ window.emitirNotaTesteFinanceiro = async function (budgetRef) {
         setActiveTab('financialParams');
         return;
     }
-    const patientId = String(budget && (budget.paciente_id || budget.pacienteid) || '').trim();
+    const patientId = String(budget && (budget.paciente_id || budget.paciente_id) || '').trim();
     const patient = (patients || []).find(p => String(p.id) === patientId || String(p.seqid) === patientId) || null;
     if (!patient) {
         showToast('Paciente não encontrado para este orçamento.', true);
@@ -31169,7 +31169,7 @@ async function fetchTransactions(patientId = null) {
             try {
                 const { data: orcs, error: oErr } = await withTimeout(
                     db.from('orcamentos')
-                        .select('seqid,paciente_id,pacienteid,pacientenome')
+                        .select('seqid,paciente_id,paciente_id,pacientenome')
                         .eq('empresa_id', currentEmpresaId)
                         .in('seqid', uniq.map(n => Number(n))),
                     15000,
@@ -31179,7 +31179,7 @@ async function fetchTransactions(patientId = null) {
                     orcs.forEach(o => {
                         if (o && o.seqid != null) {
                             budgetSeqInfo.set(String(o.seqid), {
-                                pacienteUuid: String(o.pacienteid || o.paciente_id || ''),
+                                pacienteUuid: String(o.paciente_id || o.paciente_id || ''),
                                 pacienteNome: String(o.pacientenome || '')
                             });
                         }
@@ -31259,7 +31259,7 @@ async function fetchTransactions(patientId = null) {
                     if (mId && mId[1]) b = (budgets || []).find(x => String(x.id) === String(mId[1]));
                     if (!b && mSeq && mSeq[1]) b = (budgets || []).find(x => String(x.seqid) === String(mSeq[1]));
                     if (b) {
-                        pat = patients.find(p => String(p.id) === String(b.pacienteid || b.paciente_id));
+                        pat = patients.find(p => String(p.id) === String(b.paciente_id || b.paciente_id));
                         obsDisplay = replaceObsBudgetTag(t.observacoes || '');
                     }
                 } catch { /* ignore */ }
@@ -31570,7 +31570,7 @@ async function deleteTransaction(id) {
                             if (mId && mId[1]) b = listBud.find(x => String(x.id) === String(mId[1]));
                             if (!b && mSeq && mSeq[1]) b = listBud.find(x => String(x.seqid) === String(mSeq[1]));
                             if (b) {
-                                pat = listPat.find(p => String(p.id) === String(b.pacienteid || b.paciente_id));
+                                pat = listPat.find(p => String(p.id) === String(b.paciente_id || b.paciente_id));
                                 obsDisplay = typeof replaceObsBudgetTag === 'function' ? replaceObsBudgetTag(t.observacoes || '') : (t.observacoes || '');
                             }
                         } catch { }
@@ -32177,7 +32177,7 @@ window.recordBudgetPayment = async function (budgetId) {
     // Validação extra se for SALDO EM CONTA
     if (forma === 'Saldo em Conta') {
         try {
-            const pacIdRaw = budget.pacienteid || budget.paciente_id;
+            const pacIdRaw = budget.paciente_id || budget.paciente_id;
             const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
             const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
 
@@ -32247,7 +32247,7 @@ window.recordBudgetPayment = async function (budgetId) {
             showToast("Pagamento via Saldo registrado!");
         } else {
             try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
+                const pacIdRaw = budget.paciente_id || budget.paciente_id;
                 const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
                 const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
 
@@ -32362,7 +32362,7 @@ async function autoReleaseEligibleBudgetItems(budget, autorizadoPor) {
             }
 
             try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
+                const pacIdRaw = budget.paciente_id || budget.paciente_id;
                 const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
                 const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
                 const desc = item.descricao || 'Serviço';
@@ -32473,7 +32473,7 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
 
             // --- NOVO: Debitar serviço no financeiro para controle de conta corrente ---
             try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
+                const pacIdRaw = budget.paciente_id || budget.paciente_id;
                 const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
                 const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
                 const desc = item.descricao || 'Serviço';
@@ -32941,7 +32941,7 @@ async function processBudgetCancel(budget, motivo, analysis = { cancelCase: 1 })
         const userName = currentUserData.data.user.user_metadata?.full_name || currentUserData.data.user.email;
 
         // Buscar o seqid do paciente para as tabelas financeiras
-        const patientObj = patients.find(p => p.id === budget.pacienteid);
+        const patientObj = patients.find(p => p.id === budget.paciente_id);
         const pacienteSeqId = patientObj ? parseInt(patientObj.seqid) : null;
 
         if (!pacienteSeqId) {
@@ -33025,7 +33025,7 @@ async function processBudgetCancel(budget, motivo, analysis = { cancelCase: 1 })
                 
                 // Registro no Prontuário (Evolução) - Apenas para Caso 3
                 const evolucaoEntry = {
-                    paciente_id: budget.pacienteid,
+                    paciente_id: budget.paciente_id,
                     descricao: `ORÇAMENTO CANCELADO (#${budget.seqid}): Cancelamento crítico realizado. Estorno de R$ ${analysis.totalPago.toFixed(2)} e comissões processados. Motivo: ${motivo}`,
                     empresa_id: currentEmpresaId,
                     created_by: userId
@@ -34580,8 +34580,8 @@ function renderChatPacientesList(contacts) {
     });
 }
 
-async function openChatPaciente(pacienteId, pacienteNome) {
-    currentChatPacienteId = pacienteId;
+async function openChatPaciente(paciente_id, pacienteNome) {
+    currentChatPacienteId = paciente_id;
     
     // Atualizar UI
     document.getElementById('chatActivePatientName').innerText = pacienteNome;
@@ -34606,7 +34606,7 @@ async function openChatPaciente(pacienteId, pacienteNome) {
         }
         
         const { data, error } = await query
-            .eq('paciente_id', pacienteId)
+            .eq('paciente_id', paciente_id)
             .order('created_at', { ascending: true });
 
         if (error) throw error;
@@ -34648,9 +34648,9 @@ async function openChatPaciente(pacienteId, pacienteNome) {
     const newInput = inputMsg.cloneNode(true);
     inputMsg.parentNode.replaceChild(newInput, inputMsg);
     
-    newBtn.onclick = () => sendChatMensagemAdmin(pacienteId);
+    newBtn.onclick = () => sendChatMensagemAdmin(paciente_id);
     newInput.onkeypress = (e) => {
-        if (e.key === 'Enter') sendChatMensagemAdmin(pacienteId);
+        if (e.key === 'Enter') sendChatMensagemAdmin(paciente_id);
     };
     newInput.focus();
 }
@@ -34793,7 +34793,7 @@ function scrollToBottomAdmin() {
     }
 }
 
-async function sendChatMensagemAdmin(pacienteId) {
+async function sendChatMensagemAdmin(paciente_id) {
     const input = document.getElementById('chatAdminInput');
     const text = input.value.trim();
     if (!text) return;
@@ -34814,7 +34814,7 @@ async function sendChatMensagemAdmin(pacienteId) {
     try {
         const { error } = await db.from('portal_mensagens').insert([{
             empresa_id: currentEmpresaId,
-            paciente_id: pacienteId,
+            paciente_id: paciente_id,
             conteudo: text,
             remetente: 'CLINICA',
             lida: true,

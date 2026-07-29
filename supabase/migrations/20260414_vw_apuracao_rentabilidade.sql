@@ -143,8 +143,8 @@ left join public.orcamentos o
 left join public.pacientes p
   on p.id::text = coalesce(
     nullif(btrim(coalesce(to_jsonb(o)->>'paciente_id', '')), ''),
-    nullif(btrim(coalesce(to_jsonb(o)->>'pacienteid', '')), ''),
-    nullif(btrim(coalesce(to_jsonb(o)->>'pacienteId', '')), '')
+    nullif(btrim(coalesce(to_jsonb(o)->>'paciente_id', '')), ''),
+    nullif(btrim(coalesce(to_jsonb(o)->>'paciente_id', '')), '')
   )
 left join public.servicos s
   on s.id::text = coalesce(

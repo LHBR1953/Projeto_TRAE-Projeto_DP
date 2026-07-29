@@ -176,12 +176,12 @@ Deno.serve(async (req) => {
       const r = statusToRange(statusKey);
       let data: any = null;
 
-      const resp1 = await supabaseAdmin
+      let resp1 = await supabaseAdmin
         .from("marketing_campanhas")
         .select("*")
         .eq("empresa_id", empresaId)
         .eq("ativo", true)
-        .eq("target_status", statusKey)
+        .ilike("target_status", statusKey.replace(/S$/, '') + "%")
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -196,7 +196,6 @@ Deno.serve(async (req) => {
           .eq("ativo", true)
           .eq("target_min_meses", r.min);
         q2 = r.max === null ? q2.is("target_max_meses", null) : q2.eq("target_max_meses", r.max);
-        q2 = q2.eq("target_status", statusKey);
 
         const resp2 = await q2
           .order("updated_at", { ascending: false })
@@ -326,7 +325,7 @@ Deno.serve(async (req) => {
     const selected = eligible.slice(0, planned);
     for (const r of selected) {
       const vars = {
-        NOME_PACIENTE: r.nome || "Paciente",
+        NOME_PACIENTE: String(r.nome || "Paciente").trim(),
         EMAIL_PACIENTE: r.email,
         NOME_EMPRESA: empresaNome,
         TELEFONE_EMPRESA: empresaTelefone,
@@ -337,7 +336,7 @@ Deno.serve(async (req) => {
       const footer = campaign.rodape
         ? applyTemplate(String(campaign.rodape || ""), vars)
         : `Atenciosamente,\n${empresaNome}\n${empresaTelefone || empresaCelular ? `Atendimento: ${[empresaTelefone, empresaCelular].filter(Boolean).join(" / ")}\n` : ""}À Gerência.`;
-      const bodyText = `Prezado Sr(a) ${vars.NOME_PACIENTE}\n\n${core}\n\n${footer}`;
+      const bodyText = `${core}\n\n${footer}`;
       const bodyHtml = textToHtml(bodyText);
 
       try {

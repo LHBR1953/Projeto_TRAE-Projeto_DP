@@ -97,7 +97,7 @@ async function fetchConsultaAvaliacaoForUI() {
             if (pUuid) {
                 // Find if there's an 'Avaliação' budget
                 avaliacaoBudget = budgets.find(b => {
-                    const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                    const isSamePat = b.paciente_id === pUuid || String(b.paciente_id) === String(pUuid);
                     const statusNorm = String(b.status || '').trim().toLowerCase();
                     return isSamePat && (statusNorm === 'avaliação' || statusNorm === 'avaliacao');
                 });
@@ -105,7 +105,7 @@ async function fetchConsultaAvaliacaoForUI() {
                 // If no avaliacao budget, check if there's a 'Pendente' budget created today (meaning it was liberated)
                 if (!avaliacaoBudget) {
                     wasLiberated = budgets.some(b => {
-                        const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                        const isSamePat = b.paciente_id === pUuid || String(b.paciente_id) === String(pUuid);
                         const statusNorm = String(b.status || '').trim().toLowerCase();
                         return isSamePat && statusNorm === 'pendente' && (b.created_at || '').startsWith(dateStr);
                     });
@@ -114,7 +114,7 @@ async function fetchConsultaAvaliacaoForUI() {
                 // Check if patient already has a normal budget in progress (created via menu)
                 // that is not canceled and not concluded, which means they don't need a new evaluation today
                 hasNormalBudgetOpen = budgets.some(b => {
-                    const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                    const isSamePat = b.paciente_id === pUuid || String(b.paciente_id) === String(pUuid);
                     const statusNorm = normalizeKey(String(b.status || ''));
                     // Se tem qualquer orçamento normal que não seja 'AVALIACAO', 'CANCELADO', 'EXECUTADO', 'CONCLUIDO'
                     return isSamePat && 

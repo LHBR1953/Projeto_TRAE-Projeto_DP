@@ -126,7 +126,7 @@ window.finalizeBudgetItem = async function(budgetId, itemId, event) {
         const itemTotal = (parseFloat(itemData.valor) || 0) * (parseInt(itemData.qtde) || 1);
         
         // Puxando o ID do paciente do Orçamento
-        let pacId = budgetData.paciente_id || budgetData.pacienteid || budgetData.pacienteseqid;
+        let pacId = budgetData.paciente_id || budgetData.paciente_id || budgetData.pacienteseqid;
         
         // Resolvendo o seqid se tivermos a array local de patients
         if (typeof window.patients !== 'undefined') {

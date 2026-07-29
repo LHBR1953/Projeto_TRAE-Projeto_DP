@@ -31,10 +31,10 @@ END $$;
 DO $$
 BEGIN
   IF to_regclass('public.orcamentos') IS NOT NULL AND to_regclass('public.pacientes') IS NOT NULL THEN
-    ALTER TABLE public.orcamentos DROP CONSTRAINT IF EXISTS orcamentos_pacienteid_fkey;
+    ALTER TABLE public.orcamentos DROP CONSTRAINT IF EXISTS orcamentos_paciente_id_fkey;
     ALTER TABLE public.orcamentos
-      ADD CONSTRAINT orcamentos_pacienteid_fkey
-      FOREIGN KEY (pacienteid) REFERENCES public.pacientes(id) ON DELETE RESTRICT NOT VALID;
+      ADD CONSTRAINT orcamentos_paciente_id_fkey
+      FOREIGN KEY (paciente_id) REFERENCES public.pacientes(id) ON DELETE RESTRICT NOT VALID;
   END IF;
 END $$;
 

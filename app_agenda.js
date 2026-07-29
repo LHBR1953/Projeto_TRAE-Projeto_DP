@@ -104,7 +104,7 @@ function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId, dateStr }) {
         const firstAg = arr[0];
         const hora = firstAg && firstAg.inicio ? formatTimeHHMM(new Date(firstAg.inicio)) : '--:--';
 
-        const patientBudgets = (budgets || []).filter(b => String(b.pacienteid || b.paciente_id || '') === String(pacienteUuid));
+        const patientBudgets = (budgets || []).filter(b => String(b.paciente_id || b.paciente_id || '') === String(pacienteUuid));
         patientBudgets.forEach(b => {
             const itens = (b.orcamento_itens || b.itens || []);
             const tipoKey = normalizeKey(String(b.tipo || 'Normal'));
@@ -287,8 +287,8 @@ async function printAgendaWeekAppointmentsFromUI() {
                 const mi = String(dt.getMinutes()).padStart(2, '0');
                 const ini = `${hh}:${mi}`;
                 const st = a.status || '—';
-                const pacienteId = a.paciente_id != null ? String(a.paciente_id) : '';
-                const pacienteNome = pacienteId ? getPacienteNameBySeqId(pacienteId) : '';
+                const paciente_id = a.paciente_id != null ? String(a.paciente_id) : '';
+                const pacienteNome = paciente_id ? getPacienteNameBySeqId(paciente_id) : '';
                 const tit = String(a.titulo || '').trim();
                 const label = pacienteNome
                     ? (tit && normalizeKey(tit) !== normalizeKey(pacienteNome) ? `${pacienteNome} — ${tit}` : pacienteNome)
@@ -1109,10 +1109,10 @@ async function saveAgendaFromModal() {
     const fimIso = new Date(`${dateVal}T${fimTime}:00`).toISOString();
     if (fimIso <= inicioIso) { showToast('Fim deve ser maior que início.', true); return; }
 
-    const pacienteIdVal = agendaPaciente && agendaPaciente.value ? Number(agendaPaciente.value) : null;
+    const paciente_idVal = agendaPaciente && agendaPaciente.value ? Number(agendaPaciente.value) : null;
     const tituloVal = agendaTitulo ? agendaTitulo.value : '';
 
-    if (!pacienteIdVal) {
+    if (!paciente_idVal) {
         showToast('É obrigatório selecionar ou cadastrar um paciente.', true);
         if (agendaPacienteBusca) agendaPacienteBusca.focus();
         return;
@@ -1127,7 +1127,7 @@ async function saveAgendaFromModal() {
     const payload = {
         empresa_id: currentEmpresaId,
         profissional_id: Number(profSeqId),
-        paciente_id: pacienteIdVal,
+        paciente_id: paciente_idVal,
         inicio: inicioIso,
         fim: fimIso,
         status: agendaStatus ? agendaStatus.value : 'MARCADO',

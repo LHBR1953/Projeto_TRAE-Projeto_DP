@@ -15,8 +15,8 @@ appJs = appJs.replace(/const dataNascimento/g, 'const datanascimento');
 appJs = appJs.replace(/\.especialidadeId\b/g, '.especialidadeid');
 appJs = appJs.replace(/\bespecialidadeId:/g, 'especialidadeid:');
 
-appJs = appJs.replace(/\.pacienteId\b/g, '.pacienteid');
-appJs = appJs.replace(/\bpacienteId:/g, 'pacienteid:');
+appJs = appJs.replace(/\.paciente_id\b/g, '.paciente_id');
+appJs = appJs.replace(/\bpaciente_id:/g, 'paciente_id:');
 
 appJs = appJs.replace(/\.pacienteNome\b/g, '.pacientenome');
 appJs = appJs.replace(/\bpacienteNome:/g, 'pacientenome:');
@@ -32,7 +32,7 @@ let sql = fs.readFileSync('c:\\Projeto_Antigravity\\Projeto_DP\\supabase_schema.
 sql = sql.replace(/seqId/g, 'seqid');
 sql = sql.replace(/dataNascimento/g, 'datanascimento');
 sql = sql.replace(/especialidadeId/g, 'especialidadeid');
-sql = sql.replace(/pacienteId/g, 'pacienteid');
+sql = sql.replace(/paciente_id/g, 'paciente_id');
 sql = sql.replace(/pacienteNome/g, 'pacientenome');
 sql = sql.replace(/pacienteCelular/g, 'pacientecelular');
 sql = sql.replace(/pacienteEmail/g, 'pacienteemail');

@@ -86,7 +86,7 @@ async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
         const seq = String(p.orcamento_id || '');
         const budget = budgetBySeqid.get(seq);
         const itens = budget ? (budget.orcamento_itens || budget.itens || []) : [];
-        const pacienteUuid = budget ? String(budget.pacienteid || budget.paciente_id || '') : '';
+        const pacienteUuid = budget ? String(budget.paciente_id || budget.paciente_id || '') : '';
         const paciente = pacienteUuid ? patientById.get(pacienteUuid) : null;
         const pacNome = paciente ? String(paciente.nome || '') : (seq ? `Orçamento #${seq}` : '—');
 

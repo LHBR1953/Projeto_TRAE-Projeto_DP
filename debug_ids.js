@@ -15,7 +15,7 @@ async function debug() {
 
         const { data: buds, error: err2 } = await supabase.from('orcamentos')
             .select('*')
-            .or(`pacienteid.eq.${p.id},paciente_id.eq.${p.seqid},pacienteseqid.eq.${p.seqid}`);
+            .or(`paciente_id.eq.${p.id},paciente_id.eq.${p.seqid},pacienteseqid.eq.${p.seqid}`);
 
         console.log("Orçamentos encontrados por ID de paciente:", buds);
     }

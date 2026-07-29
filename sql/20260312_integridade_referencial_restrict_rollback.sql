@@ -2,7 +2,7 @@ BEGIN;
 
 DO $$
 BEGIN
-  ALTER TABLE public.orcamentos DROP CONSTRAINT IF EXISTS orcamentos_pacienteid_fkey;
+  ALTER TABLE public.orcamentos DROP CONSTRAINT IF EXISTS orcamentos_paciente_id_fkey;
   ALTER TABLE public.orcamentos DROP CONSTRAINT IF EXISTS orcamentos_profissional_id_fkey;
 
   ALTER TABLE public.orcamento_itens DROP CONSTRAINT IF EXISTS orcamento_itens_orcamento_id_fkey;

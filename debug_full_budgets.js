@@ -7,7 +7,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function debug() {
     const empresaId = 'emp_dp';
     console.log(`--- BUSCANDO TODOS OS ORÇAMENTOS DA EMPRESA ${empresaId} ---`);
-    const { data: buds, error } = await supabase.from('orcamentos').select('id, seqid, pacienteid, pacientenome').eq('empresa_id', empresaId);
+    const { data: buds, error } = await supabase.from('orcamentos').select('id, seqid, paciente_id, pacientenome').eq('empresa_id', empresaId);
 
     if (error) {
         console.error("Erro:", error);
@@ -16,7 +16,7 @@ async function debug() {
 
     console.log(`Total de orçamentos: ${buds.length}`);
     buds.forEach(b => {
-        console.log(`ID: ${b.id}, SeqID: ${b.seqid}, PacienteID: ${b.pacienteid}, Nome: ${b.pacientenome}`);
+        console.log(`ID: ${b.id}, SeqID: ${b.seqid}, PacienteID: ${b.paciente_id}, Nome: ${b.pacientenome}`);
     });
 
     console.log("\n--- BUSCANDO PACIENTE MANOEL ---");

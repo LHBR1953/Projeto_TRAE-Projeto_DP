@@ -61,7 +61,7 @@ begin
     return new;
   end if;
 
-  select o.pacienteid
+  select o.paciente_id
   into v_paciente_id
   from public.orcamentos o
   where o.empresa_id = new.empresa_id

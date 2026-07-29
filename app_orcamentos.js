@@ -203,7 +203,7 @@ async function syncProteseOrcamentoItens() {
 
     const pacienteSel = document.getElementById('protesePaciente');
     if (pacienteSel) {
-        const raw = b ? (b.pacienteid || b.paciente_id) : null;
+        const raw = b ? (b.paciente_id || b.paciente_id) : null;
         let budgetPatientUuid = '';
         let budgetPatientName = b && b.pacientenome ? String(b.pacientenome) : '';
 
@@ -923,7 +923,7 @@ async function autoReleaseEligibleBudgetItems(budget, autorizadoPor) {
             }
 
             try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
+                const pacIdRaw = budget.paciente_id || budget.paciente_id;
                 const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
                 const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
                 const desc = item.descricao || 'Serviço';
@@ -1009,7 +1009,7 @@ async function processBudgetCancel(budget, motivo, analysis = { cancelCase: 1 })
         const userName = currentUserData.data.user.user_metadata?.full_name || currentUserData.data.user.email;
 
         // Buscar o seqid do paciente para as tabelas financeiras
-        const patientObj = patients.find(p => p.id === budget.pacienteid);
+        const patientObj = patients.find(p => p.id === budget.paciente_id);
         const pacienteSeqId = patientObj ? parseInt(patientObj.seqid) : null;
 
         if (!pacienteSeqId) {
@@ -1093,7 +1093,7 @@ async function processBudgetCancel(budget, motivo, analysis = { cancelCase: 1 })
                 
                 // Registro no Prontuário (Evolução) - Apenas para Caso 3
                 const evolucaoEntry = {
-                    paciente_id: budget.pacienteid,
+                    paciente_id: budget.paciente_id,
                     descricao: `ORÇAMENTO CANCELADO (#${budget.seqid}): Cancelamento crítico realizado. Estorno de R$ ${analysis.totalPago.toFixed(2)} e comissões processados. Motivo: ${motivo}`,
                     empresa_id: currentEmpresaId,
                     created_by: userId
@@ -1510,7 +1510,7 @@ window.editBudget = function (id) {
     document.getElementById('editBudgetId').value = b.id;
 
     // Set Patient Autocomplete
-    const pat = patients.find(p => p.id === b.pacienteid);
+    const pat = patients.find(p => p.id === b.paciente_id);
     if (pat) {
         document.getElementById('budPacienteNome').value = `${pat.nome} (${pat.cpf})`;
         document.getElementById('budPacienteId').value = pat.id; // Set the hidden ID
@@ -1694,7 +1694,7 @@ window.printBudget = function (id) {
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
     // Get patient CPF for signature
-    const patData = patients.find(p => p.id === b.pacienteid);
+    const patData = patients.find(p => p.id === b.paciente_id);
     const patCpf = patData ? (patData.cpf || '') : '';
 
     // Get unique professionals (Responsible + Item Protothetics)
@@ -2243,7 +2243,7 @@ window.recordBudgetPayment = async function (budgetId) {
     // Validação extra se for SALDO EM CONTA
     if (forma === 'Saldo em Conta') {
         try {
-            const pacIdRaw = budget.pacienteid || budget.paciente_id;
+            const pacIdRaw = budget.paciente_id || budget.paciente_id;
             const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
             const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
 
@@ -2313,7 +2313,7 @@ window.recordBudgetPayment = async function (budgetId) {
             showToast("Pagamento via Saldo registrado!");
         } else {
             try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
+                const pacIdRaw = budget.paciente_id || budget.paciente_id;
                 const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
                 const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
 
@@ -2451,7 +2451,7 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
 
             // --- NOVO: Debitar serviço no financeiro para controle de conta corrente ---
             try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
+                const pacIdRaw = budget.paciente_id || budget.paciente_id;
                 const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
                 const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
                 const desc = item.descricao || 'Serviço';
@@ -2875,7 +2875,7 @@ if (budgetForm) {
         }
 
         const budgetData = {
-            pacienteid: pat.id,
+            paciente_id: pat.id,
             pacientenome: pat.nome,
             pacientecelular: pat.celular || pat.telefone,
             pacienteemail: pat.email,

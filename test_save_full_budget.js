@@ -27,7 +27,7 @@ async function testSave() {
     const budgetData = {
         id: budgetId,
         seqid: 9999,
-        pacienteid: pat.id,
+        paciente_id: pat.id,
         pacientenome: pat.nome,
         pacientecelular: '(00) 0000-0000',
         pacienteemail: 'teste@teste.com',

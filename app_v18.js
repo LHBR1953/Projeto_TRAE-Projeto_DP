@@ -2693,7 +2693,7 @@ if (budgetForm) {
         const pat = patients.find(p => p.id === patId);
 
         const budgetData = {
-            pacienteid: patId,
+            paciente_id: patId,
             pacientenome: pat.nome,
             pacientecelular: pat.celular || pat.telefone,
             pacienteemail: pat.email,
@@ -2772,7 +2772,7 @@ window.editBudget = function (id) {
     document.getElementById('editBudgetId').value = b.id;
 
     // Set Patient Combobox
-    document.getElementById('budPacienteId').value = b.pacienteid;
+    document.getElementById('budPacienteId').value = b.paciente_id;
     document.getElementById('budNomePaciente').value = b.pacientenome;
     document.getElementById('budCelularPaciente').value = b.pacientecelular || '';
     document.getElementById('budEmailPaciente').value = b.pacienteemail || '';
@@ -2842,7 +2842,7 @@ window.printBudget = function (id) {
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
     // Get patient CPF for signature
-    const patData = patients.find(p => p.id === b.pacienteid);
+    const patData = patients.find(p => p.id === b.paciente_id);
     const patCpf = patData ? (patData.cpf || '') : '';
 
     // Get unique professionals (Responsible + Item Protothetics)
@@ -4077,7 +4077,7 @@ function formatDate(isoString) {
 // Orçamentos tab
 function renderPatientBudgets(patientId) {
     const body = document.getElementById('detOrcamentosBody');
-    const filtered = budgets.filter(b => b.pacienteid === patientId);
+    const filtered = budgets.filter(b => b.paciente_id === patientId);
 
     if (filtered.length === 0) {
         body.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-muted); padding: 20px;">Nenhum orçamento para este paciente.</td></tr>';
@@ -4219,7 +4219,7 @@ async function printPatientDetailReport(saveAsPdf = false) {
 
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
     const a = patient.anamnese || {};
-    const patientBudgets = budgets.filter(b => b.pacienteid === patientId);
+    const patientBudgets = budgets.filter(b => b.paciente_id === patientId);
 
     // ---- Anamnese section ----
     // 4 boolean fields horizontal, 'Doenças preexistentes' full-width below
@@ -4928,7 +4928,7 @@ window.deleteBudgetPayment = async function (budgetId, paymentId) {
 
         // 3. Find and delete mirror in financeiro_transacoes
         // Note: We search by orcamento_id (referencia_id), valor and paciente_id to be safe
-        const pacId = budget.pacienteid || budget.paciente_id;
+        const pacId = budget.paciente_id || budget.paciente_id;
         const patient = patients.find(p => p.id === pacId);
         const pacNumId = patient ? patient.seqid : null;
 
@@ -5010,7 +5010,7 @@ window.recordBudgetPayment = async function (budgetId) {
 
         // 2. Tentar inserir espelho em financeiro_transacoes (Conta Corrente)
         try {
-            const pacId = budget.pacienteid || budget.paciente_id;
+            const pacId = budget.paciente_id || budget.paciente_id;
             const patient = patients.find(p => p.id === pacId);
             const pacNumId = patient ? patient.seqid : null;
 

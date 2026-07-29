@@ -17,14 +17,345 @@
     <link rel="stylesheet" href="styles.css?v=20260706_STATUS_ANTECIPADO_CONCAT">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
-        @media (max-width: 1023.98px) {
-            #buildBadge,
-            #systemVersionContainer,
-            .build-badge,
-            [id*="build"] {
+        @keyframes occPulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        #view-portalchat {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            height: calc(100dvh - 120px) !important;
+            max-height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #portalChatShell {
+            display: flex;
+            flex-direction: row;
+            width: 100%;
+            height: 100%;
+            flex: 1 1 auto;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        #portalChatSidebar {
+            flex: 0 0 320px;
+            width: auto !important;
+            min-width: 280px;
+            max-width: 320px;
+            overflow: hidden;
+        }
+
+        #portalChatWindow {
+            flex: 1 1 auto !important;
+            width: 100% !important;
+            max-width: none !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+            overflow: hidden;
+        }
+
+        #portalChatMessagesContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch !important;
+            min-width: 0;
+            min-height: 0;
+            flex: 1 1 auto;
+            width: auto;
+            max-width: 100%;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box;
+        }
+
+        #portalChatInputArea {
+            flex-shrink: 0;
+        }
+
+        #portalChatBackButton {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            border: 1px solid #d1d5db;
+            background: #ffffff;
+            color: #374151;
+            border-radius: 6px;
+            padding: 0.4rem 0.7rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            flex: 0 0 auto;
+        }
+
+        #portalChatEmptyState {
+            width: 100%;
+            min-width: 0;
+            text-align: center;
+        }
+
+        #portalChatHeaderTitleWrap {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        #portalChatHeaderPatientName {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #portalChatMessagesContainer .portal-chat-message-row {
+            width: 100%;
+            display: flex;
+            align-items: flex-end;
+            margin-bottom: 0.75rem;
+        }
+
+        #portalChatMessagesContainer .portal-chat-message-row.msg-received {
+            justify-content: flex-start !important;
+            align-self: flex-start !important;
+        }
+
+        #portalChatMessagesContainer .portal-chat-message-row.msg-sent {
+            justify-content: flex-end !important;
+            align-self: flex-end !important;
+        }
+
+        #portalChatMessagesContainer .portal-chat-bubble {
+            display: inline-block;
+            max-width: 75%;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            text-align: left;
+        }
+
+        #portalChatMessagesContainer .portal-chat-bubble.msg-received {
+            align-self: flex-start !important;
+            margin-right: auto !important;
+            margin-left: 0 !important;
+            background: #f1f5f9 !important;
+            color: #1e293b !important;
+            border: 1px solid #dbe4ee !important;
+            border-bottom-left-radius: 2px !important;
+        }
+
+        #portalChatMessagesContainer .portal-chat-bubble.msg-sent {
+            align-self: flex-end !important;
+            margin-left: auto !important;
+            margin-right: 0 !important;
+            background: #00a884 !important;
+            color: #ffffff !important;
+            border-bottom-right-radius: 2px !important;
+        }
+
+        @media (max-width: 991px) and (orientation: portrait) {
+            #view-portalchat {
+                height: calc(100dvh - 120px) !important;
+            }
+
+            #portalChatShell {
+                position: relative;
+                width: 100%;
+                display: flex !important;
+                flex-direction: column !important;
+                height: calc(100dvh - 120px) !important;
+                max-height: calc(100dvh - 120px) !important;
+                overflow: hidden !important;
+            }
+
+            #portalChatSidebar {
+                min-width: 0 !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                flex: 1 !important;
+                display: block !important;
+            }
+
+            #portalChatWindow {
                 display: none !important;
-                visibility: hidden !important;
-                pointer-events: none !important;
+                width: 100% !important;
+                flex: 1 1 100% !important;
+                height: calc(100dvh - 120px) !important;
+                max-height: calc(100dvh - 120px) !important;
+                min-height: 0 !important;
+                overflow: hidden !important;
+            }
+
+            #portalChatShell.chat-open #portalChatSidebar,
+            #portalChatShell.chat-selected #portalChatSidebar {
+                display: none !important;
+            }
+
+            #portalChatShell.chat-open #portalChatWindow,
+            #portalChatShell.chat-selected #portalChatWindow {
+                display: flex !important;
+                flex-direction: column !important;
+                width: 100% !important;
+                height: calc(100dvh - 100px) !important;
+                max-height: calc(100dvh - 100px) !important;
+                overflow: hidden !important;
+            }
+
+            #portalChatShell.chat-open #portalChatBackButton,
+            #portalChatShell.chat-selected #portalChatBackButton {
+                display: inline-flex;
+            }
+
+            #portalChatWindow > div:first-child,
+            .portal-chat-header {
+                flex-shrink: 0 !important;
+            }
+
+            #portalChatMessagesContainer {
+                flex: 1 1 auto !important;
+                min-height: 0 !important;
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+            }
+
+            #portalChatInputArea,
+            .portal-chat-composer, #portal-chat-messages-panel .card-footer {
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                gap: 8px !important;
+                padding: 8px !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+                background: #ffffff !important;
+                border-top: 1px solid #e2e8f0 !important;
+                z-index: 10 !important;
+                flex-shrink: 0 !important;
+            }
+
+            #formPortalChatSend {
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                gap: 6px !important;
+                width: 100% !important;
+            }
+
+            #inputPortalChatMessage,
+            .portal-chat-composer input, #portal-chat-input {
+                flex: 1 1 auto !important;
+                min-width: 0 !important;
+                height: 42px !important;
+            }
+
+            #formPortalChatSend > div {
+                display: flex !important;
+                align-items: center !important;
+                gap: 6px !important;
+                width: auto !important;
+                flex-shrink: 0 !important;
+            }
+
+            #btnSendPortalChat,
+            #formPortalChatSend button[type="submit"],
+            .portal-chat-composer button {
+                flex: 0 0 auto !important;
+                height: 42px !important;
+                padding: 0 16px !important;
+                white-space: nowrap !important;
+                background-color: #2563eb !important;
+                color: #ffffff !important;
+                border-radius: 8px !important;
+                font-weight: bold !important;
+            }
+        }
+
+        @media (max-width: 991px) and (orientation: landscape), (max-height: 500px) {
+            body:has(#view-portalchat:not(.hidden)) .main-header {
+                display: none !important;
+            }
+
+            #view-portalchat {
+                height: auto !important;
+                min-height: calc(100dvh - 110px);
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+            }
+
+            #portalChatShell {
+                height: auto !important;
+                min-height: max-content;
+                overflow: visible !important;
+            }
+
+            #portalChatWindow {
+                height: auto !important;
+                min-height: calc(100dvh - 110px);
+                overflow: visible !important;
+            }
+
+            #portalChatShell.chat-selected #portalChatSidebar {
+                display: none !important;
+            }
+
+            #portalChatWindow > div:first-child {
+                height: 48px !important;
+                min-height: 48px !important;
+                padding: 4px 8px !important;
+                gap: 8px !important;
+            }
+
+            #portalChatAvatar {
+                width: 32px !important;
+                height: 32px !important;
+                font-size: 1rem !important;
+            }
+
+            #portalChatHeaderPatientName {
+                font-size: 0.95rem !important;
+            }
+
+            #portalChatPatientPhone {
+                font-size: 0.75rem !important;
+            }
+
+            #portalChatMessagesContainer {
+                max-height: 180px !important;
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+                padding: 8px !important;
+                margin: 6px !important;
+                gap: 8px !important;
+            }
+
+            #portalChatInputArea {
+                padding: 6px !important;
+                min-height: 58px !important;
+            }
+
+            #formPortalChatSend {
+                gap: 6px !important;
+            }
+
+            #inputPortalChatMessage {
+                height: 36px !important;
+                font-size: 13px !important;
+            }
+
+            #portalChatMessagesContainer .portal-chat-message-row {
+                width: 100% !important;
+            }
+
+            #portalChatMessagesContainer .portal-chat-bubble {
+                width: 100% !important;
+                max-width: 90% !important;
             }
         }
 
@@ -369,13 +700,15 @@
                     <i class="ri-tools-line"></i> <span>Produção Protética</span>
                 </button>
 
-                <div class="nav-section mt-4" id="navSuporteSection">Suporte</div>
-                <button id="navSuporteTickets" class="nav-item">
-                    <i class="ri-customer-service-2-line"></i> <span>Tickets</span>
-                </button>
-                <button id="navPortalChat" class="nav-item">
-                    <i class="ri-wechat-line"></i> <span>Chat do Portal</span>
-                </button>
+                <div id="menu-group-suporte" class="menu-group-suporte">
+                    <div class="nav-section mt-4" id="navSuporteSection" style="display: none;">Suporte</div>
+                    <button id="navSuporteTickets" data-menu="tickets" class="nav-item" style="display: none;">
+                        <i class="ri-customer-service-2-line"></i> <span>Tickets</span>
+                    </button>
+                    <button id="navPortalChat" data-menu="chat-portal" class="nav-item" style="display: none;">
+                        <i class="ri-wechat-line"></i> <span>Chat do Portal</span>
+                    </button>
+                </div>
 
                 <div class="nav-section mt-4" id="navConfigSection" style="display: none;">Configurações</div>
                 <button id="navEmpresas" class="nav-item" style="display: none;">
@@ -822,6 +1155,11 @@
                 <div class="section-header">
                     <h2>Pacientes</h2>
                     <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-secondary btn-occ-voice" style="border-radius: 50%; padding: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; position: relative;" title="Ativar Voz OCC">
+                            <i class="ri-mic-line"></i>
+                            <span class="occ-voice-indicator" style="display: none; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; border: 2px solid white; animation: occPulse 1.5s infinite;"></span>
+                        </button>
+                        <span class="occ-voice-status-text" style="display: none; font-size: 0.8rem; color: #ef4444; font-weight: bold; animation: occPulse 1.5s infinite; align-self: center;">Ouvindo...</span>
                         <button id="btnPrintPatients" class="btn btn-secondary" onclick="printGeneralPatientsReport()">
                             <i class="ri-printer-line"></i> Imprimir Geral
                         </button>
@@ -862,7 +1200,14 @@
             <!-- PATIENT FORM VIEW -->
             <section id="patientFormView" class="view-section hidden">
                 <div class="section-header">
-                    <h2 id="formTitle">Novo Paciente</h2>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <h2 id="formTitle">Novo Paciente</h2>
+                        <button type="button" class="btn btn-secondary btn-occ-voice" style="border-radius: 50%; padding: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; position: relative;" title="Ativar Voz OCC">
+                            <i class="ri-mic-line"></i>
+                            <span class="occ-voice-indicator" style="display: none; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; border: 2px solid white; animation: occPulse 1.5s infinite;"></span>
+                        </button>
+                        <span class="occ-voice-status-text" style="display: none; font-size: 0.8rem; color: #ef4444; font-weight: bold; animation: occPulse 1.5s infinite;">Ouvindo comando...</span>
+                    </div>
                     <button id="btnBack" class="btn btn-secondary">
                         <i class="ri-arrow-left-line"></i> Voltar
                     </button>
@@ -1086,9 +1431,16 @@
             <section id="professionalListView" class="view-section hidden">
                 <div class="section-header">
                     <h2>Profissionais</h2>
-                    <button id="btnAddNewProfessional" class="btn btn-primary">
-                        <i class="ri-user-add-line"></i> Novo Profissional
-                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-secondary btn-occ-voice" style="border-radius: 50%; padding: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; position: relative;" title="Ativar Voz OCC">
+                            <i class="ri-mic-line"></i>
+                            <span class="occ-voice-indicator" style="display: none; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; border: 2px solid white; animation: occPulse 1.5s infinite;"></span>
+                        </button>
+                        <span class="occ-voice-status-text" style="display: none; font-size: 0.8rem; color: #ef4444; font-weight: bold; animation: occPulse 1.5s infinite; align-self: center;">Ouvindo...</span>
+                        <button id="btnAddNewProfessional" class="btn btn-primary">
+                            <i class="ri-user-add-line"></i> Novo Profissional
+                        </button>
+                    </div>
                 </div>
 
                 <div class="search-bar">
@@ -1123,7 +1475,14 @@
             <!-- PROFESSIONAL FORM VIEW -->
             <section id="professionalFormView" class="view-section hidden">
                 <div class="section-header">
-                    <h2 id="professionalFormTitle">Novo Profissional</h2>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <h2 id="professionalFormTitle">Novo Profissional</h2>
+                        <button type="button" class="btn btn-secondary btn-occ-voice" style="border-radius: 50%; padding: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; position: relative;" title="Ativar Voz OCC">
+                            <i class="ri-mic-line"></i>
+                            <span class="occ-voice-indicator" style="display: none; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; border: 2px solid white; animation: occPulse 1.5s infinite;"></span>
+                        </button>
+                        <span class="occ-voice-status-text" style="display: none; font-size: 0.8rem; color: #ef4444; font-weight: bold; animation: occPulse 1.5s infinite;">Ouvindo comando...</span>
+                    </div>
                     <button id="btnBackProfessional" class="btn btn-secondary">
                         <i class="ri-arrow-left-line"></i> Voltar
                     </button>
@@ -1533,6 +1892,9 @@
                 <div class="section-header">
                     <h2>Serviços / Estoque</h2>
                     <div style="display: flex; gap: 10px; align-items: center;">
+                        <button type="button" class="btn btn-secondary btn-occ-voice" style="border-radius: 50%; padding: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; position: relative;" title="Ativar Voz OCC">
+                            <i class="ri-mic-fill" style="font-size: 1.2rem;"></i>
+                        </button>
                         <button id="btnPrintServiceList" class="btn btn-secondary" title="Relatório Geral de Serviços"
                             style="padding: 0.5rem 0.75rem; font-size: 1.2rem;">
                             <i class="ri-printer-line"></i>
@@ -1592,9 +1954,14 @@
             <section id="serviceFormView" class="view-section hidden">
                 <div class="section-header">
                     <h2 id="serviceFormTitle">Novo Serviço/Item</h2>
-                    <button id="btnBackService" class="btn btn-secondary">
-                        <i class="ri-arrow-left-line"></i> Voltar
-                    </button>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <button type="button" class="btn btn-secondary btn-occ-voice" style="border-radius: 50%; padding: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; position: relative;" title="Ativar Voz OCC">
+                            <i class="ri-mic-fill" style="font-size: 1.2rem;"></i>
+                        </button>
+                        <button id="btnBackService" class="btn btn-secondary">
+                            <i class="ri-arrow-left-line"></i> Voltar
+                        </button>
+                    </div>
                 </div>
 
                 <form id="serviceForm" class="patient-form">
@@ -3585,6 +3952,13 @@
                             </div>
                         </div>
                         <div class="form-group">
+                            <label for="mkSaudacao">Saudação / Cabeçalho <span style="font-weight:normal; color:#64748b; font-size:0.85em; margin-left:8px;">Obs: Mantenha a tag {{NOME_PACIENTE}} para que o sistema substitua pelo nome do paciente.</span></label>
+                            <div style="display: flex; gap: 8px;">
+                                <input id="mkSaudacao" type="text" class="form-control" value="Olá, Sr(a). {{NOME_PACIENTE}}!" readonly style="flex: 1; background-color: #f1f5f9;">
+                                <button type="button" id="btnEditSaudacao" class="btn btn-secondary" title="Editar Saudação" style="padding: 0 12px;" onclick="document.getElementById('mkSaudacao').removeAttribute('readonly'); document.getElementById('mkSaudacao').style.backgroundColor = '#ffffff';"><i class="ri-pencil-line"></i></button>
+                            </div>
+                        </div>
+                        <div class="form-group">
                             <label for="mkCorpo">E-mail</label>
                             <textarea id="mkCorpo" class="form-control" rows="7"></textarea>
                         </div>
@@ -5077,12 +5451,12 @@
             </div>
 
         <!-- VIEW REATIVADA DO CHAT DO PORTAL DO PACIENTE --> 
-        <div id="view-portalchat" class="view-section hidden" style="display: none; width: 100%; max-width: calc(100vw - 250px); padding: 15px; box-sizing: border-box; height: calc(100vh - 100px);"> 
+        <div id="view-portalchat" class="view-section hidden" style="display: none; width: 100%; max-width: 100%; padding: 15px; box-sizing: border-box; height: calc(100dvh - 120px); min-width: 0; overflow: hidden;">
             
-            <div class="flex bg-white rounded-lg border border-gray-300 overflow-hidden shadow-sm" style="width: 100%; height: 100%; min-height: 550px; display: flex;"> 
+            <div id="portalChatShell" class="flex bg-white rounded-lg border border-gray-300 overflow-hidden shadow-sm" style="width: 100%; height: 100%; min-height: 550px; display: flex; min-width: 0; overflow: hidden;">
                 
                 <!-- LADO ESQUERDO: LISTA DE PACIENTES -->
-                <div style="width: 320px; min-width: 320px; max-width: 320px; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; background-color: #f9fafb;"> 
+                <div id="portalChatSidebar" style="flex: 0 0 320px; width: auto; min-width: 280px; max-width: 320px; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; background-color: #f9fafb; overflow: hidden;">
                     <div class="p-4 bg-white" style="border-bottom: 1px solid #e5e7eb; padding: 1rem;"> 
                         <h3 class="text-md font-bold text-gray-700" style="margin: 0; font-size: 1.1rem;">Conversas do Portal</h3> 
                         <p class="text-xs text-gray-400" style="font-size: 0.85rem; color: #9ca3af; margin-bottom: 10px;">Pacientes via PWA OCC</p> 
@@ -5096,11 +5470,12 @@
                 <!-- LADO DIREITO: PAINEL DE CONVERSA -->
                 <div id="portalChatWindow" style="flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; background: #ffffff;"> 
                     
-                    <div style="height: 60px; min-height: 60px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: #f9fafb;"> 
-                        <div style="display: flex; align-items: center; gap: 1rem;">
+                    <div class="portal-chat-header" style="height: 60px; min-height: 60px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: #f9fafb; gap: 12px; min-width: 0;">
+                        <button type="button" id="portalChatBackButton">← Voltar</button>
+                        <div style="display: flex; align-items: center; gap: 1rem; min-width: 0; flex: 1 1 auto;">
                             <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--primary-color); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem; display: none;" id="portalChatAvatar">P</div>
-                            <div>
-                                <h4 id="portalChatHeaderPatientName" style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #1f2937;">Selecione um Paciente</h4> 
+                            <div id="portalChatHeaderTitleWrap">
+                                <h4 id="portalChatHeaderPatientName" style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #1f2937;">Selecione um Paciente</h4>
                                 <span id="portalChatPatientPhone" style="font-size: 0.85rem; color: #6b7280; display: none;"></span>
                             </div>
                         </div>
@@ -5110,14 +5485,14 @@
                         </div>
                     </div> 
         
-                    <div id="portalChatMessagesContainer" style="flex: 1; overflow-y: auto; overflow-x: hidden; padding: 20px; background: #f3f4f6; display: flex; flex-direction: column; gap: 12px; border: 1px solid #d1d5db; margin: 10px; border-radius: 6px;"> 
+                    <div id="portalChatMessagesContainer" style="flex: 1; overflow-y: auto; overflow-x: hidden; padding: 20px; background: #f3f4f6; display: flex; flex-direction: column; align-items: stretch; gap: 12px; border: 1px solid #d1d5db; margin: 10px; border-radius: 6px;">
                         <div id="portalChatEmptyState" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9ca3af;"> 
                             <i class="ri-chat-3-line" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.5;"></i>
                             <p style="font-size: 0.875rem;">Selecione uma conversa na lista para interagir.</p> 
                         </div> 
                     </div> 
         
-                    <div id="portalChatInputArea" style="height: auto; min-height: 70px; border-top: 1px solid #e5e7eb; padding: 12px; background: #ffffff; box-sizing: border-box;"> 
+                    <div id="portalChatInputArea" class="portal-chat-composer" style="height: auto; min-height: 70px; border-top: 1px solid #e5e7eb; padding: 12px; background: #ffffff; box-sizing: border-box;">
                         <form id="formPortalChatSend" style="display: flex; flex-direction: column; gap: 8px; width: 100%;"> 
                             <input type="text" id="inputPortalChatMessage" placeholder="Digite sua resposta..." style="width: 100%; height: 40px; border: 1px solid #d1d5db; border-radius: 4px; padding: 0 15px; font-size: 14px; outline: none;" autocomplete="off" required> 
                             <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; width: 100%;">
@@ -5125,7 +5500,7 @@
                                     <i class="ri-attachment-2" style="font-size: 1.25rem;"></i>
                                     <input type="file" id="inputPortalChatPdfAdmin" accept=".pdf,.png,.jpg,.jpeg" style="display: none;">
                                 </label>
-                                <button type="submit" style="background: #1d4ed8; color: #ffffff; padding: 0 24px; height: 40px; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; transition: background 0.2s;">Enviar</button> 
+                                <button type="submit" id="btnSendPortalChat" style="background-color: #2563eb !important; color: #ffffff !important; padding: 0 24px; height: 40px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.2s;">Enviar</button>
                             </div>
                         </form> 
                     </div> 
@@ -6132,6 +6507,8 @@
                             <label class="checkbox-label"><input type="checkbox" value="protese"> Produção Protética</label>
                             <label class="checkbox-label"><input type="checkbox" value="profissionais"> Profissionais</label>
                             <label class="checkbox-label"><input type="checkbox" value="servicos"> Serviços</label>
+                            <label class="checkbox-label"><input type="checkbox" value="suporte_tickets"> Suporte: Tickets</label>
+                            <label class="checkbox-label"><input type="checkbox" value="suporte_chat_portal"> Suporte: Chat do Portal</label>
                         </div>
                     </div>
                 </div>
@@ -6182,9 +6559,10 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
     <!-- App Script Loader (Robust) -->
+    <script src="js/occ-voice-assistant.js"></script>
     <script src="modulo_financeiro.js?v=20260630_SUB_MENU_FISCAL_TAB_MOVIMENTATION"></script>
     <script src="modulo_atendimento.js?v=20260708_FLUXO_CORRETO"></script>
-    <script src="app_v22.js?v=20260725_SIDEBAR_VERSION_ICON"></script>
+    <script src="app_v22.js?v=20260728-0420"></script>
     <script src="app_estoque_inventario.js"></script>
     <script src="app_config_usuarios.js?v=20260704_MENU_URL_PARAM_FIX"></script>
     <script>
@@ -6269,7 +6647,7 @@
             }, true);
         })();
     </script>
-    <script src="pwa-install.js?v=20260725_PWA_RESTORE_001"></script>
+    <script src="pwa-install.js?v=20260726_PWA_AUTO_UPDATE_0063"></script>
 </body>
 
 </html>
