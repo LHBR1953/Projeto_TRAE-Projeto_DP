@@ -63,7 +63,7 @@ function resolvePacienteNameById(pid) {
 
 function resolveOrcamentoPacienteId(b) {
     if (!b) return '';
-    return String(b.paciente_id || b.pacienteid || b.pacienteId || '').trim();
+    return String(b.paciente_id || b.paciente_id || b.paciente_id || '').trim();
 }
 
 let patientPortalLoading = false;
@@ -259,7 +259,7 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
     const seqidToPacienteUuid = new Map();
     seqids.forEach(s => {
         const b = budgetBySeqid.get(String(s));
-        const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
+        const pid = b ? String(b.paciente_id || b.paciente_id || '') : '';
         if (pid) seqidToPacienteUuid.set(String(s), pid);
     });
     const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
@@ -267,7 +267,7 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
         try {
             const { data: orcs, error: oErr } = await withTimeout(
                 db.from('orcamentos')
-                    .select('seqid,paciente_id,pacienteid,pacientenome')
+                    .select('seqid,paciente_id,paciente_id,pacientenome')
                     .eq('empresa_id', currentEmpresaId)
                     .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
                 15000,
@@ -275,7 +275,7 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
             );
             if (!oErr && Array.isArray(orcs)) {
                 orcs.forEach(o => {
-                    const pid = String(o.pacienteid || o.paciente_id || '');
+                    const pid = String(o.paciente_id || o.paciente_id || '');
                     if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
                 });
             }
@@ -459,7 +459,7 @@ async function printFaturamentoMensalPacienteCross(year) {
     const seqidToPacienteUuid = new Map();
     seqids.forEach(s => {
         const b = budgetBySeqid.get(String(s));
-        const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
+        const pid = b ? String(b.paciente_id || b.paciente_id || '') : '';
         if (pid) seqidToPacienteUuid.set(String(s), pid);
     });
     const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
@@ -467,14 +467,14 @@ async function printFaturamentoMensalPacienteCross(year) {
         try {
             const { data: orcs } = await withTimeout(
                 db.from('orcamentos')
-                    .select('seqid,paciente_id,pacienteid,pacientenome')
+                    .select('seqid,paciente_id,paciente_id,pacientenome')
                     .eq('empresa_id', currentEmpresaId)
                     .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
                 15000,
                 'cross_paciente:orcamentos'
             );
             (Array.isArray(orcs) ? orcs : []).forEach(o => {
-                const pid = String(o.pacienteid || o.paciente_id || '');
+                const pid = String(o.paciente_id || o.paciente_id || '');
                 if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
             });
         } catch { }
@@ -715,7 +715,7 @@ function renderPatientBudgets(patientId) {
         const statusKey = normalizeKey(b.status);
         if (statusKey.includes('AVALIACAO')) return false;
 
-        const bPacId = b.pacienteid || b.paciente_id || b.pacienteseqid;
+        const bPacId = b.paciente_id || b.paciente_id || b.pacienteseqid;
 
         // 1. Comparação Direta de ID (Robustas)
         if (bPacId && patientId && String(bPacId).trim() === String(patientId).trim()) return true;
@@ -796,7 +796,7 @@ async function printPatientDetailReport(saveAsPdf = false) {
 
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
     const a = patient.anamnese || {};
-    const patientBudgets = budgets.filter(b => b.pacienteid === patientId);
+    const patientBudgets = budgets.filter(b => b.paciente_id === patientId);
 
     // ---- Anamnese section ----
     // 4 boolean fields horizontal, 'Doenças preexistentes' full-width below
@@ -1381,8 +1381,8 @@ function renderChatPacientesList(contacts) {
     });
 }
 
-async function openChatPaciente(pacienteId, pacienteNome) {
-    currentChatPacienteId = pacienteId;
+async function openChatPaciente(paciente_id, pacienteNome) {
+    currentChatPacienteId = paciente_id;
     
     // Atualizar UI
     document.getElementById('chatActivePatientName').innerText = pacienteNome;
@@ -1407,7 +1407,7 @@ async function openChatPaciente(pacienteId, pacienteNome) {
         }
         
         const { data, error } = await query
-            .eq('paciente_id', pacienteId)
+            .eq('paciente_id', paciente_id)
             .order('created_at', { ascending: true });
 
         if (error) throw error;
@@ -1449,9 +1449,9 @@ async function openChatPaciente(pacienteId, pacienteNome) {
     const newInput = inputMsg.cloneNode(true);
     inputMsg.parentNode.replaceChild(newInput, inputMsg);
     
-    newBtn.onclick = () => sendChatMensagemAdmin(pacienteId);
+    newBtn.onclick = () => sendChatMensagemAdmin(paciente_id);
     newInput.onkeypress = (e) => {
-        if (e.key === 'Enter') sendChatMensagemAdmin(pacienteId);
+        if (e.key === 'Enter') sendChatMensagemAdmin(paciente_id);
     };
     newInput.focus();
 }
@@ -1580,7 +1580,7 @@ function scrollToBottomAdmin() {
     }
 }
 
-async function sendChatMensagemAdmin(pacienteId) {
+async function sendChatMensagemAdmin(paciente_id) {
     const input = document.getElementById('chatAdminInput');
     const text = input.value.trim();
     if (!text) return;
@@ -1591,7 +1591,12 @@ async function sendChatMensagemAdmin(pacienteId) {
     const tempMsg = {
         id: 'temp_' + Date.now(),
         conteudo: text,
-        remetente: 'CLINICA',
+        remetente: 'clinica',
+        origem: 'clinica',
+        tipo: 'admin',
+        is_admin: true,
+        from_admin: true,
+        sender_type: 'admin',
         tipo_mensagem: 'TEXTO',
         created_at: new Date().toISOString()
     };
@@ -1601,9 +1606,14 @@ async function sendChatMensagemAdmin(pacienteId) {
     try {
         const { error } = await db.from('portal_mensagens').insert([{
             empresa_id: currentEmpresaId,
-            paciente_id: pacienteId,
+            paciente_id: paciente_id,
             conteudo: text,
-            remetente: 'CLINICA',
+            remetente: 'clinica',
+            origem: 'clinica',
+            tipo: 'admin',
+            is_admin: true,
+            from_admin: true,
+            sender_type: 'admin',
             lida: true,
             tipo_mensagem: 'TEXTO'
         }]);
@@ -1698,7 +1708,12 @@ async function uploadArquivoAdminChat(input) {
             paciente_id: currentChatPacienteId,
             empresa_id: currentEmpresaId,
             conteudo: publicUrl,
-            remetente: 'CLINICA',
+            remetente: 'clinica',
+            origem: 'clinica',
+            tipo: 'admin',
+            is_admin: true,
+            from_admin: true,
+            sender_type: 'admin',
             lida: true,
             tipo_mensagem: 'ARQUIVO',
             created_at: new Date().toISOString()
@@ -1978,8 +1993,8 @@ function renderChatPacientesList(contacts) {
     });
 }
 
-async function openChatPaciente(pacienteId, pacienteNome) {
-    currentChatPacienteId = pacienteId;
+async function openChatPaciente(paciente_id, pacienteNome) {
+    currentChatPacienteId = paciente_id;
     
     // Atualizar UI
     document.getElementById('chatActivePatientName').innerText = pacienteNome;
@@ -2004,7 +2019,7 @@ async function openChatPaciente(pacienteId, pacienteNome) {
         }
         
         const { data, error } = await query
-            .eq('paciente_id', pacienteId)
+            .eq('paciente_id', paciente_id)
             .order('created_at', { ascending: true });
 
         if (error) throw error;
@@ -2046,9 +2061,9 @@ async function openChatPaciente(pacienteId, pacienteNome) {
     const newInput = inputMsg.cloneNode(true);
     inputMsg.parentNode.replaceChild(newInput, inputMsg);
     
-    newBtn.onclick = () => sendChatMensagemAdmin(pacienteId);
+    newBtn.onclick = () => sendChatMensagemAdmin(paciente_id);
     newInput.onkeypress = (e) => {
-        if (e.key === 'Enter') sendChatMensagemAdmin(pacienteId);
+        if (e.key === 'Enter') sendChatMensagemAdmin(paciente_id);
     };
     newInput.focus();
 }
@@ -2191,7 +2206,7 @@ function scrollToBottomAdmin() {
     }
 }
 
-async function sendChatMensagemAdmin(pacienteId) {
+async function sendChatMensagemAdmin(paciente_id) {
     const input = document.getElementById('chatAdminInput');
     const text = input.value.trim();
     if (!text) return;
@@ -2202,7 +2217,12 @@ async function sendChatMensagemAdmin(pacienteId) {
     const tempMsg = {
         id: 'temp_' + Date.now(),
         conteudo: text,
-        remetente: 'CLINICA',
+        remetente: 'clinica',
+        origem: 'clinica',
+        tipo: 'admin',
+        is_admin: true,
+        from_admin: true,
+        sender_type: 'admin',
         tipo_mensagem: 'TEXTO',
         created_at: new Date().toISOString()
     };
@@ -2212,9 +2232,14 @@ async function sendChatMensagemAdmin(pacienteId) {
     try {
         const { error } = await db.from('portal_mensagens').insert([{
             empresa_id: currentEmpresaId,
-            paciente_id: pacienteId,
+            paciente_id: paciente_id,
             conteudo: text,
-            remetente: 'CLINICA',
+            remetente: 'clinica',
+            origem: 'clinica',
+            tipo: 'admin',
+            is_admin: true,
+            from_admin: true,
+            sender_type: 'admin',
             lida: true,
             tipo_mensagem: 'TEXTO'
         }]);
@@ -2309,7 +2334,12 @@ async function uploadArquivoAdminChat(input) {
             paciente_id: currentChatPacienteId,
             empresa_id: currentEmpresaId,
             conteudo: publicUrl,
-            remetente: 'CLINICA',
+            remetente: 'clinica',
+            origem: 'clinica',
+            tipo: 'admin',
+            is_admin: true,
+            from_admin: true,
+            sender_type: 'admin',
             lida: true,
             tipo_mensagem: 'ARQUIVO',
             created_at: new Date().toISOString()

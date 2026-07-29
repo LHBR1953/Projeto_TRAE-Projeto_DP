@@ -738,7 +738,7 @@ async function syncProteseUniqueOpGuard() {
     const btnSave = document.getElementById('btnProteseSave');
     if (!warn || !warnText || !btnView) return;
 
-    const pacienteId = String((document.getElementById('protesePaciente') || {}).value || '').trim();
+    const paciente_id = String((document.getElementById('protesePaciente') || {}).value || '').trim();
     const orcSeqRaw = String((document.getElementById('proteseOrcamentoSeqid') || {}).value || '').trim();
     const itemId = String((document.getElementById('proteseOrcamentoItemId') || {}).value || '').trim();
     const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
@@ -752,7 +752,7 @@ async function syncProteseUniqueOpGuard() {
         if (btnSave) btnSave.disabled = false;
     };
 
-    if (!pacienteId || !orcamentoId || !itemId) {
+    if (!paciente_id || !orcamentoId || !itemId) {
         clear();
         return;
     }
@@ -768,7 +768,7 @@ async function syncProteseUniqueOpGuard() {
             db.from('ordens_proteticas')
                 .select('id, seqid, status_geral, created_at')
                 .eq('empresa_id', currentEmpresaId)
-                .eq('paciente_id', pacienteId)
+                .eq('paciente_id', paciente_id)
                 .eq('orcamento_id', orcamentoId)
                 .eq('orcamento_item_id', itemId)
                 .neq('status_geral', 'CANCELADA')
@@ -997,7 +997,7 @@ async function saveProteseOrder() {
         return;
     }
 
-    const pacienteId = (document.getElementById('protesePaciente') || {}).value || '';
+    const paciente_id = (document.getElementById('protesePaciente') || {}).value || '';
     const exec = (document.getElementById('proteseTipoExecucao') || {}).value || 'EXTERNA';
     const statusGeral = (document.getElementById('proteseStatusGeral') || {}).value || 'EM_ANDAMENTO';
     const labId = (document.getElementById('proteseLaboratorio') || {}).value || '';
@@ -1017,7 +1017,7 @@ async function saveProteseOrder() {
         if (b) orcamentoId = b.id;
     }
 
-    if (!pacienteId) {
+    if (!paciente_id) {
         showToast('Selecione o paciente.', true);
         return;
     }
@@ -1034,7 +1034,7 @@ async function saveProteseOrder() {
         if (!currentProteseOrder) {
             const payload = {
                 empresa_id: currentEmpresaId,
-                paciente_id: pacienteId,
+                paciente_id: paciente_id,
                 orcamento_id: orcamentoId || '',
                 orcamento_item_id: orcItemId || '',
                 tipo_execucao: exec,
@@ -1088,7 +1088,7 @@ async function saveProteseOrder() {
             } catch { }
         } else {
             const upd = {
-                paciente_id: pacienteId,
+                paciente_id: paciente_id,
                 orcamento_id: orcamentoId,
                 orcamento_item_id: orcItemId || null,
                 tipo_execucao: exec,
@@ -1136,7 +1136,7 @@ async function saveProteseOrder() {
         const isDup = code === '23505' || /duplicate key/i.test(rawMsg) || /ordens_proteticas_uniq_ativa_item/i.test(rawMsg);
         if (isDup && !currentProteseOrder) {
             try {
-                const pacienteId = String((document.getElementById('protesePaciente') || {}).value || '').trim();
+                const paciente_id = String((document.getElementById('protesePaciente') || {}).value || '').trim();
                 const orcSeqRaw = String((document.getElementById('proteseOrcamentoSeqid') || {}).value || '').trim();
                 const itemId = String((document.getElementById('proteseOrcamentoItemId') || {}).value || '').trim();
                 const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
@@ -1146,7 +1146,7 @@ async function saveProteseOrder() {
                     db.from('ordens_proteticas')
                         .select('id, seqid')
                         .eq('empresa_id', currentEmpresaId)
-                        .eq('paciente_id', pacienteId)
+                        .eq('paciente_id', paciente_id)
                         .eq('orcamento_id', orcamentoId)
                         .eq('orcamento_item_id', itemId)
                         .neq('status_geral', 'CANCELADA')

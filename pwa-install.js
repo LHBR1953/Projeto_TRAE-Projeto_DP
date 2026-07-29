@@ -56,7 +56,17 @@
   async function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     try {
-      await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+      const registration = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+      registration.update();
+      registration.onupdatefound = function () {
+        const installingWorker = registration.installing;
+        if (!installingWorker) return;
+        installingWorker.onstatechange = function () {
+          if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            window.location.reload();
+          }
+        };
+      };
     } catch (error) {
       console.warn('Falha ao registrar service worker do OCC:', error);
     }
@@ -94,10 +104,18 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
       bindInstallButton();
+    }, { once: true });
+    window.addEventListener('load', function () {
       registerServiceWorker();
     }, { once: true });
   } else {
     bindInstallButton();
-    registerServiceWorker();
+    if (document.readyState === 'complete') {
+      registerServiceWorker();
+    } else {
+      window.addEventListener('load', function () {
+        registerServiceWorker();
+      }, { once: true });
+    }
   }
 })();

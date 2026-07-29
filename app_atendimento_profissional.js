@@ -120,7 +120,7 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
             // Verifica o orcamento no array global (para pegar paciente, etc)
             const b = (budgets || []).find(x => String(x.id) === String(it.orcamento_id || it.orcamentoid || ''));
             
-            const pacId = b ? String(b.paciente_id || b.pacienteid || '') : '';
+            const pacId = b ? String(b.paciente_id || b.paciente_id || '') : '';
             let paciente = null;
             if (pacId && pacId !== 'null' && pacId !== 'undefined') {
                 paciente = (patients || []).find(p => String(p.id) === pacId);

@@ -1,4 +1,5 @@
-const OCC_PWA_CACHE = 'occ-pwa-cache-v20260725-001';
+const CACHE_NAME = 'occ-pwa-cache-v20260728-0610';
+const OCC_PWA_CACHE = CACHE_NAME;
 const OCC_PWA_CORE = [
   '/',
   '/index.html',
@@ -17,10 +18,14 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys
-        .filter((key) => key !== OCC_PWA_CACHE)
-        .map((key) => caches.delete(key))
+    caches.keys().then((cacheNames) => Promise.all(
+      cacheNames.map((cache) => {
+        if (cache !== CACHE_NAME) {
+          console.log('[SW] Apagando cache antigo:', cache);
+          return caches.delete(cache);
+        }
+        return Promise.resolve(false);
+      })
     )).then(() => self.clients.claim())
   );
 });
@@ -46,7 +51,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((cached) => {
+    caches.match(request, { ignoreSearch: false }).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
         if (!response || response.status !== 200 || response.type !== 'basic') {

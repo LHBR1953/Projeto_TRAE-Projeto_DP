@@ -75,7 +75,6 @@ function ensurePlanManagedModuleEntries() {
     if (!Array.isArray(modules)) return;
     const requiredModules = [
         { id: 'nfse', label: 'Emitir NFS-e' },
-        { id: 'suporte', label: 'Suporte' },
         { id: 'tickets', label: 'Suporte: Tickets' },
         { id: 'chat_portal', label: 'Suporte: Chat do Portal' },
         { id: 'auditoria', label: 'Auditoria' }
@@ -102,13 +101,6 @@ const moduleAliasFamilies = {
         'NFSe',
         'NFS-e'
     ],
-    suporte: [
-        'suporte',
-        'support',
-        'navSupport',
-        'navSuporte',
-        'Suporte'
-    ],
     tickets: [
         'tickets',
         'suporte_tickets',
@@ -122,7 +114,9 @@ const moduleAliasFamilies = {
         'portalChat',
         'navPortalChat',
         'Suporte: Chat do Portal',
-        'Chat do Portal'
+        'Chat do Portal',
+        'portal_mensagens',
+        'portal_anexos'
     ],
     auditoria: [
         'auditoria',
@@ -143,14 +137,6 @@ function expandCollectedModuleAliases(collector) {
         normalizedAliases.forEach(alias => collector.add(alias));
         collector.add(normalizeModuleKey(familyKey));
     });
-    const suporteAliases = (moduleAliasFamilies.suporte || []).map(normalizeModuleKey).filter(Boolean);
-    const hasSuporte = suporteAliases.some(alias => collector.has(alias));
-    if (hasSuporte) {
-        ['tickets', 'chat_portal'].forEach(key => {
-            (moduleAliasFamilies[key] || []).map(normalizeModuleKey).filter(Boolean).forEach(alias => collector.add(alias));
-            collector.add(normalizeModuleKey(key));
-        });
-    }
 }
 
 function getModuleAliasValues(modOrKey) {
@@ -171,23 +157,19 @@ function clonePermissionValue(value) {
     };
 }
 
-function setModuleChecksState(tbody, moduleId, checked, disabled) {
-    const checks = tbody.querySelectorAll(`.perm-check[data-mod="${moduleId}"], .perm-all[data-mod="${moduleId}"]`);
-    checks.forEach(check => {
-        check.checked = !!checked;
-        if (typeof disabled === 'boolean') {
-            check.disabled = disabled;
-        }
-    });
-}
-
 function syncSupportHierarchyUi(tbody) {
     if (!tbody) return;
     const parentChecks = tbody.querySelectorAll('.perm-check[data-mod="suporte"], .perm-all[data-mod="suporte"]');
     if (!parentChecks.length) return;
     const supportEnabled = Array.from(parentChecks).some(check => !!check.checked);
     ['tickets', 'chat_portal'].forEach(childId => {
-        setModuleChecksState(tbody, childId, supportEnabled, !supportEnabled);
+        const childChecks = tbody.querySelectorAll(`.perm-check[data-mod="${childId}"], .perm-all[data-mod="${childId}"]`);
+        if (childChecks.length > 0) {
+            const tr = childChecks[0].closest('tr');
+            if (tr) {
+                tr.style.display = supportEnabled ? '' : 'none';
+            }
+        }
     });
 }
 
@@ -217,9 +199,6 @@ function getModuleAliases(mod) {
     }
     if (id === 'nfse' || normalizeModuleKey(label).indexOf('nfs_e') >= 0) {
         aliases.push('Emitir NFS-e', 'NFSe', 'NFS-e', 'nfse');
-    }
-    if (id === 'suporte') {
-        aliases.push('Suporte', 'support', 'navSupport', 'navSuporte');
     }
     if (id === 'tickets') {
         aliases.push('tickets', 'suporte_tickets', 'suporteTickets', 'navSuporteTickets', 'Suporte: Tickets');

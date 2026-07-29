@@ -88,8 +88,8 @@ begin
            ) then 'paciente_id'
            when exists (
              select 1 from information_schema.columns
-             where table_schema='public' and table_name='orcamentos' and column_name='pacienteid'
-           ) then 'pacienteid'
+             where table_schema='public' and table_name='orcamentos' and column_name='paciente_id'
+           ) then 'paciente_id'
            else null
          end
   into v_orc_paciente_col;
@@ -101,8 +101,8 @@ begin
            ) then 'paciente_id'
            when exists (
              select 1 from information_schema.columns
-             where table_schema='public' and table_name='agenda_agendamentos' and column_name='pacienteid'
-           ) then 'pacienteid'
+             where table_schema='public' and table_name='agenda_agendamentos' and column_name='paciente_id'
+           ) then 'paciente_id'
            else null
          end
   into v_ag_paciente_col;

@@ -5,7 +5,7 @@ async function testBudgetInsert() {
     const budgetData = {
         id: Date.now().toString(36),
         seqid: 999,
-        pacienteid: 'mmc9f79ukyf3di1sc',
+        paciente_id: 'mmc9f79ukyf3di1sc',
         pacientenome: 'Test Name',
         pacientecelular: '1234',
         pacienteemail: 'a@a',

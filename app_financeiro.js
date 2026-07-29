@@ -330,7 +330,7 @@ async function renderFinanceiroNotasGrid() {
         if (!budget || !isClosed) return null;
         const bruto = Math.max(0, toDec(calculateBudgetTotal(budget), 0));
         const paid = ordered.reduce((sum, x) => sum + toDec(x && x.valor, 0), 0);
-        const patientId = String(budget && (budget.paciente_id || budget.pacienteid) || sample && sample.paciente_id || '').trim();
+        const patientId = String(budget && (budget.paciente_id || budget.paciente_id) || sample && sample.paciente_id || '').trim();
         const patient = (patients || []).find(p => String(p.id) === patientId || String(p.seqid) === patientId) || null;
         const itens = Array.isArray(budget && budget.orcamento_itens) ? budget.orcamento_itens : [];
         return {
@@ -485,7 +485,7 @@ async function fetchTransactions(patientId = null) {
             try {
                 const { data: orcs, error: oErr } = await withTimeout(
                     db.from('orcamentos')
-                        .select('seqid,paciente_id,pacienteid,pacientenome')
+                        .select('seqid,paciente_id,paciente_id,pacientenome')
                         .eq('empresa_id', currentEmpresaId)
                         .in('seqid', uniq.map(n => Number(n))),
                     15000,
@@ -495,7 +495,7 @@ async function fetchTransactions(patientId = null) {
                     orcs.forEach(o => {
                         if (o && o.seqid != null) {
                             budgetSeqInfo.set(String(o.seqid), {
-                                pacienteUuid: String(o.pacienteid || o.paciente_id || ''),
+                                pacienteUuid: String(o.paciente_id || o.paciente_id || ''),
                                 pacienteNome: String(o.pacientenome || '')
                             });
                         }
@@ -575,7 +575,7 @@ async function fetchTransactions(patientId = null) {
                     if (mId && mId[1]) b = (budgets || []).find(x => String(x.id) === String(mId[1]));
                     if (!b && mSeq && mSeq[1]) b = (budgets || []).find(x => String(x.seqid) === String(mSeq[1]));
                     if (b) {
-                        pat = patients.find(p => String(p.id) === String(b.pacienteid || b.paciente_id));
+                        pat = patients.find(p => String(p.id) === String(b.paciente_id || b.paciente_id));
                         obsDisplay = replaceObsBudgetTag(t.observacoes || '');
                     }
                 } catch { /* ignore */ }

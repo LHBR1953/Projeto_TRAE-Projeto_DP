@@ -92,7 +92,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260725-0028';
+const APP_BUILD = '20260728-0610';
 
 const AUTO_SEED_SPECIALTIES = false;
 
@@ -1305,7 +1305,7 @@ async function getPatientDeleteBlockers(patient) {
     const patSeq = patient && patient.seqid != null ? Number(patient.seqid) : NaN;
 
     if (patId) {
-        const hasBudget = (budgets || []).some(b => String(b && (b.pacienteid || b.paciente_id) || '') === patId);
+        const hasBudget = (budgets || []).some(b => String(b && (b.paciente_id || b.paciente_id) || '') === patId);
         if (hasBudget) blocks.push('Orçamentos');
         const hasProtese = (proteseOrders || []).some(o => String(o && o.paciente_id || '') === patId);
         if (hasProtese) blocks.push('Prótese');
@@ -3898,15 +3898,13 @@ const systemModules = [
     { id: 'profissionais', label: 'Profissionais' },
     { id: 'servicos', label: 'Serviços/Estoque' },
     { id: 'tickets', label: 'Suporte: Tickets' },
-    { id: 'chat_portal', label: 'Suporte: Chat do Portal' },
-    { id: 'suporte', label: 'Suporte' }
+    { id: 'chat_portal', label: 'Suporte: Chat do Portal' }
 ];
 
 const modulePermissionAliasMap = {
     nfse: ['emissao_nfse', 'navNfse'],
     tickets: ['suporte_tickets', 'suporteTickets', 'navSuporteTickets'],
-    chat_portal: ['portal_chat', 'portalChat', 'navPortalChat'],
-    suporte: ['support', 'navSupport'],
+    chat_portal: ['portal_chat', 'portalChat', 'navPortalChat', 'portal_mensagens', 'portal_anexos'],
     auditoria: ['audit', 'navAudit']
 };
 
@@ -4394,7 +4392,9 @@ const btnAgendaDelete = document.getElementById('btnAgendaDelete');
 const modalAgendaTitle = document.getElementById('modalAgendaTitle');
 const formAgenda = document.getElementById('formAgenda');
 const agendaId = document.getElementById('agendaId');
-const agendaPaciente = document.getElementById('agendaPaciente');
+const agendaPacienteId = document.getElementById('agendaPacienteId');
+const agendaPacienteBusca = document.getElementById('agendaPacienteBusca');
+const agendaPacienteDropdown = document.getElementById('agendaPacienteDropdown');
 const agendaTitulo = document.getElementById('agendaTitulo');
 const agendaInicio = document.getElementById('agendaInicio');
 const agendaFim = document.getElementById('agendaFim');
@@ -4577,8 +4577,8 @@ function updateSidebarVisibility() {
     }
     if (sidebar) sidebar.style.display = '';
 
-    // Core Modules Mapping
-    const sidebarMapping = {
+    // RBAC Core Modules Mapping
+    const menuRBACMap = {
         'navDashboard': 'dashboard',
         'navPatients': 'patients',
         'navProfessionals': 'professionals',
@@ -4590,15 +4590,23 @@ function updateSidebarVisibility() {
         'navMarketing': 'marketing',
         'navAtendimentoToggle': 'atendimento',
         'navAtendimento': 'atendimento',
-        'navConsultaAvaliacao': 'consultaAvaliacao',
+        'navConsultaAvaliacao': 'atendimento',
         'navAgenda': 'agenda',
         'navProtese': 'protese'
     };
 
-    Object.entries(sidebarMapping).forEach(([id, type]) => {
+    const checkPermStrict = (key) => {
+        if (isSuperAdmin) return true; // SuperAdmin always bypasses
+        if (!currentUserPerms) return false;
+        const aliases = modulePermissionAliasMap[key] || [];
+        const keysToCheck = [key, ...aliases];
+        return keysToCheck.some(k => currentUserPerms[k] && currentUserPerms[k].select);
+    };
+
+    Object.entries(menuRBACMap).forEach(([id, type]) => {
         const el = document.getElementById(id);
         if (el) {
-            let hasPerm = can(getModuleKey(type), 'select');
+            let hasPerm = checkPermStrict(type);
             
             // Exceção de interface solicitada: 
             // Dentistas (ou profissionais) não devem ver o menu global de "Orçamentos" 
@@ -4608,29 +4616,96 @@ function updateSidebarVisibility() {
             }
 
             el.style.display = hasPerm ? 'flex' : 'none';
-            console.log(`DEBUG: Sidebar Sync -> ${id} (${type}): ${hasPerm ? 'VISIBLE' : 'HIDDEN'}`);
+            if (!hasPerm) el.style.setProperty('display', 'none', 'important');
+            console.log(`DEBUG: Sidebar Sync RBAC -> ${id} (${type}): ${hasPerm ? 'VISIBLE' : 'HIDDEN'}`);
         }
     });
+
     const stockPerms = {
-        inventory: canAccessStockTab('stockInventory'),
-        models: canAccessStockTab('stockModels'),
-        mapping: canAccessStockTab('stockMapping'),
-        logs: canAccessStockTab('stockLogs'),
-        reports: canAccessStockTab('stockReports')
+        inventory: checkPermStrict('stockInventory') || checkPermStrict('estoque'),
+        models: checkPermStrict('stockModels') || checkPermStrict('estoque_modelos'),
+        mapping: checkPermStrict('stockMapping') || checkPermStrict('estoque'),
+        logs: checkPermStrict('stockLogs') || checkPermStrict('estoque'),
+        reports: checkPermStrict('stockReports') || checkPermStrict('estoque')
     };
     const hasAnyStock = !!(stockPerms.inventory || stockPerms.models || stockPerms.mapping || stockPerms.logs || stockPerms.reports);
+    const hasBaseStockPerm = checkPermStrict('estoque');
+
+    // Correção Forçada de Ocultação do Menu Suporte (RBAC) - HIERARQUIA INDIVIDUAL QUEBRADA TOTALMENTE
+    const canTickets = Boolean(checkPermStrict('tickets') || checkPermStrict('suporte_tickets'));
+    const canChat = Boolean(checkPermStrict('chat_portal') || checkPermStrict('suporte_chat_portal'));
     
-    // Explicitly hide the entire nav section if the user doesn't have the base 'estoque' module permission
-    const hasBaseStockPerm = can('estoque', 'select');
+    // REGRA INFALÍVEL:
+    // O checkbox 'Suporte' isolado NUNCA deve conceder permissão para abrir telas!
+    // A chave pai 'suporte' NÃO HABILITA FILHOS AUTOMATICAMENTE MAIS.
+    const hasAnyChildActive = canTickets || canChat;
+
+    const secSuporte = document.getElementById('menu-group-suporte') || document.querySelector('.menu-group-suporte');
+    if (secSuporte) {
+        if (hasAnyChildActive) {
+            secSuporte.style.display = 'block';
+        } else {
+            secSuporte.setAttribute('style', 'display: none !important;');
+        }
+    }
+
+    const headerSuporte = document.getElementById('navSuporteSection');
+    if (headerSuporte) {
+        if (hasAnyChildActive) {
+            headerSuporte.style.display = 'block';
+        } else {
+            headerSuporte.setAttribute('style', 'display: none !important;');
+        }
+    }
+
+    const itemTickets = document.getElementById('navSuporteTickets') || document.querySelector('[data-menu="tickets"]');
+    if (itemTickets) {
+        if (canTickets) {
+            itemTickets.style.display = 'flex';
+        } else {
+            itemTickets.setAttribute('style', 'display: none !important;');
+        }
+    }
+
+    const itemChat = document.getElementById('navPortalChat') || document.querySelector('[data-menu="chat-portal"]');
+    if (itemChat) {
+        if (canChat) {
+            itemChat.style.display = 'flex';
+        } else {
+            itemChat.setAttribute('style', 'display: none !important;');
+        }
+    }
+    
+    // Bloqueio de Acesso Imediato INDIVIDUALIZADO
+    if (window.location.hash === '#chat-portal' && !canChat) {
+        console.warn('RBAC: Acesso não autorizado ao Chat do Portal.');
+        window.location.hash = '#agenda';
+    }
+    if (window.location.hash === '#tickets' && !canTickets) {
+        console.warn('RBAC: Acesso não autorizado aos Tickets.');
+        window.location.hash = '#agenda';
+    }
+
+    const navEstoqueToggle = document.getElementById('navEstoqueToggle');
+    const navInventory = document.getElementById('navInventory');
+    const navUsageModels = document.getElementById('navUsageModels');
+    const navServiceMapping = document.getElementById('navServiceMapping');
+    const navInventoryLogs = document.getElementById('navInventoryLogs');
+    const navInventoryReports = document.getElementById('navInventoryReports');
+    const navEstoqueSubmenu = document.getElementById('navEstoqueSubmenu');
+    const navEstoqueToggleIcon = document.getElementById('navEstoqueToggleIcon');
+
     if (navEstoqueToggle) navEstoqueToggle.style.display = (hasAnyStock && hasBaseStockPerm) ? 'flex' : 'none';
     if (navInventory) navInventory.style.display = (stockPerms.inventory && hasBaseStockPerm) ? 'flex' : 'none';
     if (navUsageModels) navUsageModels.style.display = (stockPerms.models && hasBaseStockPerm) ? 'flex' : 'none';
     if (navServiceMapping) navServiceMapping.style.display = (stockPerms.mapping && hasBaseStockPerm) ? 'flex' : 'none';
     if (navInventoryLogs) navInventoryLogs.style.display = (stockPerms.logs && hasBaseStockPerm) ? 'flex' : 'none';
     if (navInventoryReports) navInventoryReports.style.display = (stockPerms.reports && hasBaseStockPerm) ? 'flex' : 'none';
+    
     if (!hasAnyStock || !hasBaseStockPerm) {
         if (navEstoqueSubmenu) navEstoqueSubmenu.style.display = 'none';
         if (navEstoqueToggleIcon) navEstoqueToggleIcon.className = 'ri-arrow-down-s-line';
+        if (navEstoqueToggle) navEstoqueToggle.style.setProperty('display', 'none', 'important');
     }
 
     // Admin Specific Logic (Double check Config sections)
@@ -4665,6 +4740,38 @@ function updateSidebarVisibility() {
         if (navUsersAdmin) navUsersAdmin.style.display = 'none';
         if (navCancelledBudgets) navCancelledBudgets.style.display = 'none';
     }
+
+    // Support Menu Logic based strictly on currentUserPerms
+    const checkPermStrictLocal = (key) => {
+        if (isSuperAdmin) return true; // SuperAdmin always bypasses
+        if (!currentUserPerms) return false;
+        const aliases = modulePermissionAliasMap[key] || [];
+        const keysToCheck = [key, ...aliases];
+        return keysToCheck.some(k => currentUserPerms[k] && currentUserPerms[k].select);
+    };
+
+    const hasTickets = checkPermStrictLocal('tickets');
+    const hasChat = checkPermStrictLocal('chat_portal');
+    const hasBaseSuporte = checkPermStrictLocal('suporte');
+
+    const navSuporteSection = document.getElementById('navSuporteSection');
+    const navSuporteTickets = document.getElementById('navSuporteTickets');
+    const navPortalChat = document.getElementById('navPortalChat');
+
+    if (navSuporteTickets) {
+        navSuporteTickets.style.display = hasTickets ? 'flex' : 'none';
+        if (!hasTickets) navSuporteTickets.style.setProperty('display', 'none', 'important');
+    }
+    if (navPortalChat) {
+        navPortalChat.style.display = hasChat ? 'flex' : 'none';
+        if (!hasChat) navPortalChat.style.setProperty('display', 'none', 'important');
+    }
+    if (navSuporteSection) {
+        const showSuporte = hasBaseSuporte || hasTickets || hasChat;
+        navSuporteSection.style.display = showSuporte ? 'block' : 'none';
+        if (!showSuporte) navSuporteSection.style.setProperty('display', 'none', 'important');
+    }
+
     applyFinancialOnboardingMenuLock();
 
     // Forçar liberação: Exceção na lógica de visibilidade para Avaliação/Orçamento
@@ -5375,10 +5482,11 @@ function syncInventoryAreaByType(typeKey, preferredArea = '') {
     }
 }
 
-window.updateInventoryAreaOptionsForTipoInventario = function () {
+window.updateInventoryAreaOptionsForTipoInventario = function (text) {
     const inventoryTipoInventarioInput = document.getElementById('inventoryTipoInventario');
     if (!inventoryTipoInventarioInput) return;
-    console.log('Troquei o tipo para:', inventoryTipoInventarioInput.value);
+    const value = typeof text === 'string' ? text : inventoryTipoInventarioInput.value;
+    console.log('Troquei o tipo para:', value);
     const selectedText = inventoryTipoInventarioInput.options && inventoryTipoInventarioInput.selectedIndex >= 0
         ? String(inventoryTipoInventarioInput.options[inventoryTipoInventarioInput.selectedIndex]?.textContent || '')
         : '';
@@ -5388,7 +5496,7 @@ window.updateInventoryAreaOptionsForTipoInventario = function () {
     else if (labelKey.includes('equip')) typeKey = 'equipamentos';
     else if (labelKey.includes('instrument')) typeKey = 'instrumentais';
     else if (labelKey.includes('consum')) typeKey = 'consumiveis';
-    else typeKey = normalizeInventoryTypeKey(String(inventoryTipoInventarioInput.value || ''));
+    else typeKey = normalizeInventoryTypeKey(String(value || ''));
     syncInventoryAreaByType(typeKey, '');
 };
 
@@ -8035,7 +8143,7 @@ function getServicoById(serviceId) {
 
 function resolveOrcamentoPacienteId(b) {
     if (!b) return '';
-    return String(b.paciente_id || b.pacienteid || b.pacienteId || '').trim();
+    return String(b.paciente_id || b.paciente_id || b.paciente_id || '').trim();
 }
 
 function resolveOrcamentoSeq(b) {
@@ -8094,8 +8202,8 @@ async function buildConsumptionReportRows({ startDate, endDate } = {}) {
         const it = itemById.get(aid) || null;
         const orc = it ? orcById.get(String(it && it.orcamento_id || '')) : null;
         const srv = it ? getServicoById(it.servico_id || it.servicoId) : null;
-        const pacienteId = resolveOrcamentoPacienteId(orc);
-        const pacienteNome = resolvePacienteNameById(pacienteId) || '—';
+        const paciente_id = resolveOrcamentoPacienteId(orc);
+        const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
         const procedimento = resolveItemDescricao(it, srv) || '—';
         const subdiv = resolveServicoSubdivision(srv) || '—';
         const dataHora = (() => {
@@ -8241,8 +8349,8 @@ async function buildFinancialApportionRows({ startDate, endDate } = {}) {
             const srv = getServicoById(it.servico_id || it.servicoId);
             const executorId = String(it && (it.profissional_id || it.profissionalId || it.executor_id || it.executorId) || '');
             const executorNome = getProfessionalNameBySeqId(executorId) || '—';
-            const pacienteId = resolveOrcamentoPacienteId(orc);
-            const pacienteNome = resolvePacienteNameById(pacienteId) || '—';
+            const paciente_id = resolveOrcamentoPacienteId(orc);
+            const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
             const dtRaw = String(it && (it.updated_at || it.created_at || '') || '');
             const dt = dtRaw ? new Date(dtRaw) : null;
             const dtTxt = dt && Number.isFinite(dt.getTime()) ? dt.toLocaleDateString('pt-BR') : '—';
@@ -12268,7 +12376,7 @@ function showForm(editMode = false, type = 'patients', dataObj = null) {
             'Estoque: Movimentações', 'Orçamentos', 'Marketing', 'Atendimento', 
             'Produção Protética', 'Pacientes', 'Especialidades',
             'Estoque: Inventário', 'Estoque: Vínculo de Serviços', 'Estoque: Relatórios', 
-            'Financeiro', 'Comissões', 'Agenda', 'Emitir NFS-e', 'Auditoria', 'Suporte'
+            'Financeiro', 'Comissões', 'Agenda', 'Emitir NFS-e', 'Auditoria', 'Suporte: Tickets', 'Suporte: Chat do Portal'
         ];
 
         function renderModulosCheckboxes(currentModulesStr) {
@@ -12678,32 +12786,23 @@ async function fetchPatientPortalAppointments(paciente) {
     
     // O banco de dados pode estar usando UUID (id) ou INT (seqid). 
     // Agendamentos usa 'paciente_id' que é o seqid (inteiro).
-    const pacienteId = paciente.seqid;
+    const paciente_id = paciente.seqid;
     
-    if (!pacienteId) {
-        console.error("Erro na carga de Agendamentos: Objeto paciente não possui 'seqid'.", paciente);
+    if (!paciente_id) {
+        console.error("ERRO DE SEGURANÇA: ID numérico do paciente não identificado (Agendamentos).");
         return [];
     }
     
-    const q = db.from('agenda_agendamentos')
-        .select('*')
-        .eq('paciente_id', pacienteId)
-        .order('inicio', { ascending: false })
-        .limit(50);
-        
-    let { data, error } = await withTimeout(q, 15000, 'patient_portal:agenda_agendamentos');
+    // Utilizando exclusivamente a RPC para evitar erros 400 de REST API
+    const { data: rpcData, error: rpcErr } = await db.rpc('get_paciente_agendamentos', { p_empresa_id: paciente.empresa_id, p_paciente_id: paciente_id });
     
-    // Se RLS bloquear silenciosamente (array vazio) ou der erro, tenta a RPC
-    if (error || (!data || data.length === 0)) {
-        if (error) console.warn("Erro ao consultar agenda_agendamentos, tentando RPC fallback...", error);
-        const { data: rpcData, error: rpcErr } = await db.rpc('get_paciente_agendamentos', { p_paciente_id: pacienteId });
-        if (!rpcErr && rpcData) {
-            data = Array.isArray(rpcData) ? rpcData : [rpcData];
-            error = null;
-        } else if (error) {
-            console.error("Erro real na carga de Agendamentos (RPC):", rpcErr);
-            error = rpcErr || error;
-        }
+    let data = [];
+    let error = null;
+    if (!rpcErr) {
+        data = Array.isArray(rpcData) ? rpcData : (rpcData ? [rpcData] : []);
+    } else {
+        console.warn("RPC falhou, assumindo array vazio para agendamentos.", rpcErr);
+        error = rpcErr;
     }
     if (error) throw error;
     return data || [];
@@ -12711,6 +12810,8 @@ async function fetchPatientPortalAppointments(paciente) {
 
 async function renderPatientPortal(paciente) {
     if (!paciente) return;
+    
+    console.log('[SECURITY AUDIT] Carregando dados para Empresa:', paciente.empresa_id, '| Paciente ID:', paciente.id, '| SeqID:', paciente.seqid);
 
     // --- JANELA 1: Informações Cadastrais ---
     const infoContainer = document.getElementById('portalInfoContainer');
@@ -12782,36 +12883,40 @@ async function renderPatientPortal(paciente) {
     const orcamentosContainer = document.getElementById('portalOrcamentosContainer');
     if (orcamentosContainer) {
         try {
-            // Orçamentos usa o UUID do paciente na coluna 'pacienteid'
-            const pacienteId = paciente.id;
-            if (!pacienteId) {
-                console.error("Erro na carga de Orçamentos: Objeto paciente sem 'id' (UUID).", paciente);
+            // Orçamentos usa o UUID do paciente na coluna 'paciente_id'
+            const paciente_id = paciente.id;
+            if (!paciente_id) {
+                console.error("ERRO DE SEGURANÇA: ID do paciente não identificado (Orçamentos).");
+                orcamentosContainer.innerHTML = '<p style="text-align: center; color: #9ca3af; padding: 1rem 0;">Erro: Paciente não identificado.</p>';
                 throw new Error("ID do paciente não encontrado.");
             }
 
-            let { data: orcs, error: errOrc } = await db.from('orcamentos').select('*').eq('pacienteid', pacienteId).order('created_at', { ascending: false }).limit(5);
+            // Utilizando exclusivamente a RPC para evitar erros 400 de REST API com colunas legadas
+            let { data: rpcOrcs, error: errOrc } = await db.rpc('get_paciente_orcamentos', { p_empresa_id: paciente.empresa_id, p_paciente_id: paciente_id });
             
-            // Se RLS bloquear silenciosamente (retorna array vazio) ou der erro, tentamos a RPC
-            if (errOrc || (!orcs || orcs.length === 0)) {
-                if (errOrc) console.warn("Erro ao consultar orçamentos, tentando RPC fallback...", errOrc);
-                const { data: rpcOrcs, error: rpcErr } = await db.rpc('get_paciente_orcamentos', { p_paciente_id: pacienteId });
-                if (!rpcErr && rpcOrcs) {
-                    orcs = Array.isArray(rpcOrcs) ? rpcOrcs : [rpcOrcs];
-                    errOrc = null;
-                } else if (errOrc) {
-                    // Só logamos o erro real se a query original também falhou
-                    console.error("Erro real na carga de Orçamentos (RPC):", rpcErr);
-                    throw rpcErr || errOrc;
-                }
+            let orcs = [];
+            if (!errOrc) {
+                orcs = Array.isArray(rpcOrcs) ? rpcOrcs : (rpcOrcs ? [rpcOrcs] : []);
+            } else {
+                console.warn("RPC falhou, assumindo array vazio para orçamentos.", errOrc);
             }
+            
+            console.log('[ORCAMENTOS RAW SUPABASE DATA]:', orcs);
+            console.log('[PORTAL DATA DEBUG] Orçamentos retornados:', orcs ? orcs.length : 0);
+            
             if (!orcs || orcs.length === 0) {
-                orcamentosContainer.innerHTML = `<p style="text-align: center; color: #9ca3af; padding: 1rem 0;">Nenhum orçamento encontrado.</p>`;
+                if (errOrc) console.error('[ORCAMENTOS ERROR DETAILED]', errOrc);
+                orcamentosContainer.innerHTML = `<div class='p-4 text-center text-gray-500'>Nenhum orçamento encontrado para este cadastro.</div>`;
             } else {
                 orcamentosContainer.innerHTML = `
                     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; padding: 0.25rem;">
                         ${orcs.map(item => {
                             console.log("=== DEBUG PORTAL PACIENTE ==="); 
-                            console.log("ID do Orçamento:", item.id || item.seqid); 
+                            const orcId = item.seqid || item.id || item.numero || 'N/A';
+                            const orcDate = item.created_at || item.data_orcamento || item.data || new Date().toISOString();
+                            const orcTotal = item.valor_total || item.valortotal || item.valor || 0;
+                            const orcStatus = item.status || 'Em Aberto';
+                            console.log("ID do Orçamento:", orcId); 
                             console.log("Colunas diretas do item:", Object.keys(item)); 
                             if (item.itens) console.log("Itens do orçamento:", item.itens); 
 
@@ -12924,26 +13029,18 @@ async function renderPatientPortal(paciente) {
     if (financeiroContainer) {
         try {
             // Financeiro transações usa o seqid numérico do paciente
-            const pacienteId = paciente.seqid;
-            if (!pacienteId) {
-                console.error("Erro na carga de Financeiro: Objeto paciente sem 'seqid'.", paciente);
+            const paciente_id = paciente.seqid;
+            if (!paciente_id) {
+                console.error("ERRO DE SEGURANÇA: ID numérico do paciente não identificado (Financeiro).");
+                financeiroContainer.innerHTML = '<p style="text-align: center; color: #9ca3af; padding: 1rem 0;">Erro: Paciente não identificado.</p>';
                 throw new Error("ID numérico do paciente não encontrado.");
             }
 
-            let { data: fins, error: errFin } = await db.from('financeiro_transacoes').select('*').eq('paciente_id', pacienteId).order('data_transacao', { ascending: false }).limit(10);
-            
-            // Se RLS bloquear silenciosamente ou der erro
-            if (errFin || (!fins || fins.length === 0)) {
-                if (errFin) console.warn("Erro ao consultar financeiro, tentando RPC fallback...", errFin);
-                const { data: rpcFins, error: rpcErr } = await db.rpc('get_paciente_financeiro', { p_paciente_id: pacienteId });
-                if (!rpcErr && rpcFins) {
-                    fins = Array.isArray(rpcFins) ? rpcFins : [rpcFins];
-                    errFin = null;
-                } else if (errFin) {
-                    console.error("Erro real na carga de Financeiro (RPC):", rpcErr);
-                    throw rpcErr || errFin;
-                }
-            }
+            let { data: rpcFins, error: rpcErr } = await db.rpc('get_paciente_financeiro', { p_empresa_id: paciente.empresa_id, p_paciente_id: paciente_id });
+            let fins = Array.isArray(rpcFins) ? rpcFins : (rpcFins ? [rpcFins] : []);
+            let errFin = rpcErr;
+            console.log('[PORTAL DATA DEBUG] Financeiro retornado:', fins ? fins.length : 0);
+
             if (!fins || fins.length === 0) {
                 financeiroContainer.innerHTML = `<p style="text-align: center; color: #9ca3af; padding: 1rem 0;">Nenhum histórico financeiro encontrado.</p>`;
             } else {
@@ -13650,6 +13747,7 @@ function initMarketingModule() {
     const mkLimiteDia = document.getElementById('mkLimiteDia');
     const mkJanelaConv = document.getElementById('mkJanelaConv');
     const mkAtivo = document.getElementById('mkAtivo');
+    const mkSaudacao = document.getElementById('mkSaudacao');
     const mkCorpo = document.getElementById('mkCorpo');
     const mkRodape = document.getElementById('mkRodape');
     const btnMkSaveCampaign = document.getElementById('btnMkSaveCampaign');
@@ -13722,7 +13820,7 @@ function initMarketingModule() {
                 .eq('empresa_id', currentEmpresaId)
                 .eq('ativo', true)
                 ;
-            if (sk) q = q.eq('target_status', sk);
+            if (sk) q = q.ilike('target_status', sk.replace(/S$/, '') + '%');
             q = q
                 .order('updated_at', { ascending: false })
                 .limit(1);
@@ -13764,7 +13862,27 @@ function initMarketingModule() {
         if (mkCampaignIdEl) mkCampaignIdEl.value = r.id ? String(r.id) : '';
         if (mkCampaignNome) mkCampaignNome.value = r.nome != null ? String(r.nome) : '';
         if (mkCampaignAssunto) mkCampaignAssunto.value = r.assunto != null ? String(r.assunto) : '';
-        if (mkCorpo) mkCorpo.value = r.corpo != null ? String(r.corpo) : '';
+        
+        let savedCorpo = r.corpo != null ? String(r.corpo) : '';
+        let saudacao = 'Olá, Sr(a). {{NOME_PACIENTE}}!';
+        let mainCorpo = savedCorpo;
+
+        const firstDoubleNewline = savedCorpo.indexOf('\n\n');
+        if (firstDoubleNewline !== -1) {
+            const possibleSaudacao = savedCorpo.substring(0, firstDoubleNewline);
+            if (possibleSaudacao.includes('{{NOME_PACIENTE}}')) {
+                saudacao = possibleSaudacao;
+                mainCorpo = savedCorpo.substring(firstDoubleNewline + 2);
+            }
+        }
+
+        if (mkSaudacao) {
+            mkSaudacao.value = saudacao;
+            mkSaudacao.setAttribute('readonly', 'readonly');
+            mkSaudacao.style.backgroundColor = '#f1f5f9';
+        }
+        if (mkCorpo) mkCorpo.value = mainCorpo;
+        
         if (mkRodape) mkRodape.value = r.rodape != null ? String(r.rodape) : '';
         if (mkDiasReenvio) mkDiasReenvio.value = r.dias_reenvio != null ? String(r.dias_reenvio) : '0';
         if (mkLimiteDia) mkLimiteDia.value = r.limite_dia != null ? String(r.limite_dia) : '50';
@@ -13935,7 +14053,8 @@ function initMarketingModule() {
         }
         const nome = mkCampaignNome ? String(mkCampaignNome.value || '').trim() : '';
         const assunto = mkCampaignAssunto ? String(mkCampaignAssunto.value || '').trim() : '';
-        const corpo = mkCorpo ? String(mkCorpo.value || '').trim() : '';
+        const corpoOriginal = mkCorpo ? String(mkCorpo.value || '').trim() : '';
+        const saudacao = mkSaudacao ? String(mkSaudacao.value || '').trim() : '';
         const rodape = mkRodape ? String(mkRodape.value || '').trim() : '';
         const diasReenvio = mkDiasReenvio ? Number(String(mkDiasReenvio.value || '').trim()) : 0;
         const limiteDia = mkLimiteDia ? Number(String(mkLimiteDia.value || '').trim()) : 50;
@@ -13943,10 +14062,17 @@ function initMarketingModule() {
         const ativo = mkAtivo ? Boolean(mkAtivo.checked) : false;
         const { min, max } = statusToRange(mkStatusAlvo ? mkStatusAlvo.value : 'ATIVOS');
 
-        if (!nome || !assunto || !corpo) {
+        if (!nome || !assunto || !corpoOriginal) {
             showToast('Preencha Nome, Assunto e E-mail.', true);
             return;
         }
+
+        if (saudacao && !saudacao.includes('{{NOME_PACIENTE}}')) {
+            showToast('A Saudação deve conter obrigatoriamente a tag {{NOME_PACIENTE}}.', true);
+            return;
+        }
+
+        const corpo = saudacao ? saudacao + '\n\n' + corpoOriginal : corpoOriginal;
 
         if (btnMkSaveCampaign) btnMkSaveCampaign.disabled = true;
         if (mkCampaignResult) mkCampaignResult.textContent = 'Salvando...';
@@ -13960,6 +14086,7 @@ function initMarketingModule() {
                 ativo,
                 target_min_meses: min,
                 target_max_meses: max,
+                target_status: mkStatusAlvo ? String(mkStatusAlvo.value || '').trim().toUpperCase() : 'ATIVOS',
                 dias_reenvio: Number.isFinite(diasReenvio) ? diasReenvio : 0,
                 limite_dia: Number.isFinite(limiteDia) ? limiteDia : 50,
                 janela_conversao_dias: Number.isFinite(janelaConv) ? janelaConv : 30,
@@ -14247,7 +14374,8 @@ function initMarketingModule() {
 
             for (const pac of pacientes) {
                 try {
-                    const corpoPersonalizado = corpo.replace(/\{nome\}/gi, pac.nome || 'Paciente');
+                    const nomeLimpo = String(pac.nome || 'Paciente').trim();
+                    const corpoPersonalizado = corpo.replace(/\{\{NOME_PACIENTE\}\}/gi, nomeLimpo);
                     await EnviarEmailPaciente(assunto, corpoPersonalizado, pac.email, pac.nome || 'Paciente', brevoApiKey, fromEmail);
                     
                     // Logar o envio no banco
@@ -14976,7 +15104,7 @@ async function fetchConsultaAvaliacaoForUI() {
             if (pUuid) {
                 // Find if there's an 'Avaliação' budget
                 avaliacaoBudget = budgets.find(b => {
-                    const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                    const isSamePat = b.paciente_id === pUuid || String(b.paciente_id) === String(pUuid);
                     const statusNorm = String(b.status || '').trim().toLowerCase();
                     return isSamePat && (statusNorm === 'avaliação' || statusNorm === 'avaliacao');
                 });
@@ -14984,7 +15112,7 @@ async function fetchConsultaAvaliacaoForUI() {
                 // If no avaliacao budget, check if there's a 'Pendente' budget created today (meaning it was liberated)
                 if (!avaliacaoBudget) {
                     wasLiberated = budgets.some(b => {
-                        const isSamePat = b.pacienteid === pUuid || String(b.paciente_id) === String(pUuid);
+                        const isSamePat = b.paciente_id === pUuid || String(b.paciente_id) === String(pUuid);
                         const statusNorm = String(b.status || '').trim().toLowerCase();
                         return isSamePat && statusNorm === 'pendente' && (b.created_at || '').startsWith(dateStr);
                     });
@@ -15068,7 +15196,7 @@ window.iniciarConsultaAvaliacao = function(patientUuid, agendamentoId) {
     window._currentPatientDetailId = patient.id;
     
     // Check if there is an existing budget with status "Avaliação" for this patient
-    const existingAvaliacao = (budgets || []).find(b => b.pacienteid === patient.id && String(b.status || '').trim().toLowerCase() === 'avaliação');
+    const existingAvaliacao = (budgets || []).find(b => b.paciente_id === patient.id && String(b.status || '').trim().toLowerCase() === 'avaliação');
     
     if (existingAvaliacao) {
         window.editBudget(existingAvaliacao.id);
@@ -15432,7 +15560,7 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
         try {
             const { data: orcs, error: oErr } = await withTimeout(
                 db.from('orcamentos')
-                    .select('id,seqid,paciente_id,pacienteid,pacientenome')
+                    .select('id,seqid,paciente_id,pacientenome')
                     .eq('empresa_id', currentEmpresaId)
                     .in('id', missingIds.slice(0, 200)),
                 15000,
@@ -15460,7 +15588,7 @@ async function printPagamentosPacientes({ startDateStr, endDateStr, forma }) {
             seqidStr = b.seqid ? `#${b.seqid}` : '';
             pacNome = String(b.pacientenome || '');
             if (!pacNome) {
-                const pid = String(b.paciente_id || b.pacienteid || '');
+                const pid = String(b.paciente_id || b.paciente_id || '');
                 const pac = patientById.get(pid);
                 if (pac) pacNome = String(pac.nome || '');
             }
@@ -15708,7 +15836,7 @@ async function printFaturamentoMensalPacienteCross(year) {
     const seqidToPacienteUuid = new Map();
     seqids.forEach(s => {
         const b = budgetBySeqid.get(String(s));
-        const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
+        const pid = b ? String(b.paciente_id || b.paciente_id || '') : '';
         if (pid) seqidToPacienteUuid.set(String(s), pid);
     });
     const missingSeq = seqids.filter(s => !seqidToPacienteUuid.has(String(s)));
@@ -15716,14 +15844,14 @@ async function printFaturamentoMensalPacienteCross(year) {
         try {
             const { data: orcs } = await withTimeout(
                 db.from('orcamentos')
-                    .select('seqid,paciente_id,pacienteid,pacientenome')
+                    .select('seqid,paciente_id,pacientenome')
                     .eq('empresa_id', currentEmpresaId)
                     .in('seqid', missingSeq.slice(0, 200).map(n => Number(n))),
                 15000,
                 'cross_paciente:orcamentos'
             );
             (Array.isArray(orcs) ? orcs : []).forEach(o => {
-                const pid = String(o.pacienteid || o.paciente_id || '');
+                const pid = String(o.paciente_id || o.paciente_id || '');
                 if (o.seqid != null && pid) seqidToPacienteUuid.set(String(o.seqid), pid);
             });
         } catch { }
@@ -15867,7 +15995,7 @@ async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
         try {
             const { data: orcs, error: oErr } = await withTimeout(
                 db.from('orcamentos')
-                    .select('id,seqid,paciente_id,pacienteid,pacientenome')
+                    .select('id,seqid,paciente_id,pacientenome')
                     .eq('empresa_id', currentEmpresaId)
                     .in('id', missingIds.slice(0, 200)),
                 15000,
@@ -15907,7 +16035,7 @@ async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
             seqidStr = budget.seqid ? `#${budget.seqid}` : '';
             pacNome = String(budget.pacientenome || '');
             if (!pacNome) {
-                const pid = String(budget.paciente_id || budget.pacienteid || '');
+                const pid = String(budget.paciente_id || budget.paciente_id || '');
                 const pac = patientById.get(pid);
                 if (pac) pacNome = String(pac.nome || '');
             }
@@ -15991,7 +16119,7 @@ async function printMovimentacaoDiaria({ dateStr, profSeqId }) {
                     if (budget) {
                         pacNome = String(budget.pacientenome || '');
                         if (!pacNome) {
-                            const pid = String(budget.paciente_id || budget.pacienteid || '');
+                            const pid = String(budget.paciente_id || budget.paciente_id || '');
                             const pac = patientById.get(pid);
                             if (pac) pacNome = String(pac.nome || '');
                         }
@@ -16149,7 +16277,7 @@ function buildAtendimentoRowsFromAgenda({ agendaRows, profSeqId, dateStr }) {
         const firstAg = arr[0];
         const hora = firstAg && firstAg.inicio ? formatTimeHHMM(new Date(firstAg.inicio)) : '--:--';
 
-        const patientBudgets = (budgets || []).filter(b => String(b.pacienteid || b.paciente_id || '') === String(pacienteUuid));
+        const patientBudgets = (budgets || []).filter(b => String(b.paciente_id || b.paciente_id || '') === String(pacienteUuid));
         patientBudgets.forEach(b => {
             const itens = (b.orcamento_itens || b.itens || []);
             const tipoKey = normalizeKey(String(b.tipo || 'Normal'));
@@ -16333,8 +16461,8 @@ async function printAgendaWeekAppointmentsFromUI() {
                 const mi = String(dt.getMinutes()).padStart(2, '0');
                 const ini = `${hh}:${mi}`;
                 const st = a.status || '—';
-                const pacienteId = a.paciente_id != null ? String(a.paciente_id) : '';
-                const pacienteNome = pacienteId ? getPacienteNameBySeqId(pacienteId) : '';
+                const paciente_id = a.paciente_id != null ? String(a.paciente_id) : '';
+                const pacienteNome = paciente_id ? getPacienteNameBySeqId(paciente_id) : '';
                 const tit = String(a.titulo || '').trim();
                 const label = pacienteNome
                     ? (tit && normalizeKey(tit) !== normalizeKey(pacienteNome) ? `${pacienteNome} — ${tit}` : pacienteNome)
@@ -16434,7 +16562,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
             // O p.orcamento_id é um UUID. Buscamos pelo ID real.
             seqids.forEach(uuid => {
                 const b = budgetByUuid.get(String(uuid));
-                const pid = b ? String(b.pacienteid || b.paciente_id || '') : '';
+                const pid = b ? String(b.paciente_id || b.paciente_id || '') : '';
                 if (pid) seqidToPacienteUuid.set(String(uuid), pid);
             });
             
@@ -16443,7 +16571,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
                 try {
                     const { data: orcs, error: oErr } = await withTimeout(
                         db.from('orcamentos')
-                            .select('id,seqid,paciente_id,pacienteid')
+                            .select('id,seqid,paciente_id')
                             .eq('empresa_id', currentEmpresaId)
                             .in('id', missingSeq.slice(0, 200)),
                         15000,
@@ -16453,7 +16581,7 @@ async function printFechamentoDiario({ dateStr, profSeqId }) {
                         orcs.forEach(o => {
                             // Popula o cache local com os orçamentos buscados
                             budgetByUuid.set(String(o.id), o);
-                            const pid = String(o.pacienteid || o.paciente_id || '');
+                            const pid = String(o.paciente_id || o.paciente_id || '');
                             if (o.id && pid) seqidToPacienteUuid.set(String(o.id), pid);
                         });
                     }
@@ -17057,7 +17185,7 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
         // Adiciona os pacientes desses orçamentos na nossa lista de análise, 
         // mesmo que eles não tenham agendamento formal hoje.
         extraBudgets.forEach(b => {
-            const pacId = String(b.paciente_id || b.pacienteid || '');
+            const pacId = String(b.paciente_id || b.paciente_id || '');
             if (pacId && pacId !== 'null' && pacId !== 'undefined') {
                 const pac = (patients || []).find(p => String(p.id) === pacId);
                 if (pac && pac.seqid) {
@@ -17076,7 +17204,7 @@ async function fetchAtendimentoDay({ empresaId, profSeqId, dateStr }) {
             const pacienteUuid = paciente?.id || null;
             if (!pacienteUuid) return;
 
-            const allPatientBudgets = (budgets || []).filter(b => String(b.pacienteid || b.paciente_id || '') === String(pacienteUuid));
+            const allPatientBudgets = (budgets || []).filter(b => String(b.paciente_id || b.paciente_id || '') === String(pacienteUuid));
             const patientBudgets = allPatientBudgets
                 .filter(b => {
                     const stKey = normalizeKey(b && b.status || '');
@@ -18925,7 +19053,7 @@ async function syncProteseOrcamentoItens() {
 
     const pacienteSel = document.getElementById('protesePaciente');
     if (pacienteSel) {
-        const raw = b ? (b.pacienteid || b.paciente_id) : null;
+        const raw = b ? (b.paciente_id || b.paciente_id) : null;
         let budgetPatientUuid = '';
         let budgetPatientName = b && b.pacientenome ? String(b.pacientenome) : '';
 
@@ -19099,7 +19227,7 @@ async function syncProteseUniqueOpGuard() {
     const btnSave = document.getElementById('btnProteseSave');
     if (!warn || !warnText || !btnView) return;
 
-    const pacienteId = String((document.getElementById('protesePaciente') || {}).value || '').trim();
+    const paciente_id = String((document.getElementById('protesePaciente') || {}).value || '').trim();
     const orcSeqRaw = String((document.getElementById('proteseOrcamentoSeqid') || {}).value || '').trim();
     const itemId = String((document.getElementById('proteseOrcamentoItemId') || {}).value || '').trim();
     const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
@@ -19113,7 +19241,7 @@ async function syncProteseUniqueOpGuard() {
         if (btnSave) btnSave.disabled = false;
     };
 
-    if (!pacienteId || !orcamentoId || !itemId) {
+    if (!paciente_id || !orcamentoId || !itemId) {
         clear();
         return;
     }
@@ -19129,7 +19257,7 @@ async function syncProteseUniqueOpGuard() {
             db.from('ordens_proteticas')
                 .select('id, seqid, status_geral, created_at')
                 .eq('empresa_id', currentEmpresaId)
-                .eq('paciente_id', pacienteId)
+                .eq('paciente_id', paciente_id)
                 .eq('orcamento_id', orcamentoId)
                 .eq('orcamento_item_id', itemId)
                 .neq('status_geral', 'CANCELADA')
@@ -19358,7 +19486,7 @@ async function saveProteseOrder() {
         return;
     }
 
-    const pacienteId = (document.getElementById('protesePaciente') || {}).value || '';
+    const paciente_id = (document.getElementById('protesePaciente') || {}).value || '';
     const exec = (document.getElementById('proteseTipoExecucao') || {}).value || 'EXTERNA';
     const statusGeral = (document.getElementById('proteseStatusGeral') || {}).value || 'EM_ANDAMENTO';
     const labId = (document.getElementById('proteseLaboratorio') || {}).value || '';
@@ -19378,7 +19506,7 @@ async function saveProteseOrder() {
         if (b) orcamentoId = b.id;
     }
 
-    if (!pacienteId) {
+    if (!paciente_id) {
         showToast('Selecione o paciente.', true);
         return;
     }
@@ -19395,7 +19523,7 @@ async function saveProteseOrder() {
         if (!currentProteseOrder) {
             const payload = {
                 empresa_id: currentEmpresaId,
-                paciente_id: pacienteId,
+                paciente_id: paciente_id,
                 orcamento_id: orcamentoId || '',
                 orcamento_item_id: orcItemId || '',
                 tipo_execucao: exec,
@@ -19449,7 +19577,7 @@ async function saveProteseOrder() {
             } catch { }
         } else {
             const upd = {
-                paciente_id: pacienteId,
+                paciente_id: paciente_id,
                 orcamento_id: orcamentoId,
                 orcamento_item_id: orcItemId || null,
                 tipo_execucao: exec,
@@ -19497,7 +19625,7 @@ async function saveProteseOrder() {
         const isDup = code === '23505' || /duplicate key/i.test(rawMsg) || /ordens_proteticas_uniq_ativa_item/i.test(rawMsg);
         if (isDup && !currentProteseOrder) {
             try {
-                const pacienteId = String((document.getElementById('protesePaciente') || {}).value || '').trim();
+                const paciente_id = String((document.getElementById('protesePaciente') || {}).value || '').trim();
                 const orcSeqRaw = String((document.getElementById('proteseOrcamentoSeqid') || {}).value || '').trim();
                 const itemId = String((document.getElementById('proteseOrcamentoItemId') || {}).value || '').trim();
                 const orcSeq = orcSeqRaw ? Number(orcSeqRaw) : null;
@@ -19507,7 +19635,7 @@ async function saveProteseOrder() {
                     db.from('ordens_proteticas')
                         .select('id, seqid')
                         .eq('empresa_id', currentEmpresaId)
-                        .eq('paciente_id', pacienteId)
+                        .eq('paciente_id', paciente_id)
                         .eq('orcamento_id', orcamentoId)
                         .eq('orcamento_item_id', itemId)
                         .neq('status_geral', 'CANCELADA')
@@ -22640,16 +22768,121 @@ function initAgendaFilters() {
         }
     }
 
-    if (agendaPaciente) {
-        const opts = ['<option value="">(Sem paciente)</option>'];
-        (patients || [])
-            .slice()
-            .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
-            .forEach(p => {
-                const label = `${p.nome}${p.cpf ? ` (${p.cpf})` : ''}`;
-                opts.push(`<option value="${p.seqid}">${label}</option>`);
-            });
-        agendaPaciente.innerHTML = opts.join('');
+    if (agendaPacienteBusca) {
+        agendaPacienteBusca.addEventListener('input', (e) => {
+            agendaPacienteBusca.style.border = ''; // Remove error border if any
+            const val = e.target.value.toLowerCase().trim();
+            if (!val) {
+                agendaPacienteDropdown.style.display = 'none';
+                agendaPacienteId.value = '';
+                return;
+            }
+            
+            const matches = (patients || []).filter(p => {
+                const searchStr = `${p.nome} ${p.cpf || ''}`.toLowerCase();
+                return searchStr.includes(val);
+            }).slice(0, 10); // max 10 resultados
+            
+            if (matches.length > 0) {
+                agendaPacienteDropdown.innerHTML = '';
+                matches.forEach((p, idx) => {
+                    const div = document.createElement('div');
+                    div.className = 'dropdown-item';
+                    div.style.padding = '8px 12px';
+                    div.style.cursor = 'pointer';
+                    div.style.borderBottom = '1px solid var(--border)';
+                    if (idx === 0) {
+                        div.classList.add('active'); // Highlight first item
+                        div.style.backgroundColor = '#e0f2fe';
+                        div.style.color = '#0284c7';
+                    }
+                    div.textContent = `${p.nome}${p.cpf ? ` (${p.cpf})` : ''}`;
+                    
+                    div.addEventListener('mousedown', () => {
+                        agendaPacienteId.value = p.seqid;
+                        agendaPacienteBusca.value = div.textContent;
+                        agendaPacienteBusca.style.border = ''; // Remove error border if any
+                        agendaPacienteDropdown.style.display = 'none';
+                    });
+                    
+                    div.addEventListener('mouseenter', () => {
+                        Array.from(agendaPacienteDropdown.children).forEach(c => {
+                            c.classList.remove('active');
+                            c.style.backgroundColor = '';
+                            c.style.color = '';
+                        });
+                        div.classList.add('active');
+                        div.style.backgroundColor = '#e0f2fe';
+                        div.style.color = '#0284c7';
+                    });
+                    div.addEventListener('mouseleave', () => {
+                        div.style.backgroundColor = '';
+                        div.style.color = '';
+                    });
+                    
+                    agendaPacienteDropdown.appendChild(div);
+                });
+                agendaPacienteDropdown.style.display = 'block';
+            } else {
+                agendaPacienteDropdown.innerHTML = '<div style="padding: 8px 12px; color: var(--text-muted); font-style: italic;">Nenhum paciente encontrado.</div>';
+                agendaPacienteDropdown.style.display = 'block';
+            }
+        });
+
+        agendaPacienteBusca.addEventListener('keydown', (e) => {
+            if (agendaPacienteDropdown.style.display !== 'block') return;
+            
+            const items = Array.from(agendaPacienteDropdown.querySelectorAll('.dropdown-item'));
+            if (!items.length) return;
+            
+            let currentIndex = items.findIndex(item => item.classList.contains('active'));
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (currentIndex < items.length - 1) {
+                    if (currentIndex >= 0) {
+                        items[currentIndex].classList.remove('active');
+                        items[currentIndex].style.backgroundColor = '';
+                        items[currentIndex].style.color = '';
+                    }
+                    currentIndex++;
+                    items[currentIndex].classList.add('active');
+                    items[currentIndex].style.backgroundColor = '#e0f2fe';
+                    items[currentIndex].style.color = '#0284c7';
+                    items[currentIndex].scrollIntoView({ block: 'nearest' });
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (currentIndex > 0) {
+                    items[currentIndex].classList.remove('active');
+                    items[currentIndex].style.backgroundColor = '';
+                    items[currentIndex].style.color = '';
+                    currentIndex--;
+                    items[currentIndex].classList.add('active');
+                    items[currentIndex].style.backgroundColor = '#e0f2fe';
+                    items[currentIndex].style.color = '#0284c7';
+                    items[currentIndex].scrollIntoView({ block: 'nearest' });
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (currentIndex >= 0) {
+                    const evt = new MouseEvent('mousedown');
+                    items[currentIndex].dispatchEvent(evt);
+                }
+            }
+        });
+
+        agendaPacienteBusca.addEventListener('focus', () => {
+            if (agendaPacienteBusca.value.trim().length > 0) {
+                agendaPacienteBusca.dispatchEvent(new Event('input'));
+            }
+        });
+
+        document.addEventListener('mousedown', (e) => {
+            if (agendaPacienteBusca && agendaPacienteDropdown && !agendaPacienteBusca.contains(e.target) && !agendaPacienteDropdown.contains(e.target)) {
+                agendaPacienteDropdown.style.display = 'none';
+            }
+        });
     }
 
     if (agendaDate && !agendaDate.value) {
@@ -22869,14 +23102,23 @@ function renderAgendaSlots({ dateStr, profSeqId, disponibilidade, agendamentos }
         const pacienteNome = a ? (getPacienteNameBySeqId(a.paciente_id) || (a.titulo || '')) : '';
         const status = a ? String(a.status || 'MARCADO') : 'LIVRE';
 
+        let canCancel = false;
+        if (a) {
+            const now = new Date();
+            const appointmentStart = new Date(a.inicio);
+            canCancel = appointmentStart >= now;
+        }
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td style="font-weight:700;">${s.time}</td>
             <td>${a ? (pacienteNome || a.titulo || '-') : '-'}</td>
             <td>${status}</td>
-            <td>
-                ${a ? `<button class="btn btn-secondary btn-sm" data-action="edit" data-id="${a.id}"><i class="ri-edit-line"></i> Editar</button>` :
-            `<button class="btn btn-primary btn-sm" data-action="new" data-time="${s.time}" data-step="${s.step}"><i class="ri-add-line"></i> Agendar</button>`}
+            <td style="display:flex; gap: 0.5rem; align-items:center;">
+                ${a ? `
+                    <button class="btn btn-secondary btn-sm" data-action="edit" data-id="${a.id}"><i class="ri-edit-line"></i> Editar</button>
+                    ${canCancel ? `<button class="btn btn-danger btn-sm" data-action="delete" data-id="${a.id}" title="Desmarcar / Liberar Horário"><i class="ri-close-circle-line"></i></button>` : ''}
+                ` : `<button class="btn btn-primary btn-sm" data-action="new" data-time="${s.time}" data-step="${s.step}"><i class="ri-add-line"></i> Agendar</button>`}
             </td>
         `;
         agendaSlotsBody.appendChild(tr);
@@ -22894,6 +23136,21 @@ function renderAgendaSlots({ dateStr, profSeqId, disponibilidade, agendamentos }
             const id = btn.getAttribute('data-id');
             const a = (agendamentos || []).find(x => String(x.id) === String(id));
             if (a) openAgendaModalEdit(a, dateStr);
+        });
+    });
+    agendaSlotsBody.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-id');
+            if (!confirm('Desmarcar este agendamento e liberar o horário?')) return;
+            try {
+                const { error } = await db.from('agenda_agendamentos').delete().eq('id', id).eq('empresa_id', currentEmpresaId);
+                if (error) throw error;
+                showToast('Agendamento desmarcado com sucesso.');
+                await fetchAgendaForUI();
+            } catch (err) {
+                console.error('Erro ao excluir agendamento:', err);
+                showToast('Erro ao excluir agendamento.', true);
+            }
         });
     });
 
@@ -23037,7 +23294,9 @@ function openAgendaModalNew({ dateStr, time, step, profSeqId }) {
     if (modalAgendaTitle) modalAgendaTitle.textContent = 'Novo Agendamento';
     if (agendaId) agendaId.value = '';
     if (btnAgendaDelete) btnAgendaDelete.classList.add('hidden');
-    if (agendaPaciente) agendaPaciente.value = '';
+    if (agendaPacienteBusca) agendaPacienteBusca.value = '';
+    if (agendaPacienteId) agendaPacienteId.value = '';
+    if (agendaPacienteDropdown) agendaPacienteDropdown.style.display = 'none';
     if (agendaTitulo) agendaTitulo.value = '';
     if (agendaObs) agendaObs.value = '';
     if (agendaStatus) agendaStatus.value = 'MARCADO';
@@ -23056,8 +23315,28 @@ function openAgendaModalEdit(a, dateStrArg) {
     if (!modalAgenda) return;
     if (modalAgendaTitle) modalAgendaTitle.textContent = 'Editar Agendamento';
     if (agendaId) agendaId.value = a.id;
-    if (btnAgendaDelete) btnAgendaDelete.classList.remove('hidden');
-    if (agendaPaciente) agendaPaciente.value = a.paciente_id ? String(a.paciente_id) : '';
+    
+    if (btnAgendaDelete) {
+        const now = new Date();
+        const appointmentStart = new Date(a.inicio);
+        if (appointmentStart >= now) {
+            btnAgendaDelete.classList.remove('hidden');
+        } else {
+            btnAgendaDelete.classList.add('hidden');
+        }
+    }
+    if (agendaPacienteId) {
+        agendaPacienteId.value = a.paciente_id ? String(a.paciente_id) : '';
+        if (agendaPacienteBusca) {
+            if (a.paciente_id) {
+                const p = (patients || []).find(x => x.seqid == a.paciente_id);
+                agendaPacienteBusca.value = p ? `${p.nome}${p.cpf ? ` (${p.cpf})` : ''}` : '';
+            } else {
+                agendaPacienteBusca.value = '';
+            }
+        }
+        if (agendaPacienteDropdown) agendaPacienteDropdown.style.display = 'none';
+    }
     if (agendaTitulo) agendaTitulo.value = a.titulo || '';
     if (agendaObs) agendaObs.value = a.observacoes || '';
     if (agendaStatus) agendaStatus.value = a.status || 'MARCADO';
@@ -23080,6 +23359,16 @@ async function saveAgendaFromModal() {
     const profSeqId = agendaProfessional.value;
     if (!profSeqId) { showToast('Selecione o profissional.', true); return; }
 
+    const pacienteIdVal = agendaPacienteId ? agendaPacienteId.value : '';
+    if (!pacienteIdVal) {
+        if (agendaPacienteBusca) {
+            agendaPacienteBusca.style.border = '2px solid var(--danger-color)';
+            agendaPacienteBusca.focus();
+        }
+        showToast('Por favor, selecione um paciente para agendar.', true);
+        return;
+    }
+
     const id = agendaId ? agendaId.value : '';
     const inicioVal = agendaInicio ? agendaInicio.value : '';
     const fimVal = agendaFim ? agendaFim.value : '';
@@ -23092,7 +23381,7 @@ async function saveAgendaFromModal() {
     const payload = {
         empresa_id: currentEmpresaId,
         profissional_id: Number(profSeqId),
-        paciente_id: agendaPaciente && agendaPaciente.value ? Number(agendaPaciente.value) : null,
+        paciente_id: agendaPacienteId && agendaPacienteId.value ? Number(agendaPacienteId.value) : null,
         inicio: inicioIso,
         fim: fimIso,
         status: agendaStatus ? agendaStatus.value : 'MARCADO',
@@ -26804,7 +27093,7 @@ if (budgetForm) {
         }
 
         const budgetData = {
-            pacienteid: pat.id,
+            paciente_id: pat.id,
             pacientenome: pat.nome,
             pacientecelular: pat.celular || pat.telefone,
             pacienteemail: pat.email,
@@ -27131,7 +27420,7 @@ window.editBudget = function (id) {
     document.getElementById('editBudgetId').value = b.id;
 
     // Set Patient Autocomplete
-    const pat = patients.find(p => p.id === b.pacienteid);
+    const pat = patients.find(p => p.id === b.paciente_id);
     if (pat) {
         document.getElementById('budPacienteNome').value = `${pat.nome} (${pat.cpf})`;
         document.getElementById('budPacienteId').value = pat.id; // Set the hidden ID
@@ -27317,7 +27606,7 @@ window.printBudget = function (id) {
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
     // Get patient CPF for signature
-    const patData = patients.find(p => p.id === b.pacienteid);
+    const patData = patients.find(p => p.id === b.paciente_id);
     const patCpf = patData ? (patData.cpf || '') : '';
 
     // Get unique professionals (Responsible + Item Protothetics)
@@ -28263,6 +28552,56 @@ if (searchBudgetInput) {
 }
 
 const patientLoginForm = document.getElementById('patientLoginForm');
+// Resolve a Empresa ID do portal com segurança
+function resolvePortalEmpresaId() {
+    const urlParams = new URLSearchParams(window.location.search);
+    let empresaId = urlParams.get('empresa') || urlParams.get('emp');
+
+    // Se não encontrou na URL, tenta recuperar da Hash ou do contexto
+    if (!empresaId && window.location.hash.includes('empresa=')) {
+        const hashStr = window.location.hash.split('?')[1] || window.location.hash.replace('#', '');
+        const hashParams = new URLSearchParams(hashStr);
+        empresaId = hashParams.get('empresa');
+    }
+
+    if (!empresaId) {
+        empresaId = localStorage.getItem('portal_empresa_id');
+    } else {
+        localStorage.setItem('portal_empresa_id', empresaId);
+    }
+
+    return empresaId;
+}
+
+// CPF Masking for Patient Login
+const patientLoginIdentifierInput = document.getElementById('patientLoginIdentifier');
+if (patientLoginIdentifierInput) {
+    patientLoginIdentifierInput.addEventListener('input', function (e) {
+        let val = e.target.value;
+        const justDigits = val.replace(/\D/g, '');
+        const hasLetters = /[a-zA-Z@]/.test(val);
+        
+        // Se houver letras ou @, assumimos que é e-mail e não mascaramos
+        if (hasLetters) {
+            return;
+        }
+
+        // Se for só números, aplica máscara de CPF visualmente
+        if (justDigits.length > 0) {
+            let masked = justDigits;
+            if (masked.length > 11) masked = masked.slice(0, 11);
+            if (masked.length > 9) {
+                masked = masked.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+            } else if (masked.length > 6) {
+                masked = masked.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+            } else if (masked.length > 3) {
+                masked = masked.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+            }
+            e.target.value = masked;
+        }
+    });
+}
+
 if (patientLoginForm) {
     patientLoginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -28275,7 +28614,18 @@ if (patientLoginForm) {
         btn.innerText = 'Validando...';
 
         try {
-            const cleanIdentifier = String(identifierInput || '').trim();
+            const rawIdentifier = document.getElementById('patientLoginIdentifier').value.trim();
+            let resolvedEmpresaId = resolvePortalEmpresaId() || currentEmpresaId;
+            
+            // Stripping de não-dígitos APENAS para enviar para a query (se for CPF)
+            let cleanIdentifier = rawIdentifier;
+            const justDigits = rawIdentifier.replace(/\D/g, '');
+            if (justDigits.length === 11) {
+                cleanIdentifier = justDigits;
+            } else {
+                cleanIdentifier = rawIdentifier.toLowerCase();
+            }
+
             const { data, error } = await db.rpc('buscar_paciente_portal', {
                 p_identificador: cleanIdentifier
             });
@@ -28286,12 +28636,32 @@ if (patientLoginForm) {
             }
 
             const rows = Array.isArray(data) ? data : (data ? [data] : []);
-            if (!rows.length) {
-                throw new Error('Paciente não encontrado. Verifique o CPF/E-mail informado.');
+            
+            // Fallback Automático para Links de Acesso sem &empresa=
+            if (!resolvedEmpresaId) {
+                if (rows.length > 0 && rows[0].empresa_id) {
+                    resolvedEmpresaId = rows[0].empresa_id;
+                    localStorage.setItem('portal_empresa_id', resolvedEmpresaId);
+                } else {
+                    throw new Error('Empresa não identificada no link de acesso.');
+                }
+            }
+            
+            // Filtro de Segurança: Garante que o paciente pertence estritamente à empresa do link
+            const rowsFiltered = rows.filter(p => p.empresa_id === resolvedEmpresaId);
+
+            if (!rowsFiltered.length) {
+                throw new Error('Paciente não encontrado nesta clínica. Verifique o CPF/E-mail informado.');
             }
 
-            const pacienteMatch = rows[0];
+            const pacienteMatch = rowsFiltered[0];
 
+            // Limpeza Total de Estado/Sessão Cruzada antes de logar
+            window.patientPortalCurrentPatient = null;
+            
+            // Log de sucesso
+            console.log('[PORTAL LOGIN SUCCESS]', { id: pacienteMatch.id, nome: pacienteMatch.nome, email: pacienteMatch.email, empresa_id: pacienteMatch.empresa_id });
+            
             // Validation successful! Set global variable and switch UI
             window.patientPortalCurrentPatient = pacienteMatch;
             
@@ -28698,7 +29068,7 @@ if (userAdminForm) {
         btnSave.innerHTML = id ? '<i class="ri-loader-4-line ri-spin"></i> Atualizando...' : '<i class="ri-loader-4-line ri-spin"></i> Criando...';
 
         try {
-            // Collect permissions
+            // Collect permissions - O VALOR DO DOM TEM PRIORIDADE TOTAL (INCLUSIVE FALSE)
             let permissions = {};
             systemModules.forEach(mod => {
                 const selectCheck = document.querySelector(`.perm-check[data-mod="${mod.id}"][data-action="select"]`);
@@ -28706,6 +29076,7 @@ if (userAdminForm) {
                 const updateCheck = document.querySelector(`.perm-check[data-mod="${mod.id}"][data-action="update"]`);
                 const deleteCheck = document.querySelector(`.perm-check[data-mod="${mod.id}"][data-action="delete"]`);
 
+                // Captura EXPLICITAMENTE o false se o checkbox existir e estiver desmarcado
                 permissions[mod.id] = {
                     select: selectCheck ? selectCheck.checked : false,
                     insert: insertCheck ? insertCheck.checked : false,
@@ -28713,31 +29084,39 @@ if (userAdminForm) {
                     delete: deleteCheck ? deleteCheck.checked : false
                 };
             });
-            if (role === 'admin') {
-                // Ao invés de conceder todos os módulos cegamente, concedemos apenas os que estão visíveis na tela (pertencentes ao plano e avulsos)
-                // Se for SuperAdmin, ele tem acesso irrestrito de qualquer forma pelo banco, mas para manter a consistência da UI, seguimos o que está renderizado.
-                systemModules.forEach(mod => {
-                    const hasRow = document.querySelector(`.perm-check[data-mod="${mod.id}"]`);
-                    permissions[mod.id] = {
-                        select: !!hasRow,
-                        insert: !!hasRow,
-                        update: !!hasRow,
-                        delete: !!hasRow
-                    };
-                });
-            }
-            permissions = expandModulePermissionAliases(permissions);
-            let allowedModules = null;
-            if (typeof window.getAllowedModuleSetForUserCompany === 'function') {
-                allowedModules = await window.getAllowedModuleSetForUserCompany(targetEmpresaId, true);
-            }
-            if (typeof window.filterPermissionsByAllowedModules === 'function') {
-                permissions = window.filterPermissionsByAllowedModules(permissions, allowedModules);
-            }
-            if (typeof window.enforceSupportHierarchyPermissions === 'function') {
-                permissions = window.enforceSupportHierarchyPermissions(permissions);
+
+            const domCheckTickets = document.querySelector('.perm-check[data-mod="tickets"][data-action="select"]');
+            console.log('[PERMISSOES] Checkbox Tickets:', domCheckTickets ? domCheckTickets.checked : 'Não encontrado');
+            
+            const domCheckChat = document.querySelector('.perm-check[data-mod="chat_portal"][data-action="select"]');
+
+            // Remove a permissão coringa "suporte" caso tenha sido gerada
+            if (permissions['suporte']) {
+                delete permissions['suporte'];
             }
 
+            // Expandir aliases primeiro, baseado exclusivamente no que o usuário clicou na tela
+            permissions = expandModulePermissionAliases(permissions);
+
+            // Garante explicitamente os aliases do suporte_tickets como false se não estiver checado na tela
+            if (domCheckTickets && !domCheckTickets.checked) {
+                const aliasesTickets = ['tickets', 'suporte_tickets', 'suporteTickets', 'navSuporteTickets'];
+                aliasesTickets.forEach(alias => {
+                    permissions[alias] = { select: false, insert: false, update: false, delete: false };
+                });
+            }
+            
+            // Garante explicitamente os aliases do chat_portal como false se não estiver checado na tela
+            if (domCheckChat && !domCheckChat.checked) {
+                const aliasesChat = ['chat_portal', 'suporte_chat_portal', 'portal_chat', 'navPortalChat', 'portal_mensagens', 'portal_anexos'];
+                aliasesChat.forEach(alias => {
+                    permissions[alias] = { select: false, insert: false, update: false, delete: false };
+                });
+            }
+
+            // NÃO sobrescrevemos o false com base no role 'admin' ou fallbacks do plano.
+            // A interface do usuário é a fonte absoluta da verdade.
+            
             const activeModuleIds = [];
             systemModules.forEach(mod => {
                 if (permissions[mod.id] && permissions[mod.id].select) {
@@ -28778,6 +29157,12 @@ if (userAdminForm) {
                             throw new Error(`Erro na nuvem: ${errorMsg}`);
                         }
 
+                        // Forçar salvamento direto para bypassar qualquer herança/wildcard injetada pela Edge Function
+                        await db.from('usuario_empresas')
+                            .update({ permissoes: permissions })
+                            .eq('usuario_id', id)
+                            .eq('empresa_id', targetEmpresaId);
+
                     } catch (cloudErr) {
                         const msg = cloudErr && cloudErr.message ? cloudErr.message : String(cloudErr);
                         showToast(`Nenhuma alteração feita no banco. ${msg}`, true);
@@ -28786,6 +29171,29 @@ if (userAdminForm) {
                 }
 
                 showToast("Permissões do usuário atualizadas com sucesso!");
+
+                // Se o usuário editado for o logado, atualiza imediatamente na sessão e na interface
+                if (window.currentUser && String(window.currentUser.id) === String(id)) {
+                    currentUserRole = role;
+                    currentUserPerms = permissions;
+                    window.currentUser.role = role;
+                    window.currentUser.permissions = permissions;
+                    
+                    try {
+                        let localUserStr = localStorage.getItem('user');
+                        if (localUserStr) {
+                            let localUser = JSON.parse(localUserStr);
+                            localUser.role = role;
+                            localUser.permissions = permissions;
+                            localStorage.setItem('user', JSON.stringify(localUser));
+                        }
+                    } catch (e) { console.warn("Erro ao atualizar localStorage:", e); }
+
+                    // Re-renderiza o menu lateral imediatamente
+                    if (typeof updateSidebarVisibility === 'function') {
+                        updateSidebarVisibility();
+                    }
+                }
             } else {
                 const session = await getValidSupabaseSession(db);
                 if (!session) throw new Error("Sessão expirada. Faça login novamente.");
@@ -28812,6 +29220,14 @@ if (userAdminForm) {
                 const createdUserId = result && (result.userId || result.user_id || result.usuario_id)
                     ? String(result.userId || result.user_id || result.usuario_id)
                     : '';
+                    
+                if (createdUserId) {
+                    // Forçar salvamento direto para bypassar qualquer herança/wildcard injetada pela Edge Function
+                    await db.from('usuario_empresas')
+                        .update({ permissoes: permissions })
+                        .eq('usuario_id', createdUserId)
+                        .eq('empresa_id', targetEmpresaId);
+                }
                     
                 if ((role === 'dentista' || role === 'protetico') && createdUserId) {
                     // Check if professional with this email already exists
@@ -30589,7 +31005,7 @@ async function renderPatientFinanceiro(patientId) {
         // 2. Encontrar orçamentos deste paciente para buscar pagamentos de orçamentos (PIX etc)
         const patientBudgets = (typeof budgets !== 'undefined' ? budgets : []).filter(b => 
             String(b.paciente_id) === String(patientId) || 
-            String(b.pacienteid) === String(patientId) || 
+            String(b.paciente_id) === String(patientId) || 
             String(b.pacienteseqid) === String(patientId) ||
             String(b.paciente_id) === String(patUuid) || 
             String(b.pacienteseqid) === String(patSeq)
@@ -30920,7 +31336,7 @@ function renderPatientBudgets(patientId) {
         const statusKey = normalizeKey(b.status);
         if (statusKey.includes('AVALIACAO')) return false;
 
-        const bPacId = b.pacienteid || b.paciente_id || b.pacienteseqid;
+        const bPacId = b.paciente_id || b.paciente_id || b.pacienteseqid;
 
         // 1. Comparação Direta de ID (Robustas)
         if (bPacId && patientId && String(bPacId).trim() === String(patientId).trim()) return true;
@@ -31110,7 +31526,7 @@ async function printPatientDetailReport(saveAsPdf = false) {
 
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
     const a = patient.anamnese || {};
-    const patientBudgets = budgets.filter(b => b.pacienteid === patientId);
+    const patientBudgets = budgets.filter(b => b.paciente_id === patientId);
 
     // ---- Anamnese section ----
     // 4 boolean fields horizontal, 'Doenças preexistentes' full-width below
@@ -31961,7 +32377,7 @@ async function renderFinanceiroNotasGrid() {
         if (!budget || !isClosed) return null;
         const bruto = Math.max(0, toDec(calculateBudgetTotal(budget), 0));
         const paid = ordered.reduce((sum, x) => sum + toDec(x && x.valor, 0), 0);
-        const patientId = String(budget && (budget.paciente_id || budget.pacienteid) || sample && sample.paciente_id || '').trim();
+        const patientId = String(budget && (budget.paciente_id || budget.paciente_id) || sample && sample.paciente_id || '').trim();
         const patient = (patients || []).find(p => String(p.id) === patientId || String(p.seqid) === patientId) || null;
         const itens = Array.isArray(budget && budget.orcamento_itens) ? budget.orcamento_itens : [];
         return {
@@ -32060,7 +32476,7 @@ window.emitirNotaTesteFinanceiro = async function (budgetRef) {
         setActiveTab('financialParams');
         return;
     }
-    const patientId = String(budget && (budget.paciente_id || budget.pacienteid) || '').trim();
+    const patientId = String(budget && (budget.paciente_id || budget.paciente_id) || '').trim();
     const patient = (patients || []).find(p => String(p.id) === patientId || String(p.seqid) === patientId) || null;
     if (!patient) {
         showToast('Paciente não encontrado para este orçamento.', true);
@@ -32342,7 +32758,7 @@ async function fetchTransactions(patientId = null) {
             try {
                 const { data: orcs, error: oErr } = await withTimeout(
                     db.from('orcamentos')
-                        .select('seqid,paciente_id,pacienteid,pacientenome')
+                        .select('seqid,paciente_id,pacientenome')
                         .eq('empresa_id', currentEmpresaId)
                         .in('seqid', uniq.map(n => Number(n))),
                     15000,
@@ -32352,7 +32768,7 @@ async function fetchTransactions(patientId = null) {
                     orcs.forEach(o => {
                         if (o && o.seqid != null) {
                             budgetSeqInfo.set(String(o.seqid), {
-                                pacienteUuid: String(o.pacienteid || o.paciente_id || ''),
+                                pacienteUuid: String(o.paciente_id || o.paciente_id || ''),
                                 pacienteNome: String(o.pacientenome || '')
                             });
                         }
@@ -32432,7 +32848,7 @@ async function fetchTransactions(patientId = null) {
                     if (mId && mId[1]) b = (budgets || []).find(x => String(x.id) === String(mId[1]));
                     if (!b && mSeq && mSeq[1]) b = (budgets || []).find(x => String(x.seqid) === String(mSeq[1]));
                     if (b) {
-                        pat = patients.find(p => String(p.id) === String(b.pacienteid || b.paciente_id));
+                        pat = patients.find(p => String(p.id) === String(b.paciente_id || b.paciente_id));
                         obsDisplay = replaceObsBudgetTag(t.observacoes || '');
                     }
                 } catch { /* ignore */ }
@@ -32782,7 +33198,7 @@ async function deleteTransaction(id) {
                     if (b) {
                         pacNome = String(b.pacientenome || '');
                         if (!pacNome) {
-                            const pid = String(b.paciente_id || b.pacienteid || '');
+                            const pid = String(b.paciente_id || b.paciente_id || '');
                             const pac = patientById.get(pid) || patientBySeq.get(pid);
                             if (pac) pacNome = String(pac.nome || '');
                         }
@@ -32802,7 +33218,7 @@ async function deleteTransaction(id) {
                         forma_pagamento: p.forma_pagamento || '—',
                         observacoes: desc,
                         observacoes_display: desc,
-                        paciente_id: b ? (b.paciente_id || b.pacienteid) : null,
+                        paciente_id: b ? (b.paciente_id || b.paciente_id) : null,
                         paciente_nome: pacNome.trim().toUpperCase(),
                         orcamentoNum: seqidStr !== '—' ? `#${seqidStr}` : '—',
                         isPagamentoNativo: true
@@ -32821,7 +33237,7 @@ async function deleteTransaction(id) {
                             const mSeq = String(t.observacoes || '').match(/\[Orçamento\s*#(\d+)\]/i);
                             if (mId && mId[1]) b = budgetById.get(String(mId[1]));
                             if (!b && mSeq && mSeq[1]) b = budgetBySeq.get(String(mSeq[1]));
-                            if (b) pat = patientById.get(String(b.pacienteid || b.paciente_id));
+                            if (b) pat = patientById.get(String(b.paciente_id || b.paciente_id));
                         } catch { }
                     } else {
                         // Tentar achar o orçamento pelo referencia_id se o paciente for conhecido
@@ -33321,7 +33737,7 @@ window.viewBudgetPayments = async function (budgetId) {
 
     let saldoPaciente = 0;
     try {
-        saldoPaciente = await fetchPatientBalance(budget.pacienteid || budget.paciente_id || budget.pacienteseqid);
+        saldoPaciente = await fetchPatientBalance(budget.paciente_id || budget.paciente_id || budget.pacienteseqid);
     } catch (e) {
         console.error("Erro ao carregar saldo global do paciente no modal", e);
     }
@@ -33528,7 +33944,7 @@ window.recordBudgetPayment = async function (budgetId) {
     // Validação extra se for SALDO EM CONTA
     if (forma === 'Saldo em Conta') {
         try {
-            const pacIdRaw = budget.pacienteid || budget.paciente_id;
+            const pacIdRaw = budget.paciente_id || budget.paciente_id;
             const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
             const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
 
@@ -33545,7 +33961,7 @@ window.recordBudgetPayment = async function (budgetId) {
     }
 
     try {
-        const pacIdRaw = budget.pacienteid || budget.paciente_id;
+        const pacIdRaw = budget.paciente_id || budget.paciente_id;
         const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
         const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
 
@@ -33755,7 +34171,7 @@ window.releaseBudgetItem = async function (budgetId, itemId) {
 
             // --- NOVO: Debitar serviço no financeiro para controle de conta corrente ---
             try {
-                const pacIdRaw = budget.pacienteid || budget.paciente_id;
+                const pacIdRaw = budget.paciente_id || budget.paciente_id;
                 const patientObj = patients.find(p => p.id === pacIdRaw || p.seqid == pacIdRaw);
                 const pacNumId = patientObj ? patientObj.seqid : (budget.pacienteseqid || budget.paciente_id);
                 const desc = item.descricao || 'Serviço';
@@ -34200,7 +34616,7 @@ async function processBudgetCancel(budget, motivo, analysis = { cancelCase: 1 })
         const userName = currentUserData.data.user.user_metadata?.full_name || currentUserData.data.user.email;
 
         // Buscar o seqid do paciente para as tabelas financeiras
-        const patientObj = patients.find(p => p.id === budget.pacienteid);
+        const patientObj = patients.find(p => p.id === budget.paciente_id);
         const pacienteSeqId = patientObj ? parseInt(patientObj.seqid) : null;
 
         if (!pacienteSeqId) {
@@ -34284,7 +34700,7 @@ async function processBudgetCancel(budget, motivo, analysis = { cancelCase: 1 })
                 
                 // Registro no Prontuário (Evolução) - Apenas para Caso 3
                 const evolucaoEntry = {
-                    paciente_id: budget.pacienteid,
+                    paciente_id: budget.paciente_id,
                     descricao: `ORÇAMENTO CANCELADO (#${budget.seqid}): Cancelamento crítico realizado. Estorno de R$ ${analysis.totalPago.toFixed(2)} e comissões processados. Motivo: ${motivo}`,
                     empresa_id: currentEmpresaId,
                     created_by: userId
@@ -36492,13 +36908,50 @@ document.addEventListener('DOMContentLoaded', () => {
     //  PORTAL DO PACIENTE - CHAT (REATIVADO)
     // =============================================
     let portalChatCurrentPatientId = null;
+    let activePortalChat = null;
     let portalChatRealtimeSubscription = null;
 
-    async function loadPortalChatPatients() {
+    function isPortalChatCompactMode() {
+        return !!(window.matchMedia && window.matchMedia('(max-width: 991px) and (orientation: portrait)').matches);
+    }
+
+    function setPortalChatActiveState(isActive) {
+        const shell = document.getElementById('portalChatShell');
+        if (!shell) return;
+        shell.classList.toggle('chat-active', !!isActive);
+        shell.classList.toggle('chat-open', !!isActive);
+        shell.classList.toggle('chat-selected', !!isActive);
+    }
+
+    function isPortalChatMessageFromPatient(msg, activeChat) {
+        const activePatientId = activeChat ? (activeChat.paciente_id || activeChat.patient_id || activeChat.id) : null;
+        const senderDescriptor = String(
+            (msg && msg.remetente) ||
+            (msg && msg.origem) ||
+            (msg && msg.tipo) ||
+            (msg && msg.tipo_remetente) ||
+            (msg && msg.enviado_por) ||
+            ''
+        );
+
+        return Boolean(
+            (activePatientId && ((msg && msg.sender_id == activePatientId) || (msg && msg.paciente_id == activePatientId) || (msg && msg.usuario_id == activePatientId))) ||
+            (msg && msg.is_paciente === true) ||
+            (msg && msg.from_patient === true) ||
+            (msg && msg.enviado_por_paciente === true) ||
+            /paciente|patient|pwa/i.test(senderDescriptor) ||
+            (!/clinica|admin|atendente|usuario|staff/i.test(senderDescriptor) && !(msg && msg.is_admin))
+        );
+    }
+
+    async function loadPortalChatPatients(options = {}) {
+        const silent = !!(options && options.silent);
         const listContainer = document.getElementById('portalChatPatientsList');
         if (!listContainer) return;
 
-        listContainer.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Carregando pacientes...</div>';
+        if (!silent) {
+            listContainer.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Carregando pacientes...</div>';
+        }
 
         try {
             // Busque a empresa do mesmo lugar seguro que o resto do app usa
@@ -36600,12 +37053,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             div.onclick = () => {
                 portalChatCurrentPatientId = cp.paciente_id;
+                activePortalChat = {
+                    paciente_id: cp.paciente_id,
+                    patient_id: cp.patient_id || cp.paciente_id,
+                    id: cp.id || cp.paciente_id,
+                    nome: cp.nome,
+                    celular: cp.celular
+                };
                 // Update active styling
                 Array.from(listContainer.children).forEach(child => child.style.background = 'transparent');
                 div.style.background = '#e6f0ff';
                 const container = document.getElementById('portalChatMessagesContainer');
                 if (container) container.innerHTML = '';
-                loadPortalChatMessages(cp.paciente_id, cp.nome, cp.celular);
+                if (isPortalChatCompactMode()) {
+                    setPortalChatActiveState(true);
+                }
+                Promise.resolve(loadPortalChatMessages(cp.paciente_id, cp.nome, cp.celular)).catch(err => {
+                    console.error('Erro ao selecionar conversa do portal:', err);
+                });
             };
 
             const avatar = document.createElement('div');
@@ -36692,8 +37157,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function loadPortalChatMessages(pacienteId, pacienteNome, pacienteCelular) {
+    async function loadPortalChatMessages(paciente_id, pacienteNome, pacienteCelular) {
         const empresaId = currentEmpresaId || localStorage.getItem('lastEmpresaId');
+        activePortalChat = {
+            paciente_id: paciente_id,
+            patient_id: paciente_id,
+            id: paciente_id,
+            nome: pacienteNome,
+            celular: pacienteCelular
+        };
         
         // Update Header UI
         const emptyState = document.getElementById('portalChatEmptyState');
@@ -36735,7 +37207,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // await db.from('portal_mensagens')
             //     .update({ lida: true })
             //     .eq('empresa_id', empresaId)
-            //     .eq('paciente_id', pacienteId)
+            //     .eq('paciente_id', paciente_id)
             //     .eq('remetente', 'paciente')
             //     .eq('lida', false);
 
@@ -36744,15 +37216,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 .from('portal_mensagens')
                 .select('*')
                 .eq('empresa_id', empresaId)
-                .eq('paciente_id', pacienteId)
+                .eq('paciente_id', paciente_id)
                 .order('created_at', { ascending: true });
 
             if (error) throw error;
 
             renderPortalChatMessages(messages);
-            
-            // Refresh the list to remove the unread badge
-            loadPortalChatPatients();
+
+            // Refresh silencioso da lista para não recolocar o loader após selecionar a conversa
+            loadPortalChatPatients({ silent: true });
 
             // Subscribe to real-time updates for this patient
             if (portalChatRealtimeSubscription) {
@@ -36765,6 +37237,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     { event: 'INSERT', schema: 'public', table: 'portal_mensagens', filter: `empresa_id=eq.${empresaId}` },
                     (payload) => {
                         const newMsg = payload.new;
+                        const m = newMsg;
+                        console.log('--- MSG DADOS ---', { remetente: m.remetente, origem: m.origem, tipo: m.tipo, texto: m.mensagem || m.texto, objeto_completo: m });
                         if (newMsg.paciente_id == portalChatCurrentPatientId) {
                             // Previne duplicação de mensagens (UI otimista vs Realtime)
                             if (document.getElementById(`msg-${newMsg.id}`)) return;
@@ -36776,8 +37250,39 @@ document.addEventListener('DOMContentLoaded', () => {
                             
                             // Append and scroll
                             const msgs = document.getElementById('portalChatMessagesContainer');
+                            if (msgs) {
+                                msgs.style.display = 'flex';
+                                msgs.style.flexDirection = 'column';
+                                msgs.style.alignItems = 'stretch';
+                            }
                             
-                            const esPaciente = (newMsg.remetente === 'paciente');
+                            const remetenteTexto = String(
+                                newMsg.remetente || 
+                                newMsg.origem || 
+                                newMsg.tipo || 
+                                newMsg.tipo_remetente || 
+                                newMsg.enviado_por || 
+                                newMsg.sender_type || 
+                                newMsg.sender_id || 
+                                ''
+                            ).toLowerCase().trim();
+
+                            const isEnviadoPelaClinica = remetenteTexto.includes('dentista') || 
+                                                         remetenteTexto.includes('admin') || 
+                                                         remetenteTexto.includes('super_admin') || 
+                                                         remetenteTexto.includes('clinica') || 
+                                                         remetenteTexto.includes('atendente') || 
+                                                         remetenteTexto.includes('staff') || 
+                                                         remetenteTexto.includes('usuario') || 
+                                                         newMsg.is_admin === true || 
+                                                         newMsg.from_admin === true;
+
+                            const isPaciente = !isEnviadoPelaClinica;
+
+                            const alignContainer = isEnviadoPelaClinica ? 'flex-end' : 'flex-start';
+                            const bgColor = isEnviadoPelaClinica ? '#dbeafe' : '#ffffff';
+                            const borderStyle = isEnviadoPelaClinica ? 'none' : '1px solid #cbd5e1';
+                            const marginSide = isEnviadoPelaClinica ? 'margin-left: auto; margin-right: 0;' : 'margin-right: auto; margin-left: 0;';
                             
                             let contentHtml = '';
                             const isFile = newMsg.tipo_mensagem === 'ARQUIVO' || newMsg.tipo_mensagem === 'pdf' || (newMsg.conteudo && (newMsg.conteudo.toLowerCase().includes('.pdf') || newMsg.conteudo.toLowerCase().includes('.png') || newMsg.conteudo.toLowerCase().includes('.jpg') || newMsg.conteudo.toLowerCase().includes('.jpeg')));
@@ -36813,7 +37318,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                             font-weight: 500;
                                             transition: background 0.2s;
                                         ">
-                                            <i class="ri-file-pdf-line" style="font-size: 20px; color: ${esPaciente ? '#dc2626' : '#ffffff'};"></i>
+                                            <i class="ri-file-pdf-line" style="font-size: 20px; color: #ffffff;"></i>
                                             <span>📄 Visualizar Arquivo Anexo</span>
                                         </a>
                                     </div>`;
@@ -36836,14 +37341,15 @@ document.addEventListener('DOMContentLoaded', () => {
                                     </i>`;
                             }
 
+                            const msgClass = isEnviadoPelaClinica ? 'msg-sent' : 'msg-received';
                             const templateBalao = `
-                                <div id="msg-${newMsg.id}" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-start' : 'flex-end'}; margin-bottom: 0.75rem; align-items: flex-end;">
-                                    <div style="max-width: 75%; display: inline-block; padding: 0.5rem 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: #ffffff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;' : 'background: #16a34a; color: #ffffff; border-bottom-right-radius: 0;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); text-align: left;">
-                                        <div style="display: flex; align-items: center; gap: 4px;">
+                                <div id="msg-${newMsg.id}" class="portal-chat-message-row ${msgClass}" style="display: flex !important; width: 100% !important; justify-content: ${alignContainer} !important; margin-bottom: 8px !important;">
+                                    <div class="chat-bubble ${msgClass}" style="background-color: ${bgColor} !important; color: #000000 !important; border: ${borderStyle} !important; align-self: ${alignContainer} !important; display: block; ${marginSide} max-width: 80% !important; padding: 10px 14px !important; border-radius: 12px !important;">
+                                        <div style="display: flex; align-items: center; gap: 4px; color: #000000 !important; font-size: 14px !important;">
                                             ${contentHtml}
                                             ${trashIconHtml}
                                         </div>
-                                        <div style="font-size: 0.65rem; text-align: right; opacity: 0.7; margin-top: 0.25rem; line-height: 1;">
+                                        <div style="font-size: 10px; text-align: right; opacity: 0.6; margin-top: 4px; line-height: 1; color: #000000; display: block;">
                                             ${new Date(newMsg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                         </div>
                                     </div>
@@ -36855,7 +37361,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (isAtBottom) msgs.scrollTop = msgs.scrollHeight;
                         }
                         // Refresh patient list to show latest message
-                        loadPortalChatPatients();
+                        loadPortalChatPatients({ silent: true });
                     }
                 )
                 .on(
@@ -36897,6 +37403,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('portalChatMessagesContainer');
         if (!container) return;
         
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.alignItems = 'stretch';
         container.innerHTML = '';
         
         if (messages.length === 0) {
@@ -36912,6 +37421,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let ultimaDataMarcada = ''; 
 
         messages.forEach(msg => {
+            const m = msg;
+            console.log('--- MSG DADOS ---', { remetente: m.remetente, origem: m.origem, tipo: m.tipo, texto: m.mensagem || m.texto, objeto_completo: m });
             if (document.getElementById(`msg-${msg.id}`)) return;
             
             const dataMensagemObj = new Date(msg.created_at); 
@@ -36938,7 +37449,52 @@ document.addEventListener('DOMContentLoaded', () => {
                 container.insertAdjacentHTML('beforeend', templateDivisor); 
             } 
 
-            const esPaciente = (msg.remetente === 'paciente');
+            const senderId = String(msg.sender_id || msg.user_id || msg.created_by || msg.remetente_id || '');
+            const remetenteStr = String(
+                msg.remetente || 
+                msg.origem || 
+                msg.tipo || 
+                msg.tipo_remetente || 
+                msg.enviado_por || 
+                msg.sender_type || 
+                ''
+            ).toLowerCase().trim();
+
+            const isPacienteFlag = remetenteStr.includes('paciente') || 
+                                   remetenteStr.includes('patient') || 
+                                   remetenteStr.includes('pwa') || 
+                                   msg.is_paciente === true || 
+                                   msg.from_patient === true;
+
+            const isEnviadaPelaClinica = !isPacienteFlag;
+
+            const remetenteTexto = String(
+                msg.remetente || 
+                msg.origem || 
+                msg.tipo || 
+                msg.tipo_remetente || 
+                msg.enviado_por || 
+                msg.sender_type || 
+                msg.sender_id || 
+                ''
+            ).toLowerCase().trim();
+
+            const isEnviadoPelaClinica = remetenteTexto.includes('dentista') || 
+                                         remetenteTexto.includes('admin') || 
+                                         remetenteTexto.includes('super_admin') || 
+                                         remetenteTexto.includes('clinica') || 
+                                         remetenteTexto.includes('atendente') || 
+                                         remetenteTexto.includes('staff') || 
+                                         remetenteTexto.includes('usuario') || 
+                                         msg.is_admin === true || 
+                                         msg.from_admin === true;
+
+            const isPaciente = !isEnviadoPelaClinica;
+
+            const alignContainer = isEnviadoPelaClinica ? 'flex-end' : 'flex-start';
+            const bgColor = isEnviadoPelaClinica ? '#dbeafe' : '#ffffff';
+            const borderStyle = isEnviadoPelaClinica ? 'none' : '1px solid #cbd5e1';
+            const marginSide = isEnviadoPelaClinica ? 'margin-left: auto; margin-right: 0;' : 'margin-right: auto; margin-left: 0;';
             
             let contentHtml = '';
             const isFile = msg.tipo_mensagem === 'ARQUIVO' || msg.tipo_mensagem === 'pdf' || (msg.conteudo && (msg.conteudo.toLowerCase().includes('.pdf') || msg.conteudo.toLowerCase().includes('.png') || msg.conteudo.toLowerCase().includes('.jpg') || msg.conteudo.toLowerCase().includes('.jpeg')));
@@ -36980,7 +37536,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             font-weight: 500;
                             transition: background 0.2s;
                         ">
-                            <i class="ri-file-pdf-line" style="font-size: 20px; color: ${esPaciente ? '#dc2626' : '#ffffff'};"></i>
+                            <i class="ri-file-pdf-line" style="font-size: 20px; color: #ffffff;"></i>
                             <span>📄 Visualizar Arquivo Anexo</span>
                         </a>
                     </div>`;
@@ -37004,14 +37560,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     </i>`;
             }
             
+            const msgClass = isEnviadoPelaClinica ? 'msg-sent' : 'msg-received';
             const templateBalao = `
-                <div id="msg-${msg.id}" style="display: flex; width: 100%; justify-content: ${esPaciente ? 'flex-start' : 'flex-end'}; margin-bottom: 0.75rem; align-items: flex-end;">
-                    <div style="max-width: 75%; display: inline-block; padding: 0.5rem 0.75rem; border-radius: 0.75rem; ${esPaciente ? 'background: #ffffff; color: #1f2937; border-bottom-left-radius: 0; border: 1px solid #e5e7eb;' : 'background: #16a34a; color: #ffffff; border-bottom-right-radius: 0;'} box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); text-align: left;">
-                        <div style="display: flex; align-items: center; gap: 4px;">
+                <div id="msg-${msg.id}" class="portal-chat-message-row ${msgClass}" style="display: flex !important; width: 100% !important; justify-content: ${alignContainer} !important; margin-bottom: 8px !important;">
+                    <div class="chat-bubble ${msgClass}" style="background-color: ${bgColor} !important; color: #000000 !important; border: ${borderStyle} !important; align-self: ${alignContainer} !important; display: block; ${marginSide} max-width: 80% !important; padding: 10px 14px !important; border-radius: 12px !important;">
+                        <div style="display: flex; align-items: center; gap: 4px; color: #000000 !important; font-size: 14px !important;">
                             ${contentHtml}
                             ${trashIconHtml}
                         </div>
-                        <div style="font-size: 0.65rem; text-align: right; opacity: 0.7; margin-top: 0.25rem; line-height: 1;">
+                        <div style="font-size: 10px; text-align: right; opacity: 0.6; margin-top: 4px; line-height: 1; color: #000000; display: block;">
                             ${dataMensagemObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </div>
                     </div>
@@ -37027,13 +37584,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnRefresh = document.getElementById('btnRefreshPortalChat');
     if (btnRefresh) {
         btnRefresh.addEventListener('click', () => {
-            loadPortalChatPatients();
+            loadPortalChatPatients({ silent: true });
             if (portalChatCurrentPatientId) {
                 const patientName = document.getElementById('portalChatHeaderPatientName').innerText;
                 const phoneEl = document.getElementById('portalChatPatientPhone');
                 const patientPhone = phoneEl ? phoneEl.innerText : '';
                 loadPortalChatMessages(portalChatCurrentPatientId, patientName, patientPhone);
             }
+        });
+    }
+
+    const portalChatBackButton = document.getElementById('portalChatBackButton');
+    if (portalChatBackButton) {
+        portalChatBackButton.addEventListener('click', () => {
+            setPortalChatActiveState(false);
         });
     }
 
@@ -37186,6 +37750,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (window.matchMedia) {
+        const compactQuery = window.matchMedia('(max-width: 991px) and (orientation: portrait)');
+        const syncPortalChatResponsiveState = () => {
+            if (!compactQuery.matches) {
+                setPortalChatActiveState(false);
+            } else if (portalChatCurrentPatientId) {
+                setPortalChatActiveState(true);
+            }
+        };
+        if (typeof compactQuery.addEventListener === 'function') {
+            compactQuery.addEventListener('change', syncPortalChatResponsiveState);
+        } else if (typeof compactQuery.addListener === 'function') {
+            compactQuery.addListener(syncPortalChatResponsiveState);
+        }
+        syncPortalChatResponsiveState();
+    }
+
     // Make functions globally available if needed
     window.loadPortalChatPatients = loadPortalChatPatients;
 
@@ -37321,29 +37902,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function loadPatientPortalChatMessages() {
+    async function loadPatientPortalChatMessages(silent = false) {
         if (!patientChatMessagesContainer) return;
         
         const paciente = window.patientPortalCurrentPatient || getPatientPortalPaciente();
         if (!paciente || !paciente.id) {
-            patientChatMessagesContainer.innerHTML = '<p style="text-align: center; color: #9ca3af;">Erro: Paciente não identificado.</p>';
+            console.error('ERRO DE SEGURANÇA: ID do paciente não identificado (Chat).');
+            if (!silent) patientChatMessagesContainer.innerHTML = '<p style="text-align: center; color: #9ca3af;">Erro: Paciente não identificado.</p>';
             return;
         }
 
-        patientChatMessagesContainer.innerHTML = '<p style="text-align: center; color: #9ca3af;">Carregando mensagens...</p>';
+        if (!silent) patientChatMessagesContainer.innerHTML = '<p style="text-align: center; color: #9ca3af;">Carregando mensagens...</p>';
 
         try {
             // REMOVIDO: Marcar mensagens como lidas automaticamente (Mobile)
-            // await db.from('portal_mensagens')
-            //     .update({ lida: true })
-            //     .eq('paciente_id', paciente.id)
-            //     .eq('remetente', 'dentista')
-            //     .eq('lida', false);
 
-            const { data, error } = await db.from('portal_mensagens')
-                .select('*')
-                .eq('paciente_id', paciente.id)
-                .order('created_at', { ascending: true });
+            const { data, error } = await db.rpc('get_portal_mensagens_paciente', {
+                p_empresa_id: paciente.empresa_id || localStorage.getItem('lastEmpresaId') || '',
+                p_paciente_id: String(paciente.id)
+            });
 
             if (error) throw error;
 
@@ -37542,16 +38119,19 @@ document.addEventListener('DOMContentLoaded', () => {
             inputPatientChatMessage.value = '';
 
             try {
-                const { error } = await db.from('portal_mensagens').insert([{
-                    empresa_id: empresaId,
-                    paciente_id: paciente.id,
-                    remetente: 'paciente',
-                    conteudo: conteudo,
-                    lida: false,
-                    tipo_mensagem: 'texto'
-                }]);
+                const { error } = await db.rpc('insert_portal_mensagem_paciente', {
+                    p_empresa_id: empresaId,
+                    p_paciente_id: String(paciente.id),
+                    p_conteudo: conteudo
+                });
 
-                if (error) throw error;
+                if (error) {
+                    console.error("Erro retornado pelo Supabase (Insert Mensagem):", error);
+                    throw error;
+                }
+                
+                // Força o reload da UI já que o Realtime pode ser bloqueado pelo RLS do Supabase
+                loadPatientPortalChatMessages(true);
             } catch (err) {
                 console.error('Erro ao enviar mensagem:', err);
                 alert('Erro ao enviar mensagem. Tente novamente.');
@@ -37564,38 +38144,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const paciente = window.patientPortalCurrentPatient || getPatientPortalPaciente();
         if (!paciente || !paciente.id) return;
 
-        if (patientChatSubscription) {
-            db.removeChannel(patientChatSubscription);
-        }
-
-        patientChatSubscription = db.channel(`public:portal_mensagens:patient_${paciente.id}`)
-            .on(
-                'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'portal_mensagens', filter: `paciente_id=eq.${paciente.id}` },
-                (payload) => {
-                    const newMsg = payload.new;
-                    appendPatientChatMessage(newMsg);
-
-                    // REMOVIDO: Leitura imediata via Realtime (Mobile)
-                    // const contentPortalChat = document.getElementById('contentPortalChat');
-                    // if (contentPortalChat && contentPortalChat.style.display !== 'none' && newMsg.remetente === 'dentista') {
-                    //     db.from('portal_mensagens').update({ lida: true }).eq('id', newMsg.id).then();
-                    // }
-                }
-            )
-            .on(
-                'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'portal_mensagens', filter: `paciente_id=eq.${paciente.id}` },
-                (payload) => {
-                    const updatedMsg = payload.new;
-                    const msgEl = document.getElementById(`pat-msg-${updatedMsg.id}`);
-                    if (msgEl) {
-                        // Recarrega mensagens para pegar o estado "Deletado"
-                        loadPatientPortalChatMessages();
-                    }
-                }
-            )
-            .subscribe();
+        // O paciente não consegue usar o Realtime do Supabase via 'postgres_changes' na tabela portal_mensagens 
+        // devido à política de RLS que bloqueia SELECT para anon. 
+        // Solução de fallback: Polling simples enquanto o chat estiver aberto.
+        if (window._patientChatPollingTimer) clearInterval(window._patientChatPollingTimer);
+        window._patientChatPollingTimer = setInterval(() => {
+            const contentPortalChat = document.getElementById('contentPortalChat');
+            if (contentPortalChat && contentPortalChat.style.display !== 'none') {
+                loadPatientPortalChatMessages(true);
+            }
+        }, 5000);
     }
     // ==========================================
     // FIM DA LÓGICA DO CHAT DO PACIENTE
@@ -37618,6 +38176,65 @@ setInterval(() => {
         }
     });
 }, 1000);
+
+// ============================================================================
+// MÓDULO ASSISTENTE DE VOZ (OK, OCC) - FASE 1
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof window.OCCVoiceAssistant !== 'undefined') {
+        new window.OCCVoiceAssistant({
+            btnSelector: '.btn-occ-voice',
+            indicatorSelector: '.occ-voice-indicator',
+            statusTextSelector: '.occ-voice-status-text',
+            
+            // Pacientes
+            nomeSelector: '#occ_paciente_nome',
+            cepSelector: '#occ_paciente_cep',
+            numeroSelector: '#occ_paciente_numero',
+            complementoSelector: '#occ_paciente_complemento',
+            enderecoSelector: '#occ_paciente_endereco',
+            bairroSelector: '#occ_paciente_bairro',
+            cidadeSelector: '#occ_paciente_cidade',
+            ufSelector: '#occ_paciente_uf',
+            cpfSelector: '#cpf',
+            dataNascimentoSelector: '#dataNascimento',
+            sexoSelector: '#sexo',
+            profissaoSelector: '#profissao',
+            telefoneSelector: '#occ_paciente_telefone',
+            celularSelector: '#occ_paciente_celular',
+            emailSelector: '#occ_paciente_email',
+            emTratamentoMedicoSelector: '#emTratamentoMedico',
+            tratamentoDescSelector: '#tratamentoDesc',
+            tomaMedicacaoSelector: '#tomaMedicacao',
+            medicacaoDescSelector: '#medicacaoDesc',
+            temAlergiaSelector: '#temAlergia',
+            alergiaDescSelector: '#alergiaDesc',
+            teveHemorragiaSelector: '#teveHemorragia',
+            doencasPreexistentesSelector: '#doencasPreexistentes',
+            naoReceberCampanhasSelector: '#naoReceberCampanhas',
+            btnSalvarSelector: '#btnSavePatient',
+
+            // Profissionais
+            profNomeSelector: '#profNome',
+            profCelularSelector: '#profCelular',
+            profEmailSelector: '#profEmail',
+            profTipoSelector: '#profTipo',
+            profStatusSelector: '#profStatus',
+            comissionCESelector: '#comissionCE',
+            comissionCCSelector: '#comissionCC',
+            comissionCPSelector: '#comissionCP',
+            comissionImpSelector: '#comissionImp',
+            agendaDay1Selector: '#agendaDay1Enabled',
+            agendaDay2Selector: '#agendaDay2Enabled',
+            agendaDay3Selector: '#agendaDay3Enabled',
+            agendaDay4Selector: '#agendaDay4Enabled',
+            agendaDay5Selector: '#agendaDay5Enabled',
+            agendaDay6Selector: '#agendaDay6Enabled',
+            agendaDay7Selector: '#agendaDay7Enabled',
+            btnSaveProfessionalSelector: '#btnSaveProfessional'
+        });
+    }
+});
 
 
 

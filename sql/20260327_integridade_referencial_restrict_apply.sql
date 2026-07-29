@@ -56,10 +56,10 @@ end $$;
 do $$
 begin
   if to_regclass('public.orcamentos') is not null and to_regclass('public.pacientes') is not null then
-    alter table public.orcamentos drop constraint if exists orcamentos_pacienteid_fkey;
+    alter table public.orcamentos drop constraint if exists orcamentos_paciente_id_fkey;
     alter table public.orcamentos
-      add constraint orcamentos_pacienteid_fkey
-      foreign key (pacienteid) references public.pacientes(id) on delete restrict not valid;
+      add constraint orcamentos_paciente_id_fkey
+      foreign key (paciente_id) references public.pacientes(id) on delete restrict not valid;
   end if;
 end $$;
 

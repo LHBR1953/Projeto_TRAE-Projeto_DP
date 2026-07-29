@@ -65,7 +65,7 @@ CREATE TABLE servicos (
 CREATE TABLE orcamentos (
     id TEXT PRIMARY KEY,
     seqid SERIAL NOT NULL,
-    pacienteid TEXT REFERENCES pacientes(id) ON DELETE CASCADE,
+    paciente_id TEXT REFERENCES pacientes(id) ON DELETE CASCADE,
     pacientenome TEXT NOT NULL,
     pacientecelular TEXT,
     pacienteemail TEXT,

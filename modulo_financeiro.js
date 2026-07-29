@@ -1,5 +1,5 @@
 // modulo_financeiro.js
-window.gravarDebitoPaciente = async function(orcamentoId, valor, empresaId, pacienteId, observacoes, referenciaId, criadoPor) {
+window.gravarDebitoPaciente = async function(orcamentoId, valor, empresaId, paciente_id, observacoes, referenciaId, criadoPor) {
     try {
         const debitoData = {
             tipo: 'DEBITO',
@@ -7,7 +7,7 @@ window.gravarDebitoPaciente = async function(orcamentoId, valor, empresaId, paci
             valor: parseFloat(valor) || 0,
             orcamento_id: orcamentoId, // Assume-se uuid do orcamento ou nulo dependendo do modelo, mantemos o pass-through
             empresa_id: empresaId || window.currentEmpresaId || null,
-            paciente_id: pacienteId ? parseInt(pacienteId, 10) || null : null, // Proteção de tipagem se paciente_id for numérico
+            paciente_id: paciente_id ? parseInt(paciente_id, 10) || null : null, // Proteção de tipagem se paciente_id for numérico
             observacoes: observacoes || `[Consumo/Execução] (Orçamento #${referenciaId || orcamentoId})`,
             referencia_id: referenciaId ? parseInt(referenciaId, 10) || null : null, // A coluna referencia_id é bigint
             criado_por: criadoPor || (window.currentUser ? window.currentUser.id : null) || null
