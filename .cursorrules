@@ -371,7 +371,7 @@ Antes de gerar qualquer query Supabase, certifique-se de usar os campos exatos l
 ### 🗄️ Tabela: orcamentos
 * `id` : text
 * `seqid` : integer
-* `pacienteid` : text
+* `pacienteid` : text (⚠️ ATENÇÃO: A chave do paciente é pacienteid sem underline, NUNCA USE paciente_id nesta tabela)
 * `pacientenome` : text
 * `pacientecelular` : text
 * `pacienteemail` : text

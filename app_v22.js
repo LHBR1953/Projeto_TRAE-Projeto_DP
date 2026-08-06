@@ -92,7 +92,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260728-0420';
+const APP_BUILD = '20260805-0003';
 
 const AUTO_SEED_SPECIALTIES = false;
 
@@ -8138,7 +8138,7 @@ function getServicoById(serviceId) {
     return (services || []).find(s => String(s && s.id || '') === id || String(s && s.seqid || '') === id) || null;
 }
 
-function resolveOrcamentoPacienteId(b) {
+function resolveOrcamentopaciente_id(b) {
     if (!b) return '';
     return String(b.paciente_id || b.paciente_id || b.paciente_id || '').trim();
 }
@@ -8199,7 +8199,7 @@ async function buildConsumptionReportRows({ startDate, endDate } = {}) {
         const it = itemById.get(aid) || null;
         const orc = it ? orcById.get(String(it && it.orcamento_id || '')) : null;
         const srv = it ? getServicoById(it.servico_id || it.servicoId) : null;
-        const paciente_id = resolveOrcamentoPacienteId(orc);
+        const paciente_id = resolveOrcamentopaciente_id(orc);
         const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
         const procedimento = resolveItemDescricao(it, srv) || '—';
         const subdiv = resolveServicoSubdivision(srv) || '—';
@@ -8346,7 +8346,7 @@ async function buildFinancialApportionRows({ startDate, endDate } = {}) {
             const srv = getServicoById(it.servico_id || it.servicoId);
             const executorId = String(it && (it.profissional_id || it.profissionalId || it.executor_id || it.executorId) || '');
             const executorNome = getProfessionalNameBySeqId(executorId) || '—';
-            const paciente_id = resolveOrcamentoPacienteId(orc);
+            const paciente_id = resolveOrcamentopaciente_id(orc);
             const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
             const dtRaw = String(it && (it.updated_at || it.created_at || '') || '');
             const dt = dtRaw ? new Date(dtRaw) : null;
@@ -25490,19 +25490,25 @@ if (budPacienteNomeInput) {
     document.body.appendChild(suggestionBox);
 
     const fillPatientFields = (selectedId) => {
-        document.getElementById('budPacienteId').value = selectedId || '';
+        const idField = document.getElementById('budPacienteId');
+        if (idField) idField.value = selectedId || '';
+        
+        const cpfField = document.getElementById('budCpfPaciente');
+        const celularField = document.getElementById('budCelularPaciente');
+        const emailField = document.getElementById('budEmailPaciente');
+
         if (selectedId) {
             const pat = patients.find(p => p.id == selectedId || p.seqid == selectedId);
             if (pat) {
-                document.getElementById('budCpfPaciente').value = pat.cpf || '';
-                document.getElementById('budCelularPaciente').value = pat.celular || pat.telefone || '';
-                document.getElementById('budEmailPaciente').value = pat.email || '';
+                if (cpfField) cpfField.value = pat.cpf || '';
+                if (celularField) celularField.value = pat.celular || pat.telefone || '';
+                if (emailField) emailField.value = pat.email || '';
                 return;
             }
         }
-        document.getElementById('budCpfPaciente').value = '';
-        document.getElementById('budCelularPaciente').value = '';
-        document.getElementById('budEmailPaciente').value = '';
+        if (cpfField) cpfField.value = '';
+        if (celularField) celularField.value = '';
+        if (emailField) emailField.value = '';
     };
 
     const hideSuggestions = () => { suggestionBox.style.display = 'none'; };
@@ -26890,7 +26896,8 @@ if (budgetForm) {
 
         console.log("[Flow] Status diferente de 'Cancelado'. Prosseguindo com o salvamento normal.");
 
-        const patId = document.getElementById('budPacienteId').value;
+        const patIdEl = document.getElementById('budPacienteId');
+        const patId = patIdEl ? patIdEl.value : '';
 
         if (document.getElementById('addBudgetItemPanel').style.display === 'block') {
             showToast('Você tem um item em edição. Clique em "Confirmar Item" antes de salvar o orçamento.', true);
@@ -26929,7 +26936,7 @@ if (budgetForm) {
         }
 
         const budgetData = {
-            paciente_id: pat.id,
+            pacienteid: pat.id,
             pacientenome: pat.nome,
             pacientecelular: pat.celular || pat.telefone,
             pacienteemail: pat.email,
@@ -27256,14 +27263,29 @@ window.editBudget = function (id) {
     document.getElementById('editBudgetId').value = b.id;
 
     // Set Patient Autocomplete
-    const pat = patients.find(p => p.id === b.paciente_id);
-    if (pat) {
-        document.getElementById('budPacienteNome').value = `${pat.nome} (${pat.cpf})`;
-        document.getElementById('budPacienteId').value = pat.id; // Set the hidden ID
-        document.getElementById('budCpfPaciente').value = pat.cpf || '';
+    let pat = patients.find(p => p.id === b.pacienteid || p.id === b.paciente_id);
+    if (!pat && (b.pacienteid || b.paciente_id)) {
+        pat = { 
+            id: b.pacienteid || b.paciente_id, 
+            nome: b.pacientenome || '', 
+            cpf: '', 
+            celular: b.pacientecelular || '', 
+            email: b.pacienteemail || '' 
+        };
     }
-    document.getElementById('budCelularPaciente').value = b.pacientecelular || '';
-    document.getElementById('budEmailPaciente').value = b.pacienteemail || '';
+    
+    if (pat) {
+        const pNomeEl = document.getElementById('budPacienteNome');
+        if (pNomeEl) pNomeEl.value = `${pat.nome}${pat.cpf ? ` (${pat.cpf})` : ''}`.trim();
+        const budIdEl = document.getElementById('budPacienteId');
+        if (budIdEl) budIdEl.value = pat.id; // Set the hidden ID
+        const budCpfEl = document.getElementById('budCpfPaciente');
+        if (budCpfEl) budCpfEl.value = pat.cpf || '';
+    }
+    const budCelEl = document.getElementById('budCelularPaciente');
+    if (budCelEl) budCelEl.value = b.pacientecelular || '';
+    const budEmailEl = document.getElementById('budEmailPaciente');
+    if (budEmailEl) budEmailEl.value = b.pacienteemail || '';
 
     // Conditionally populate and set the status dropdown (robust logic)
     const statusSelect = document.getElementById('budStatus');
