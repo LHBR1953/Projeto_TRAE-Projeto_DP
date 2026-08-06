@@ -2,6 +2,9 @@
 
 echocd /d C:\Projeto_TRAE\Projeto_DP
 
+echo geil pull...
+git pull
+
 echogit status
 echogit add .
 
