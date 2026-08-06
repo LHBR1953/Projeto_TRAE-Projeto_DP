@@ -1,4 +1,4 @@
-const CACHE_NAME = 'occ-pwa-cache-v20260805-0004';
+const CACHE_NAME = 'occ-pwa-cache-v20260806-0001';
 const OCC_PWA_CACHE = CACHE_NAME;
 const OCC_PWA_CORE = [
   '/',

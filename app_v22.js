@@ -92,7 +92,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-const APP_BUILD = '20260805-0004';
+const APP_BUILD = '20260806-0001';
 
 const AUTO_SEED_SPECIALTIES = false;
 
@@ -27100,7 +27100,7 @@ if (budgetForm) {
         }
 
         const budgetData = {
-            paciente_id: pat.id,
+            pacienteid: pat.id,
             pacientenome: pat.nome,
             pacientecelular: pat.celular || pat.telefone,
             pacienteemail: pat.email,
