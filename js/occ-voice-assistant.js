@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 /**
  * MÓDULO ASSISTENTE DE VOZ (OK, OCC) - FASE 1
  * Isolado e dedicado para manter a arquitetura limpa.
@@ -1330,7 +1329,6 @@ class OCCVoiceAssistant {
 
 // Expondo para o escopo global se necessário
 window.OCCVoiceAssistant = OCCVoiceAssistant;
-=======
 document.addEventListener('DOMContentLoaded', () => {
     initAgendaVoiceAssistant();
 });
@@ -1465,4 +1463,3 @@ window.processAgendaVoiceCommand = (text) => {
                 }
             }
         }
->>>>>>> fb758b8a97fdeb1a008c43c948898623b5f6dc8b

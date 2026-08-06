@@ -92,11 +92,7 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
-<<<<<<< HEAD
-const APP_BUILD = '20260805-0003';
-=======
-const APP_BUILD = '20260728-0610';
->>>>>>> fb758b8a97fdeb1a008c43c948898623b5f6dc8b
+const APP_BUILD = '20260805-0004';
 
 const AUTO_SEED_SPECIALTIES = false;
 
@@ -8206,11 +8202,7 @@ async function buildConsumptionReportRows({ startDate, endDate } = {}) {
         const it = itemById.get(aid) || null;
         const orc = it ? orcById.get(String(it && it.orcamento_id || '')) : null;
         const srv = it ? getServicoById(it.servico_id || it.servicoId) : null;
-<<<<<<< HEAD
         const paciente_id = resolveOrcamentopaciente_id(orc);
-=======
-        const paciente_id = resolveOrcamentoPacienteId(orc);
->>>>>>> fb758b8a97fdeb1a008c43c948898623b5f6dc8b
         const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
         const procedimento = resolveItemDescricao(it, srv) || '—';
         const subdiv = resolveServicoSubdivision(srv) || '—';
@@ -8357,11 +8349,7 @@ async function buildFinancialApportionRows({ startDate, endDate } = {}) {
             const srv = getServicoById(it.servico_id || it.servicoId);
             const executorId = String(it && (it.profissional_id || it.profissionalId || it.executor_id || it.executorId) || '');
             const executorNome = getProfessionalNameBySeqId(executorId) || '—';
-<<<<<<< HEAD
             const paciente_id = resolveOrcamentopaciente_id(orc);
-=======
-            const paciente_id = resolveOrcamentoPacienteId(orc);
->>>>>>> fb758b8a97fdeb1a008c43c948898623b5f6dc8b
             const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
             const dtRaw = String(it && (it.updated_at || it.created_at || '') || '');
             const dt = dtRaw ? new Date(dtRaw) : null;
@@ -27439,7 +27427,6 @@ window.editBudget = function (id) {
     document.getElementById('editBudgetId').value = b.id;
 
     // Set Patient Autocomplete
-<<<<<<< HEAD
     let pat = patients.find(p => p.id === b.pacienteid || p.id === b.paciente_id);
     if (!pat && (b.pacienteid || b.paciente_id)) {
         pat = { 
@@ -27449,13 +27436,6 @@ window.editBudget = function (id) {
             celular: b.pacientecelular || '', 
             email: b.pacienteemail || '' 
         };
-=======
-    const pat = patients.find(p => p.id === b.paciente_id);
-    if (pat) {
-        document.getElementById('budPacienteNome').value = `${pat.nome} (${pat.cpf})`;
-        document.getElementById('budPacienteId').value = pat.id; // Set the hidden ID
-        document.getElementById('budCpfPaciente').value = pat.cpf || '';
->>>>>>> fb758b8a97fdeb1a008c43c948898623b5f6dc8b
     }
     
     if (pat) {
