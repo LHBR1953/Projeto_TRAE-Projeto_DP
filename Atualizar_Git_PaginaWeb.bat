@@ -2,9 +2,6 @@
 
 echocd /d C:\Projeto_TRAE\Projeto_DP
 
-echo geil pull...
-git pull
-
 echogit status
 echogit add .
 
@@ -20,6 +17,9 @@ echo ---------------------------------------------------------
 cls
 echo [INICIANDO DEPLOY DO OCC...]
 cd /d C:\Projeto_TRAE\Projeto_DP
+
+echo git pull...
+git pull
 
 :: Garante que o Git adicione TUDO, inclusive arquivos novos (untracked)
 git add -A
