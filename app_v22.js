@@ -92,7 +92,11 @@ function isValidCPF(cpf) {
 
 const supabaseUrl = 'https://trcktinwjpvcikidrryn.supabase.co';
 const supabaseKey = 'sb_publishable_mSHjTPSylV1NFy4G-GPEhQ_r97v7CCA';
+<<<<<<< HEAD
 const APP_BUILD = '20260805-0003';
+=======
+const APP_BUILD = '20260728-0610';
+>>>>>>> fb758b8a97fdeb1a008c43c948898623b5f6dc8b
 
 const AUTO_SEED_SPECIALTIES = false;
 
@@ -4392,7 +4396,9 @@ const btnAgendaDelete = document.getElementById('btnAgendaDelete');
 const modalAgendaTitle = document.getElementById('modalAgendaTitle');
 const formAgenda = document.getElementById('formAgenda');
 const agendaId = document.getElementById('agendaId');
-const agendaPaciente = document.getElementById('agendaPaciente');
+const agendaPacienteId = document.getElementById('agendaPacienteId');
+const agendaPacienteBusca = document.getElementById('agendaPacienteBusca');
+const agendaPacienteDropdown = document.getElementById('agendaPacienteDropdown');
 const agendaTitulo = document.getElementById('agendaTitulo');
 const agendaInicio = document.getElementById('agendaInicio');
 const agendaFim = document.getElementById('agendaFim');
@@ -5480,10 +5486,11 @@ function syncInventoryAreaByType(typeKey, preferredArea = '') {
     }
 }
 
-window.updateInventoryAreaOptionsForTipoInventario = function () {
+window.updateInventoryAreaOptionsForTipoInventario = function (text) {
     const inventoryTipoInventarioInput = document.getElementById('inventoryTipoInventario');
     if (!inventoryTipoInventarioInput) return;
-    console.log('Troquei o tipo para:', inventoryTipoInventarioInput.value);
+    const value = typeof text === 'string' ? text : inventoryTipoInventarioInput.value;
+    console.log('Troquei o tipo para:', value);
     const selectedText = inventoryTipoInventarioInput.options && inventoryTipoInventarioInput.selectedIndex >= 0
         ? String(inventoryTipoInventarioInput.options[inventoryTipoInventarioInput.selectedIndex]?.textContent || '')
         : '';
@@ -5493,7 +5500,7 @@ window.updateInventoryAreaOptionsForTipoInventario = function () {
     else if (labelKey.includes('equip')) typeKey = 'equipamentos';
     else if (labelKey.includes('instrument')) typeKey = 'instrumentais';
     else if (labelKey.includes('consum')) typeKey = 'consumiveis';
-    else typeKey = normalizeInventoryTypeKey(String(inventoryTipoInventarioInput.value || ''));
+    else typeKey = normalizeInventoryTypeKey(String(value || ''));
     syncInventoryAreaByType(typeKey, '');
 };
 
@@ -8199,7 +8206,11 @@ async function buildConsumptionReportRows({ startDate, endDate } = {}) {
         const it = itemById.get(aid) || null;
         const orc = it ? orcById.get(String(it && it.orcamento_id || '')) : null;
         const srv = it ? getServicoById(it.servico_id || it.servicoId) : null;
+<<<<<<< HEAD
         const paciente_id = resolveOrcamentopaciente_id(orc);
+=======
+        const paciente_id = resolveOrcamentoPacienteId(orc);
+>>>>>>> fb758b8a97fdeb1a008c43c948898623b5f6dc8b
         const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
         const procedimento = resolveItemDescricao(it, srv) || '—';
         const subdiv = resolveServicoSubdivision(srv) || '—';
@@ -8346,7 +8357,11 @@ async function buildFinancialApportionRows({ startDate, endDate } = {}) {
             const srv = getServicoById(it.servico_id || it.servicoId);
             const executorId = String(it && (it.profissional_id || it.profissionalId || it.executor_id || it.executorId) || '');
             const executorNome = getProfessionalNameBySeqId(executorId) || '—';
+<<<<<<< HEAD
             const paciente_id = resolveOrcamentopaciente_id(orc);
+=======
+            const paciente_id = resolveOrcamentoPacienteId(orc);
+>>>>>>> fb758b8a97fdeb1a008c43c948898623b5f6dc8b
             const pacienteNome = resolvePacienteNameById(paciente_id) || '—';
             const dtRaw = String(it && (it.updated_at || it.created_at || '') || '');
             const dt = dtRaw ? new Date(dtRaw) : null;
@@ -22765,16 +22780,121 @@ function initAgendaFilters() {
         }
     }
 
-    if (agendaPaciente) {
-        const opts = ['<option value="">(Sem paciente)</option>'];
-        (patients || [])
-            .slice()
-            .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
-            .forEach(p => {
-                const label = `${p.nome}${p.cpf ? ` (${p.cpf})` : ''}`;
-                opts.push(`<option value="${p.seqid}">${label}</option>`);
-            });
-        agendaPaciente.innerHTML = opts.join('');
+    if (agendaPacienteBusca) {
+        agendaPacienteBusca.addEventListener('input', (e) => {
+            agendaPacienteBusca.style.border = ''; // Remove error border if any
+            const val = e.target.value.toLowerCase().trim();
+            if (!val) {
+                agendaPacienteDropdown.style.display = 'none';
+                agendaPacienteId.value = '';
+                return;
+            }
+            
+            const matches = (patients || []).filter(p => {
+                const searchStr = `${p.nome} ${p.cpf || ''}`.toLowerCase();
+                return searchStr.includes(val);
+            }).slice(0, 10); // max 10 resultados
+            
+            if (matches.length > 0) {
+                agendaPacienteDropdown.innerHTML = '';
+                matches.forEach((p, idx) => {
+                    const div = document.createElement('div');
+                    div.className = 'dropdown-item';
+                    div.style.padding = '8px 12px';
+                    div.style.cursor = 'pointer';
+                    div.style.borderBottom = '1px solid var(--border)';
+                    if (idx === 0) {
+                        div.classList.add('active'); // Highlight first item
+                        div.style.backgroundColor = '#e0f2fe';
+                        div.style.color = '#0284c7';
+                    }
+                    div.textContent = `${p.nome}${p.cpf ? ` (${p.cpf})` : ''}`;
+                    
+                    div.addEventListener('mousedown', () => {
+                        agendaPacienteId.value = p.seqid;
+                        agendaPacienteBusca.value = div.textContent;
+                        agendaPacienteBusca.style.border = ''; // Remove error border if any
+                        agendaPacienteDropdown.style.display = 'none';
+                    });
+                    
+                    div.addEventListener('mouseenter', () => {
+                        Array.from(agendaPacienteDropdown.children).forEach(c => {
+                            c.classList.remove('active');
+                            c.style.backgroundColor = '';
+                            c.style.color = '';
+                        });
+                        div.classList.add('active');
+                        div.style.backgroundColor = '#e0f2fe';
+                        div.style.color = '#0284c7';
+                    });
+                    div.addEventListener('mouseleave', () => {
+                        div.style.backgroundColor = '';
+                        div.style.color = '';
+                    });
+                    
+                    agendaPacienteDropdown.appendChild(div);
+                });
+                agendaPacienteDropdown.style.display = 'block';
+            } else {
+                agendaPacienteDropdown.innerHTML = '<div style="padding: 8px 12px; color: var(--text-muted); font-style: italic;">Nenhum paciente encontrado.</div>';
+                agendaPacienteDropdown.style.display = 'block';
+            }
+        });
+
+        agendaPacienteBusca.addEventListener('keydown', (e) => {
+            if (agendaPacienteDropdown.style.display !== 'block') return;
+            
+            const items = Array.from(agendaPacienteDropdown.querySelectorAll('.dropdown-item'));
+            if (!items.length) return;
+            
+            let currentIndex = items.findIndex(item => item.classList.contains('active'));
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (currentIndex < items.length - 1) {
+                    if (currentIndex >= 0) {
+                        items[currentIndex].classList.remove('active');
+                        items[currentIndex].style.backgroundColor = '';
+                        items[currentIndex].style.color = '';
+                    }
+                    currentIndex++;
+                    items[currentIndex].classList.add('active');
+                    items[currentIndex].style.backgroundColor = '#e0f2fe';
+                    items[currentIndex].style.color = '#0284c7';
+                    items[currentIndex].scrollIntoView({ block: 'nearest' });
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (currentIndex > 0) {
+                    items[currentIndex].classList.remove('active');
+                    items[currentIndex].style.backgroundColor = '';
+                    items[currentIndex].style.color = '';
+                    currentIndex--;
+                    items[currentIndex].classList.add('active');
+                    items[currentIndex].style.backgroundColor = '#e0f2fe';
+                    items[currentIndex].style.color = '#0284c7';
+                    items[currentIndex].scrollIntoView({ block: 'nearest' });
+                }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (currentIndex >= 0) {
+                    const evt = new MouseEvent('mousedown');
+                    items[currentIndex].dispatchEvent(evt);
+                }
+            }
+        });
+
+        agendaPacienteBusca.addEventListener('focus', () => {
+            if (agendaPacienteBusca.value.trim().length > 0) {
+                agendaPacienteBusca.dispatchEvent(new Event('input'));
+            }
+        });
+
+        document.addEventListener('mousedown', (e) => {
+            if (agendaPacienteBusca && agendaPacienteDropdown && !agendaPacienteBusca.contains(e.target) && !agendaPacienteDropdown.contains(e.target)) {
+                agendaPacienteDropdown.style.display = 'none';
+            }
+        });
     }
 
     if (agendaDate && !agendaDate.value) {
@@ -22994,14 +23114,23 @@ function renderAgendaSlots({ dateStr, profSeqId, disponibilidade, agendamentos }
         const pacienteNome = a ? (getPacienteNameBySeqId(a.paciente_id) || (a.titulo || '')) : '';
         const status = a ? String(a.status || 'MARCADO') : 'LIVRE';
 
+        let canCancel = false;
+        if (a) {
+            const now = new Date();
+            const appointmentStart = new Date(a.inicio);
+            canCancel = appointmentStart >= now;
+        }
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td style="font-weight:700;">${s.time}</td>
             <td>${a ? (pacienteNome || a.titulo || '-') : '-'}</td>
             <td>${status}</td>
-            <td>
-                ${a ? `<button class="btn btn-secondary btn-sm" data-action="edit" data-id="${a.id}"><i class="ri-edit-line"></i> Editar</button>` :
-            `<button class="btn btn-primary btn-sm" data-action="new" data-time="${s.time}" data-step="${s.step}"><i class="ri-add-line"></i> Agendar</button>`}
+            <td style="display:flex; gap: 0.5rem; align-items:center;">
+                ${a ? `
+                    <button class="btn btn-secondary btn-sm" data-action="edit" data-id="${a.id}"><i class="ri-edit-line"></i> Editar</button>
+                    ${canCancel ? `<button class="btn btn-danger btn-sm" data-action="delete" data-id="${a.id}" title="Desmarcar / Liberar Horário"><i class="ri-close-circle-line"></i></button>` : ''}
+                ` : `<button class="btn btn-primary btn-sm" data-action="new" data-time="${s.time}" data-step="${s.step}"><i class="ri-add-line"></i> Agendar</button>`}
             </td>
         `;
         agendaSlotsBody.appendChild(tr);
@@ -23019,6 +23148,21 @@ function renderAgendaSlots({ dateStr, profSeqId, disponibilidade, agendamentos }
             const id = btn.getAttribute('data-id');
             const a = (agendamentos || []).find(x => String(x.id) === String(id));
             if (a) openAgendaModalEdit(a, dateStr);
+        });
+    });
+    agendaSlotsBody.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-id');
+            if (!confirm('Desmarcar este agendamento e liberar o horário?')) return;
+            try {
+                const { error } = await db.from('agenda_agendamentos').delete().eq('id', id).eq('empresa_id', currentEmpresaId);
+                if (error) throw error;
+                showToast('Agendamento desmarcado com sucesso.');
+                await fetchAgendaForUI();
+            } catch (err) {
+                console.error('Erro ao excluir agendamento:', err);
+                showToast('Erro ao excluir agendamento.', true);
+            }
         });
     });
 
@@ -23162,7 +23306,9 @@ function openAgendaModalNew({ dateStr, time, step, profSeqId }) {
     if (modalAgendaTitle) modalAgendaTitle.textContent = 'Novo Agendamento';
     if (agendaId) agendaId.value = '';
     if (btnAgendaDelete) btnAgendaDelete.classList.add('hidden');
-    if (agendaPaciente) agendaPaciente.value = '';
+    if (agendaPacienteBusca) agendaPacienteBusca.value = '';
+    if (agendaPacienteId) agendaPacienteId.value = '';
+    if (agendaPacienteDropdown) agendaPacienteDropdown.style.display = 'none';
     if (agendaTitulo) agendaTitulo.value = '';
     if (agendaObs) agendaObs.value = '';
     if (agendaStatus) agendaStatus.value = 'MARCADO';
@@ -23181,8 +23327,28 @@ function openAgendaModalEdit(a, dateStrArg) {
     if (!modalAgenda) return;
     if (modalAgendaTitle) modalAgendaTitle.textContent = 'Editar Agendamento';
     if (agendaId) agendaId.value = a.id;
-    if (btnAgendaDelete) btnAgendaDelete.classList.remove('hidden');
-    if (agendaPaciente) agendaPaciente.value = a.paciente_id ? String(a.paciente_id) : '';
+    
+    if (btnAgendaDelete) {
+        const now = new Date();
+        const appointmentStart = new Date(a.inicio);
+        if (appointmentStart >= now) {
+            btnAgendaDelete.classList.remove('hidden');
+        } else {
+            btnAgendaDelete.classList.add('hidden');
+        }
+    }
+    if (agendaPacienteId) {
+        agendaPacienteId.value = a.paciente_id ? String(a.paciente_id) : '';
+        if (agendaPacienteBusca) {
+            if (a.paciente_id) {
+                const p = (patients || []).find(x => x.seqid == a.paciente_id);
+                agendaPacienteBusca.value = p ? `${p.nome}${p.cpf ? ` (${p.cpf})` : ''}` : '';
+            } else {
+                agendaPacienteBusca.value = '';
+            }
+        }
+        if (agendaPacienteDropdown) agendaPacienteDropdown.style.display = 'none';
+    }
     if (agendaTitulo) agendaTitulo.value = a.titulo || '';
     if (agendaObs) agendaObs.value = a.observacoes || '';
     if (agendaStatus) agendaStatus.value = a.status || 'MARCADO';
@@ -23205,6 +23371,16 @@ async function saveAgendaFromModal() {
     const profSeqId = agendaProfessional.value;
     if (!profSeqId) { showToast('Selecione o profissional.', true); return; }
 
+    const pacienteIdVal = agendaPacienteId ? agendaPacienteId.value : '';
+    if (!pacienteIdVal) {
+        if (agendaPacienteBusca) {
+            agendaPacienteBusca.style.border = '2px solid var(--danger-color)';
+            agendaPacienteBusca.focus();
+        }
+        showToast('Por favor, selecione um paciente para agendar.', true);
+        return;
+    }
+
     const id = agendaId ? agendaId.value : '';
     const inicioVal = agendaInicio ? agendaInicio.value : '';
     const fimVal = agendaFim ? agendaFim.value : '';
@@ -23217,7 +23393,7 @@ async function saveAgendaFromModal() {
     const payload = {
         empresa_id: currentEmpresaId,
         profissional_id: Number(profSeqId),
-        paciente_id: agendaPaciente && agendaPaciente.value ? Number(agendaPaciente.value) : null,
+        paciente_id: agendaPacienteId && agendaPacienteId.value ? Number(agendaPacienteId.value) : null,
         inicio: inicioIso,
         fim: fimIso,
         status: agendaStatus ? agendaStatus.value : 'MARCADO',
@@ -26936,7 +27112,7 @@ if (budgetForm) {
         }
 
         const budgetData = {
-            pacienteid: pat.id,
+            paciente_id: pat.id,
             pacientenome: pat.nome,
             pacientecelular: pat.celular || pat.telefone,
             pacienteemail: pat.email,
@@ -27263,6 +27439,7 @@ window.editBudget = function (id) {
     document.getElementById('editBudgetId').value = b.id;
 
     // Set Patient Autocomplete
+<<<<<<< HEAD
     let pat = patients.find(p => p.id === b.pacienteid || p.id === b.paciente_id);
     if (!pat && (b.pacienteid || b.paciente_id)) {
         pat = { 
@@ -27272,6 +27449,13 @@ window.editBudget = function (id) {
             celular: b.pacientecelular || '', 
             email: b.pacienteemail || '' 
         };
+=======
+    const pat = patients.find(p => p.id === b.paciente_id);
+    if (pat) {
+        document.getElementById('budPacienteNome').value = `${pat.nome} (${pat.cpf})`;
+        document.getElementById('budPacienteId').value = pat.id; // Set the hidden ID
+        document.getElementById('budCpfPaciente').value = pat.cpf || '';
+>>>>>>> fb758b8a97fdeb1a008c43c948898623b5f6dc8b
     }
     
     if (pat) {
